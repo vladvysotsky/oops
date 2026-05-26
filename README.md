@@ -23,6 +23,24 @@ dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true --self-contained 
 
 Бинарь окажется в `KeyLangSwitcher\bin\Release\net8.0-windows\win-x64\publish\KeyLangSwitcher.exe`.
 
+## Сборка инсталлятора (Windows)
+
+Нужен **.NET 8 SDK** и **Inno Setup 6** (https://jrsoftware.org/isinfo.php).
+
+Одной командой из корня репо в PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File installer\build.ps1
+```
+
+Скрипт сделает `dotnet publish` (single-file, self-contained) и упакует через Inno Setup. Готовый `KeyLangSwitcher-Setup-0.1.0.exe` появится в `dist\`.
+
+Альтернатива вручную:
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\KeyLangSwitcher.iss
+```
+
 ## Запуск
 
 Просто запустите `KeyLangSwitcher.exe` — появится иконка в системном трее. Двойной клик по иконке открывает настройки.
