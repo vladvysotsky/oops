@@ -45,6 +45,9 @@ public sealed class KeyboardHook : IDisposable
     private static extern short GetKeyState(int nVirtKey);
 
     [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int nVirtKey);
+
+    [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
@@ -106,12 +109,21 @@ public sealed class KeyboardHook : IDisposable
         if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
         {
             var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+
+            // Игнорируем события, которые мы сами инжектируем через SendInput —
+            // иначе наши Backspace'ы попадут обратно в логику буфера.
+            const uint LLKHF_INJECTED = 0x10;
+            if ((data.flags & LLKHF_INJECTED) != 0)
+                return CallNextHookEx(_hook, nCode, wParam, lParam);
+
             var vk = (Keys)data.vkCode;
 
-            bool shift = (GetKeyState(0x10) & 0x8000) != 0;
-            bool ctrl = (GetKeyState(0x11) & 0x8000) != 0;
-            bool alt = (GetKeyState(0x12) & 0x8000) != 0;
-            bool win = (GetKeyState(0x5B) & 0x8000) != 0 || (GetKeyState(0x5C) & 0x8000) != 0;
+            // GetAsyncKeyState даёт системно-актуальное состояние, в отличие от GetKeyState
+            // (которое читает состояние нашего потока и в LL-хуке может отставать).
+            bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
+            bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
+            bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
+            bool win = (GetAsyncKeyState(0x5B) & 0x8000) != 0 || (GetAsyncKeyState(0x5C) & 0x8000) != 0;
 
             char? typed = null;
             if (!ctrl && !alt)
@@ -143,18 +155,38 @@ public sealed class KeyboardHook : IDisposable
 
         var state = new byte[256];
         GetKeyboardState(state);
-        if (shift) state[0x10] = 0x80;
-        // Игнорируем CapsLock-эффект на спецсимволах: ToUnicodeEx сам разберётся.
+        // GetKeyboardState отражает состояние НАШЕГО потока — в LL-хуке оно почти всегда пустое.
+        // Поэтому переустанавливаем модификаторы из живых GetAsyncKeyState, и оверрайдим shift.
+        state[0x10] = (byte)(shift ? 0x80 : 0);
+        state[0x11] = (byte)(((GetAsyncKeyState(0x11) & 0x8000) != 0) ? 0x80 : 0);
+        state[0x12] = (byte)(((GetAsyncKeyState(0x12) & 0x8000) != 0) ? 0x80 : 0);
+        state[0x14] = (byte)(((GetKeyState(0x14) & 1) != 0) ? 1 : 0); // CapsLock toggle
 
         var sb = new System.Text.StringBuilder(8);
-        int n = ToUnicodeEx(vk, scan, state, sb, sb.Capacity, 0, hkl);
+        // wFlags бит 2 (0x4) = "не менять состояние клавиатуры" (Win10 1607+) —
+        // без него мы крадём dead-key state у активного приложения и сами портим себе следующие вызовы.
+        const uint NO_STATE_CHANGE = 0x4;
+        int n = ToUnicodeEx(vk, scan, state, sb, sb.Capacity, NO_STATE_CHANGE, hkl);
         if (n >= 1 && sb.Length >= 1)
         {
             var c = sb[0];
             if (!char.IsControl(c)) return c;
         }
+
+        // Фолбэк: если это печатная клавиша (A..Z, 0..9, OEM-знаки, пробел) —
+        // запоминаем плейсхолдер, чтобы количество backspace при конвертации совпало с реально набранным.
+        if (IsPrintableVk(vk))
+            return '?';
         return null;
     }
+
+    private static bool IsPrintableVk(uint vk) =>
+        (vk >= 0x30 && vk <= 0x39) ||          // 0..9
+        (vk >= 0x41 && vk <= 0x5A) ||          // A..Z
+        vk == 0x20 ||                          // Space
+        (vk >= 0xBA && vk <= 0xC0) ||          // OEM_1..OEM_3 (;=,-./` и кириллица)
+        (vk >= 0xDB && vk <= 0xDF) ||          // OEM_4..OEM_8 ([\]'`)
+        vk == 0xE2;                            // OEM_102 (\)
 
     public void Dispose() => Uninstall();
 }
