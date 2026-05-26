@@ -83,10 +83,12 @@ public sealed class App : IDisposable
     private void RunConvert()
     {
         var buffered = _buffer.Snapshot();
+        System.Diagnostics.Debug.WriteLine($"[convert] buffer.Length={buffered.Length} content='{buffered}'");
         if (buffered.Length > 0)
         {
             // Режим "буфер": стираем N символов и печатаем в другой раскладке.
             var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
+            System.Diagnostics.Debug.WriteLine($"[convert] dir={dir} converted.Length={converted.Length} content='{converted}'");
             if (converted != buffered)
             {
                 Sender.SendBackspaces(buffered.Length);
