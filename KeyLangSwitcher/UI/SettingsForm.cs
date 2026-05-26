@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using KeyLangSwitcher.Core;
 using KeyLangSwitcher.Settings;
@@ -11,9 +12,10 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _cbAutostart = new() { Text = "Запускать при старте Windows", AutoSize = true };
     private readonly CheckBox _cbAutoDetect = new() { Text = "Автоматически исправлять раскладку (бета)", AutoSize = true };
     private readonly NumericUpDown _nudIdle = new() { Minimum = 5, Maximum = 600, Value = 30, Width = 80 };
-    private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 220 };
-    private readonly Button _btnSave = new() { Text = "Сохранить", DialogResult = DialogResult.OK };
-    private readonly Button _btnCancel = new() { Text = "Отмена", DialogResult = DialogResult.Cancel };
+    private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180 };
+    private readonly Button _btnRecord = new() { Text = "Записать...", Width = 110, Height = 26 };
+    private readonly Button _btnSave = new() { Text = "Сохранить", DialogResult = DialogResult.OK, Width = 100, Height = 28 };
+    private readonly Button _btnCancel = new() { Text = "Отмена", DialogResult = DialogResult.Cancel, Width = 100, Height = 28 };
 
     private HotkeyConfig _hotkey;
 
@@ -33,53 +35,58 @@ public sealed class SettingsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new System.Drawing.Size(440, 280);
+        ClientSize = new System.Drawing.Size(480, 280);
 
-        var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true };
-        var btnRecord = new Button { Text = "Записать..." , Width = 100 };
-        btnRecord.Click += (_, _) => RecordHotkey();
+        // --- Buttons row (docked bottom). Add BEFORE the content panel so Fill respects it. ---
+        var buttons = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            Dock = DockStyle.Bottom,
+            Height = 48,
+            Padding = new Padding(10),
+        };
+        buttons.Controls.Add(_btnCancel);
+        buttons.Controls.Add(_btnSave);
+        Controls.Add(buttons);
 
-        var lblIdle = new Label { Text = "Сброс буфера через (сек):", AutoSize = true };
+        // --- Content ---
+        var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, Anchor = AnchorStyles.Left };
+        var lblIdle   = new Label { Text = "Сброс буфера (сек):", AutoSize = true, Anchor = AnchorStyles.Left };
+        _btnRecord.Click += (_, _) => RecordHotkey();
+
+        var hotkeyPanel = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            WrapContents = false,
+            Margin = new Padding(0),
+        };
+        hotkeyPanel.Controls.Add(_hotkeyBox);
+        hotkeyPanel.Controls.Add(_btnRecord);
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            Padding = new Padding(12),
-            AutoSize = true,
+            Padding = new Padding(14),
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        layout.Controls.Add(_cbEnabled, 0, 0); layout.SetColumnSpan(_cbEnabled, 2);
-        layout.Controls.Add(_cbAutostart, 0, 1); layout.SetColumnSpan(_cbAutostart, 2);
-        layout.Controls.Add(_cbAutoDetect, 0, 2); layout.SetColumnSpan(_cbAutoDetect, 2);
-
-        layout.Controls.Add(lblHotkey, 0, 3);
-        var hotkeyPanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
-        hotkeyPanel.Controls.Add(_hotkeyBox);
-        hotkeyPanel.Controls.Add(btnRecord);
-        layout.Controls.Add(hotkeyPanel, 1, 3);
-
-        layout.Controls.Add(lblIdle, 0, 4);
-        layout.Controls.Add(_nudIdle, 1, 4);
-
-        var buttons = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            Dock = DockStyle.Bottom,
-            Height = 40,
-            Padding = new Padding(8),
-        };
-        buttons.Controls.Add(_btnCancel);
-        buttons.Controls.Add(_btnSave);
+        int row = 0;
+        layout.Controls.Add(_cbEnabled,    0, row); layout.SetColumnSpan(_cbEnabled, 2);    row++;
+        layout.Controls.Add(_cbAutostart,  0, row); layout.SetColumnSpan(_cbAutostart, 2);  row++;
+        layout.Controls.Add(_cbAutoDetect, 0, row); layout.SetColumnSpan(_cbAutoDetect, 2); row++;
+        layout.Controls.Add(lblHotkey,     0, row);
+        layout.Controls.Add(hotkeyPanel,   1, row); row++;
+        layout.Controls.Add(lblIdle,       0, row);
+        layout.Controls.Add(_nudIdle,      1, row); row++;
 
         Controls.Add(layout);
-        Controls.Add(buttons);
         AcceptButton = _btnSave;
         CancelButton = _btnCancel;
 
-        // Заполняем поля
+        // populate
         _cbEnabled.Checked = settings.Enabled;
         _cbAutostart.Checked = settings.Autostart;
         _cbAutoDetect.Checked = settings.AutoDetectWrongLayout;
@@ -109,11 +116,26 @@ public sealed class SettingsForm : Form
     }
 }
 
-/// <summary>Простой диалог записи хоткея — слушает KeyDown и сохраняет комбинацию.</summary>
+/// <summary>
+/// Запись хоткея: накапливаем нажатые клавиши, фиксируем по отпусканию всех.
+/// Win-клавиша определяется через GetAsyncKeyState (WinForms её не видит в Modifiers).
+/// </summary>
 public sealed class HotkeyRecordDialog : Form
 {
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+    private const int VK_LWIN = 0x5B;
+    private const int VK_RWIN = 0x5C;
+    private const int VK_CONTROL = 0x11;
+    private const int VK_SHIFT = 0x10;
+    private const int VK_MENU = 0x12;
+
     public HotkeyConfig? Result { get; private set; }
-    private readonly Label _label = new() { Text = "Нажмите комбинацию...", AutoSize = true };
+    private readonly Label _label = new() { AutoSize = true };
+
+    private bool _ctrl, _shift, _alt, _win;
+    private int _key;
+    private bool _anyPressed;
 
     public HotkeyRecordDialog()
     {
@@ -121,42 +143,58 @@ public sealed class HotkeyRecordDialog : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new System.Drawing.Size(320, 100);
+        ClientSize = new System.Drawing.Size(360, 110);
         KeyPreview = true;
+        _label.Text = "Нажмите комбинацию и отпустите...";
         _label.Location = new System.Drawing.Point(20, 30);
         Controls.Add(_label);
 
         KeyDown += OnKeyDown;
+        KeyUp += OnKeyUp;
     }
+
+    private static bool IsModifier(Keys k) =>
+        k is Keys.ControlKey or Keys.LControlKey or Keys.RControlKey
+          or Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey
+          or Keys.Menu or Keys.LMenu or Keys.RMenu
+          or Keys.LWin or Keys.RWin;
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        var key = e.KeyCode;
-        // Игнорируем "только модификаторы" в виде основной клавиши.
-        bool isModifierOnly = key is Keys.ControlKey or Keys.LControlKey or Keys.RControlKey
-                                  or Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey
-                                  or Keys.Menu or Keys.LMenu or Keys.RMenu
-                                  or Keys.LWin or Keys.RWin;
+        _anyPressed = true;
+        if ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0)
+            _win = true;
+        if (e.Control) _ctrl = true;
+        if (e.Shift)   _shift = true;
+        if (e.Alt)     _alt = true;
+        if (!IsModifier(e.KeyCode))
+            _key = (int)e.KeyCode;
 
-        var cfg = new HotkeyConfig
-        {
-            Ctrl = e.Control,
-            Shift = e.Shift,
-            Alt = e.Alt,
-            // WinForms KeyEventArgs не даёт Win напрямую — для записи мы пользуемся
-            // тем, что Win-флаг в Modifiers не виден. Считаем, что Win нажат, если используется Apps/LWin/RWin —
-            // здесь приближение, но для большинства комбинаций достаточно.
-            Win = key is Keys.LWin or Keys.RWin,
-            Key = isModifierOnly ? 0 : (int)key,
-        };
-
-        if (!cfg.Ctrl && !cfg.Shift && !cfg.Alt && !cfg.Win && cfg.Key == 0)
-            return;
-
-        Result = cfg;
-        _label.Text = cfg.ToString();
+        UpdateLabel();
         e.Handled = true; e.SuppressKeyPress = true;
+    }
+
+    private void OnKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (!_anyPressed) return;
+        // Когда все клавиши отпущены — фиксируем.
+        bool stillDown =
+            (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 ||
+            (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0 ||
+            (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 ||
+            (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+            (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+        if (stillDown) return;
+        if (!_ctrl && !_shift && !_alt && !_win && _key == 0) return;
+
+        Result = new HotkeyConfig { Ctrl = _ctrl, Shift = _shift, Alt = _alt, Win = _win, Key = _key };
         DialogResult = DialogResult.OK;
         Close();
+    }
+
+    private void UpdateLabel()
+    {
+        var preview = new HotkeyConfig { Ctrl = _ctrl, Shift = _shift, Alt = _alt, Win = _win, Key = _key };
+        _label.Text = preview.ToString();
     }
 }
