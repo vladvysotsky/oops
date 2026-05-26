@@ -19,7 +19,8 @@ public static class Autostart
         if (key == null) return;
         if (enabled)
         {
-            var exe = Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+            var exe = Environment.ProcessPath
+                ?? Path.Combine(AppContext.BaseDirectory, "KeyLangSwitcher.exe");
             key.SetValue(ValueName, $"\"{exe}\"");
         }
         else
