@@ -13,9 +13,9 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _cbAutoDetect = new() { Text = "Автоматически исправлять раскладку (бета)", AutoSize = true };
     private readonly NumericUpDown _nudIdle = new() { Minimum = 5, Maximum = 600, Value = 30, Width = 80 };
     private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180 };
-    private readonly Button _btnRecord = new() { Text = "Записать...", Width = 110, Height = 26 };
-    private readonly Button _btnSave = new() { Text = "Сохранить", DialogResult = DialogResult.OK, Width = 100, Height = 28 };
-    private readonly Button _btnCancel = new() { Text = "Отмена", DialogResult = DialogResult.Cancel, Width = 100, Height = 28 };
+    private readonly Button _btnRecord = new() { Text = "Записать...", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 28), Padding = new Padding(6, 2, 6, 2) };
+    private readonly Button _btnSave = new() { Text = "Сохранить", DialogResult = DialogResult.OK, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 30), Padding = new Padding(10, 4, 10, 4) };
+    private readonly Button _btnCancel = new() { Text = "Отмена", DialogResult = DialogResult.Cancel, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(90, 30), Padding = new Padding(10, 4, 10, 4) };
 
     private HotkeyConfig _hotkey;
 
@@ -35,16 +35,21 @@ public sealed class SettingsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new System.Drawing.Size(480, 280);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new System.Drawing.Size(520, 300);
+        MinimumSize = new System.Drawing.Size(520, 300);
 
         // --- Buttons row (docked bottom). Add BEFORE the content panel so Fill respects it. ---
         var buttons = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.RightToLeft,
             Dock = DockStyle.Bottom,
-            Height = 48,
-            Padding = new Padding(10),
+            Height = 56,
+            Padding = new Padding(12),
+            AutoSize = false,
         };
+        _btnSave.Margin = new Padding(6, 0, 0, 0);
+        _btnCancel.Margin = new Padding(6, 0, 0, 0);
         buttons.Controls.Add(_btnCancel);
         buttons.Controls.Add(_btnSave);
         Controls.Add(buttons);
