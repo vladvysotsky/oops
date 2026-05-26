@@ -67,7 +67,7 @@ public static class Sender
         for (int i = 0; i < count; i++)
         {
             SendInput(2, pair, sz);
-            System.Threading.Thread.Sleep(12);
+            System.Threading.Thread.Sleep(25);
         }
     }
 
@@ -82,7 +82,7 @@ public static class Sender
             pair[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } } };
             pair[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } } };
             SendInput(2, pair, sz);
-            System.Threading.Thread.Sleep(8);
+            System.Threading.Thread.Sleep(20);
         }
     }
 
