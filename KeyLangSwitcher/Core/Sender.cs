@@ -58,47 +58,32 @@ public static class Sender
     public static void SendBackspaces(int count)
     {
         if (count <= 0) return;
-        var inputs = new INPUT[count * 2];
+        // Шлём по одному, с микро-задержкой между нажатиями.
+        // Electron/браузерные текстарии теряют события из больших batched SendInput-ов.
+        var pair = new INPUT[2];
+        pair[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK } } };
+        pair[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } } };
+        int sz = Marshal.SizeOf<INPUT>();
         for (int i = 0; i < count; i++)
         {
-            inputs[i * 2] = new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK } }
-            };
-            inputs[i * 2 + 1] = new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } }
-            };
+            SendInput(2, pair, sz);
+            System.Threading.Thread.Sleep(3);
         }
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
     /// <summary>Отправляет строку как последовательность KEYEVENTF_UNICODE — работает в любой раскладке.</summary>
     public static void SendUnicode(string text)
     {
         if (string.IsNullOrEmpty(text)) return;
-
-        var list = new List<INPUT>(text.Length * 2);
+        int sz = Marshal.SizeOf<INPUT>();
+        var pair = new INPUT[2];
         foreach (var ch in text)
         {
-            // Surrogate pairs передаются как два отдельных WORD-а — KEYBDINPUT уже поддерживает это
-            // если посылать по одной 16-битной единице.
-            list.Add(new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } }
-            });
-            list.Add(new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } }
-            });
+            pair[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } } };
+            pair[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } } };
+            SendInput(2, pair, sz);
+            System.Threading.Thread.Sleep(2);
         }
-
-        var arr = list.ToArray();
-        SendInput((uint)arr.Length, arr, Marshal.SizeOf<INPUT>());
     }
 
     private const ushort VK_CONTROL = 0x11;
