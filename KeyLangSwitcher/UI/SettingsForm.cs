@@ -56,7 +56,8 @@ public sealed class SettingsForm : Form
 
         // --- Content ---
         var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
-        var lblIdle   = new Label { Text = "Забывать набранное\nпосле бездействия (сек):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
+        var lblIdle   = new Label { Text = "Забывать набранное через (сек):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
+        _nudIdle.Margin = new Padding(3, 6, 3, 3);
 
         var tooltip = new ToolTip { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 200, ShowAlways = true };
         tooltip.SetToolTip(lblIdle,
@@ -89,7 +90,7 @@ public sealed class SettingsForm : Form
             ColumnCount = 2,
             Padding = new Padding(14),
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         int row = 0;
