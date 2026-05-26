@@ -9,8 +9,7 @@
     <AssemblyName>KeyLangSwitcher</AssemblyName>
     <RootNamespace>KeyLangSwitcher</RootNamespace>
     <Version>0.1.0</Version>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>false</SelfContained>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest Condition="'$(Configuration)' == 'Debug'">app.debug.manifest</ApplicationManifest>
     <ApplicationManifest Condition="'$(Configuration)' != 'Debug'">app.manifest</ApplicationManifest>
   </PropertyGroup>
