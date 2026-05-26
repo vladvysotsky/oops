@@ -86,11 +86,12 @@ public sealed class App : IDisposable
         if (buffered.Length > 0)
         {
             // Режим "буфер": стираем N символов и печатаем в другой раскладке.
-            var converted = LayoutConverter.AutoConvert(buffered);
+            var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
             if (converted != buffered)
             {
                 Sender.SendBackspaces(buffered.Length);
                 Sender.SendUnicode(converted);
+                SwitchSystemLayout(dir);
             }
             _buffer.Clear();
             return;
@@ -98,6 +99,12 @@ public sealed class App : IDisposable
 
         // Режим "выделение": пробуем сконвертировать выделенный текст через clipboard.
         SelectionConverter.TryConvertSelection();
+    }
+
+    private static void SwitchSystemLayout(LayoutConverter.Direction dir)
+    {
+        if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
+        else if (dir == LayoutConverter.Direction.ToEn) LayoutSwitcher.SwitchToEnglish();
     }
 
     public void Dispose()

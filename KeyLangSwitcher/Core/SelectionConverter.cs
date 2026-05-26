@@ -47,9 +47,13 @@ public static class SelectionConverter
         }
 
         // 5) Конвертация и вставка
-        var converted = LayoutConverter.AutoConvert(text);
+        var (converted, dir) = LayoutConverter.AutoConvertWithDirection(text);
         try { Clipboard.SetText(converted); } catch { }
         Sender.SendCtrlKey('V');
+
+        // Переключаем системную раскладку в "правильную" сторону.
+        if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
+        else if (dir == LayoutConverter.Direction.ToEn) LayoutSwitcher.SwitchToEnglish();
 
         // 6) Возврат оригинального clipboard с небольшой задержкой, чтобы Ctrl+V успел сработать
         System.Threading.Thread.Sleep(150);

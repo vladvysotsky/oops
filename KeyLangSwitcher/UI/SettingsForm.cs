@@ -36,8 +36,8 @@ public sealed class SettingsForm : Form
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new System.Drawing.Size(520, 300);
-        MinimumSize = new System.Drawing.Size(520, 300);
+        ClientSize = new System.Drawing.Size(560, 320);
+        MinimumSize = new System.Drawing.Size(560, 320);
 
         // --- Buttons row (docked bottom). Add BEFORE the content panel so Fill respects it. ---
         var buttons = new FlowLayoutPanel
@@ -55,8 +55,8 @@ public sealed class SettingsForm : Form
         Controls.Add(buttons);
 
         // --- Content ---
-        var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, Anchor = AnchorStyles.Left };
-        var lblIdle   = new Label { Text = "Сброс буфера (сек):", AutoSize = true, Anchor = AnchorStyles.Left };
+        var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
+        var lblIdle   = new Label { Text = "Сброс буфера (сек):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
         _btnRecord.Click += (_, _) => RecordHotkey();
 
         var hotkeyPanel = new FlowLayoutPanel
@@ -75,7 +75,7 @@ public sealed class SettingsForm : Form
             ColumnCount = 2,
             Padding = new Padding(14),
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         int row = 0;

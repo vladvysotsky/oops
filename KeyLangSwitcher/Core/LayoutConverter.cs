@@ -68,11 +68,10 @@ public static class LayoutConverter
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Эвристическое определение направления: если в строке больше латиницы — переводим в RU,
-    /// иначе — в EN. Символы вне обеих раскладок не учитываются.
-    /// </summary>
-    public static string AutoConvert(string text)
+    public enum Direction { None, ToRu, ToEn }
+
+    /// <summary>Конвертация с возвратом выбранного направления.</summary>
+    public static (string Result, Direction Dir) AutoConvertWithDirection(string text)
     {
         int latin = 0, cyr = 0;
         foreach (var c in text)
@@ -80,11 +79,13 @@ public static class LayoutConverter
             if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
             else if ((c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё') cyr++;
         }
-        if (latin == 0 && cyr == 0)
-        {
-            // Только пунктуация — переключаем по обоим словарям не имеет смысла; вернём как есть.
-            return text;
-        }
-        return latin >= cyr ? ToRussian(text) : ToEnglish(text);
+        if (latin == 0 && cyr == 0) return (text, Direction.None);
+        return latin >= cyr ? (ToRussian(text), Direction.ToRu) : (ToEnglish(text), Direction.ToEn);
     }
+
+    /// <summary>
+    /// Эвристическое определение направления: если в строке больше латиницы — переводим в RU,
+    /// иначе — в EN. Символы вне обеих раскладок не учитываются.
+    /// </summary>
+    public static string AutoConvert(string text) => AutoConvertWithDirection(text).Result;
 }
