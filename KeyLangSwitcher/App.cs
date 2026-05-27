@@ -96,17 +96,14 @@ public sealed class App : IDisposable
 
     private void RunConvert()
     {
-        // 1) Сначала всегда пробуем выделение — если в активном окне что-то выделено,
-        //    это явное намерение пользователя сконвертировать именно его.
-        if (SelectionConverter.TryConvertSelection())
+        // Приоритет — буферный режим: то, что пользователь только что набрал в текущей сессии.
+        // Если буфер пуст, пробуем выделенный текст (через Ctrl+C round-trip).
+        var buffered = _buffer.Snapshot();
+        if (buffered.Length == 0)
         {
-            _buffer.Clear();
+            SelectionConverter.TryConvertSelection();
             return;
         }
-
-        // 2) Иначе — буферный режим: стираем N символов и печатаем новые.
-        var buffered = _buffer.Snapshot();
-        if (buffered.Length == 0) return;
 
         var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
         if (converted != buffered)

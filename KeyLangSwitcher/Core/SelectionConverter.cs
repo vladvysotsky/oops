@@ -49,7 +49,7 @@ public static class SelectionConverter
 
         // 5) Конвертация и вставка
         var (converted, dir) = LayoutConverter.AutoConvertWithDirection(text);
-        try { Clipboard.SetText(converted); } catch { }
+        ClipboardSafe.SetText(converted);
         Sender.SendCtrlKey('V');
 
         // Переключаем системную раскладку в "правильную" сторону.
