@@ -21,13 +21,14 @@ public static class SelectionConverter
         // 3) Шлём Ctrl+C
         Sender.SendCtrlKey('C');
 
-        // 4) Ждём появления текста
+        // 4) Ждём появления текста. Таймаут короткий — это "проба" на каждый хоткей,
+        //    при отсутствии выделения мы должны быстро упасть в буферный режим.
         string? text = null;
-        var deadline = DateTime.UtcNow.AddMilliseconds(400);
+        var deadline = DateTime.UtcNow.AddMilliseconds(120);
         while (DateTime.UtcNow < deadline)
         {
             Application.DoEvents();
-            System.Threading.Thread.Sleep(20);
+            System.Threading.Thread.Sleep(10);
             try
             {
                 if (Clipboard.ContainsText())
