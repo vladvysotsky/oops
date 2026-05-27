@@ -56,29 +56,40 @@ public sealed class App : IDisposable
             return;
         }
 
-        // 2) Сброс буфера на спец-клавишах
-        if (IsBufferResetKey(e.VirtualKey))
+        // 2) Навигация / редактирование, влияющее на буфер
+        switch (e.VirtualKey)
         {
-            _buffer.Clear();
-            return;
+            case Keys.Back:
+                _buffer.Backspace();
+                return;
+            case Keys.Delete:
+                _buffer.Delete();
+                return;
+            case Keys.Left:
+                _buffer.MoveLeft();
+                return;
+            case Keys.Right:
+                _buffer.MoveRight();
+                return;
+            // Прочая навигация / завершение — содержимое буфера больше не отражает экран
+            case Keys.Enter:
+            case Keys.Return:
+            case Keys.Tab:
+            case Keys.Escape:
+            case Keys.Up:
+            case Keys.Down:
+            case Keys.Home:
+            case Keys.End:
+            case Keys.PageUp:
+            case Keys.PageDown:
+                _buffer.Clear();
+                return;
         }
 
-        // 3) Backspace
-        if (e.VirtualKey == Keys.Back)
-        {
-            _buffer.Backspace();
-            return;
-        }
-
-        // 4) Накопление символов
+        // 3) Накопление символов
         if (e.TypedChar.HasValue)
             _buffer.Append(e.TypedChar.Value);
     }
-
-    private static bool IsBufferResetKey(Keys k) => k is
-        Keys.Enter or Keys.Return or Keys.Tab or Keys.Escape
-        or Keys.Up or Keys.Down or Keys.Left or Keys.Right
-        or Keys.Home or Keys.End or Keys.PageUp or Keys.PageDown;
 
     private void RunConvert()
     {
@@ -97,7 +108,11 @@ public sealed class App : IDisposable
         var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
         if (converted != buffered)
         {
+            int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
             Sender.ReleaseHotkeyModifiers();
+            // Если пользователь правил текст и курсор не в конце набранного —
+            // сначала довезём каретку до конца буфера, потом стираем всё одним хвостом.
+            if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
             Sender.SendBackspaces(buffered.Length);
             Sender.SendUnicode(converted);
             SwitchSystemLayout(dir);

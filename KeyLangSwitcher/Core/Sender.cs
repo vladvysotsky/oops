@@ -80,6 +80,22 @@ public static class Sender
         System.Threading.Thread.Sleep(20); // даём приложению переварить key-up'ы
     }
 
+    /// <summary>Перемещает каретку вправо N раз (полезно перед SendBackspaces, если буфер-курсор не в конце).</summary>
+    public static void SendRightArrow(int count)
+    {
+        if (count <= 0) return;
+        const ushort VK_RIGHT = 0x27;
+        var pair = new INPUT[2];
+        pair[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RIGHT } } };
+        pair[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RIGHT, dwFlags = KEYEVENTF_KEYUP } } };
+        int sz = Marshal.SizeOf<INPUT>();
+        for (int i = 0; i < count; i++)
+        {
+            SendInput(2, pair, sz);
+            System.Threading.Thread.Sleep(20);
+        }
+    }
+
     public static void SendBackspaces(int count)
     {
         if (count <= 0) return;
