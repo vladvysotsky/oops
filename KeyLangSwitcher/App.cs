@@ -82,25 +82,25 @@ public sealed class App : IDisposable
 
     private void RunConvert()
     {
-        var buffered = _buffer.Snapshot();
-        System.Diagnostics.Debug.WriteLine($"[convert] buffer.Length={buffered.Length} content='{buffered}'");
-        if (buffered.Length > 0)
+        // 1) Сначала всегда пробуем выделение — если в активном окне что-то выделено,
+        //    это явное намерение пользователя сконвертировать именно его.
+        if (SelectionConverter.TryConvertSelection())
         {
-            // Режим "буфер": стираем N символов и печатаем в другой раскладке.
-            var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
-            System.Diagnostics.Debug.WriteLine($"[convert] dir={dir} converted.Length={converted.Length} content='{converted}'");
-            if (converted != buffered)
-            {
-                Sender.SendBackspaces(buffered.Length);
-                Sender.SendUnicode(converted);
-                SwitchSystemLayout(dir);
-            }
             _buffer.Clear();
             return;
         }
 
-        // Режим "выделение": пробуем сконвертировать выделенный текст через clipboard.
-        SelectionConverter.TryConvertSelection();
+        // 2) Иначе — буферный режим: заменяем последние N символов через clipboard.
+        var buffered = _buffer.Snapshot();
+        if (buffered.Length == 0) return;
+
+        var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
+        if (converted != buffered)
+        {
+            ClipboardReplace.ReplaceLastN(buffered.Length, converted);
+            SwitchSystemLayout(dir);
+        }
+        _buffer.Clear();
     }
 
     private static void SwitchSystemLayout(LayoutConverter.Direction dir)
