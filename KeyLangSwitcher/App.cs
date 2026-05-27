@@ -71,17 +71,21 @@ public sealed class App : IDisposable
             case Keys.Right:
                 _buffer.MoveRight();
                 return;
-            // Прочая навигация / завершение — содержимое буфера больше не отражает экран
+            case Keys.Home:
+                _buffer.MoveHome();
+                return;
+            case Keys.End:
+                _buffer.MoveEnd();
+                return;
+            // Вертикальная навигация и завершающие действия — мы теряем контекст.
+            case Keys.Up:
+            case Keys.Down:
+            case Keys.PageUp:
+            case Keys.PageDown:
             case Keys.Enter:
             case Keys.Return:
             case Keys.Tab:
             case Keys.Escape:
-            case Keys.Up:
-            case Keys.Down:
-            case Keys.Home:
-            case Keys.End:
-            case Keys.PageUp:
-            case Keys.PageDown:
                 _buffer.Clear();
                 return;
         }
@@ -110,11 +114,11 @@ public sealed class App : IDisposable
         {
             int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
             Sender.ReleaseHotkeyModifiers();
-            // Если пользователь правил текст и курсор не в конце набранного —
-            // сначала довезём каретку до конца буфера, потом стираем всё одним хвостом.
+            // 1) Довозим реальную каретку до конца буфера (если курсор был в середине после правок).
             if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
-            Sender.SendBackspaces(buffered.Length);
-            Sender.SendUnicode(converted);
+            // 2) Выделяем весь набранный текст справа налево, кладём конвертированный в clipboard и вставляем.
+            //    Замена визуально мгновенная (одно событие paste), не зависит от частоты обновления приёмника.
+            ClipboardReplace.ReplaceLastN(buffered.Length, converted);
             SwitchSystemLayout(dir);
         }
         _buffer.Clear();
