@@ -42,13 +42,22 @@ public static class ClipboardReplace
         ClipboardSafe.SetText(newText);
 
         SelectLastN(n);
-        System.Threading.Thread.Sleep(60);
+        System.Threading.Thread.Sleep(80);
 
         Sender.SendCtrlKey('V');
 
-        System.Threading.Thread.Sleep(150);
+        // Ctrl+V асинхронный — приёмник прочитает clipboard из своего message loop позже.
+        // Восстанавливаем оригинальный clipboard через 1 секунду на UI-потоке (Clipboard требует STA).
         if (original != null)
-            try { Clipboard.SetDataObject(original, copy: true); } catch { }
+        {
+            var uiCtx = System.Threading.SynchronizationContext.Current;
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(1000);
+                if (uiCtx != null)
+                    uiCtx.Post(_ => { try { Clipboard.SetDataObject(original, copy: true); } catch { } }, null);
+            });
+        }
     }
 
     /// <summary>
