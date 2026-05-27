@@ -25,8 +25,11 @@ internal static class Program
         _ = new Control(); // принудительно создаёт SyncContext в этом потоке
 
         var settings = AppSettings.Load();
+        System.Diagnostics.Debug.WriteLine($"[startup] settings loaded. hotkey={settings.ConvertHotkey} enabled={settings.Enabled}");
         var app = new App(settings);
+        System.Diagnostics.Debug.WriteLine("[startup] hooks installed");
         var ctx = new TrayContext(app);
+        System.Diagnostics.Debug.WriteLine("[startup] tray ready, entering message loop");
 
         Application.Run(ctx);
     }
