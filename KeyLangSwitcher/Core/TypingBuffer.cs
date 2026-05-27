@@ -103,6 +103,24 @@ public sealed class TypingBuffer
         }
     }
 
+    public void MoveHome()
+    {
+        lock (_gate)
+        {
+            _cursor = 0;
+            _lastInputUtc = DateTime.UtcNow;
+        }
+    }
+
+    public void MoveEnd()
+    {
+        lock (_gate)
+        {
+            _cursor = _buffer.Length;
+            _lastInputUtc = DateTime.UtcNow;
+        }
+    }
+
     public void Clear()
     {
         lock (_gate) ClearLocked();

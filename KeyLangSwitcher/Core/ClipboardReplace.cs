@@ -52,28 +52,38 @@ public static class ClipboardReplace
     }
 
     /// <summary>
-    /// Сначала снимаем потенциально зажатые пользователем модификаторы хоткея
-    /// (Ctrl/Alt/Win) — иначе наш Shift+Left приложение увидит как Ctrl+Alt+Shift+Left
-    /// и выделение либо сломается, либо съест больше/меньше нужного.
-    /// Затем Shift down, Left down/up * N, Shift up — одной пачкой SendInput.
+    /// Снимаем зажатые модификаторы (Ctrl/Alt/Win), затем удерживаем Shift и шлём Left N раз
+    /// с задержкой между нажатиями — single-batch SendInput теряет события в Electron/React-полях.
     /// </summary>
     private static void SelectLastN(int n)
     {
-        var inputs = new INPUT[5 + 2 + n * 2];
-        int idx = 0;
-        inputs[idx++] = Key(VK_CONTROL, true);
-        inputs[idx++] = Key(VK_MENU,    true);
-        inputs[idx++] = Key(VK_LWIN,    true);
-        inputs[idx++] = Key(VK_RWIN,    true);
-        inputs[idx++] = Key(VK_SHIFT,   true); // на случай, если ранее остался "висящий" Shift
-        inputs[idx++] = Key(VK_SHIFT, false);
+        int sz = Marshal.SizeOf<INPUT>();
+
+        // 1) снимаем потенциально зажатые модификаторы пользователя
+        var release = new[]
+        {
+            Key(VK_CONTROL, true), Key(VK_MENU, true),
+            Key(VK_LWIN, true),    Key(VK_RWIN, true),
+            Key(VK_SHIFT, true),
+        };
+        SendInput((uint)release.Length, release, sz);
+        System.Threading.Thread.Sleep(20);
+
+        // 2) Shift down
+        var shiftDown = new[] { Key(VK_SHIFT, false) };
+        SendInput(1, shiftDown, sz);
+
+        // 3) Left × N, по одному
+        var leftPair = new[] { Key(VK_LEFT, false), Key(VK_LEFT, true) };
         for (int i = 0; i < n; i++)
         {
-            inputs[idx++] = Key(VK_LEFT, false);
-            inputs[idx++] = Key(VK_LEFT, true);
+            SendInput(2, leftPair, sz);
+            System.Threading.Thread.Sleep(25);
         }
-        inputs[idx++] = Key(VK_SHIFT, true);
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+
+        // 4) Shift up
+        var shiftUp = new[] { Key(VK_SHIFT, true) };
+        SendInput(1, shiftUp, sz);
     }
 
     private static INPUT Key(ushort vk, bool up) => new()
