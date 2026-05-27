@@ -87,13 +87,27 @@ public static class Sender
     }
 
     private const ushort VK_CONTROL = 0x11;
+    private const ushort VK_SHIFT = 0x10;
+    private const ushort VK_MENU = 0x12;
+    private const ushort VK_LWIN = 0x5B;
+    private const ushort VK_RWIN = 0x5C;
 
-    /// <summary>Эмуляция Ctrl+C / Ctrl+V.</summary>
+    /// <summary>
+    /// Эмуляция Ctrl+C / Ctrl+V. Перед основной комбинацией снимаем все "лишние"
+    /// модификаторы (Shift/Alt/Win), которые мог удерживать пользователь от хоткея —
+    /// иначе приложение увидит, например, Ctrl+Alt+C вместо чистого Ctrl+C и copy не сработает.
+    /// </summary>
     public static void SendCtrlKey(char key)
     {
         ushort vk = (ushort)char.ToUpper(key);
         var inputs = new[]
         {
+            // снимаем потенциально зажатые модификаторы
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_SHIFT, dwFlags = KEYEVENTF_KEYUP } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU,  dwFlags = KEYEVENTF_KEYUP } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN,  dwFlags = KEYEVENTF_KEYUP } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN,  dwFlags = KEYEVENTF_KEYUP } } },
+            // и саму комбинацию Ctrl+key
             new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } },
             new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = vk } } },
             new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = KEYEVENTF_KEYUP } } },

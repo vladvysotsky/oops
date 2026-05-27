@@ -24,7 +24,7 @@ public static class SelectionConverter
         // 4) Ждём появления текста. Таймаут короткий — это "проба" на каждый хоткей,
         //    при отсутствии выделения мы должны быстро упасть в буферный режим.
         string? text = null;
-        var deadline = DateTime.UtcNow.AddMilliseconds(120);
+        var deadline = DateTime.UtcNow.AddMilliseconds(250);
         while (DateTime.UtcNow < deadline)
         {
             Application.DoEvents();
