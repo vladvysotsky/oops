@@ -22,7 +22,7 @@ internal static class ClipboardSafe
         data.SetData(FmtExcludeMonitor, true);
         data.SetData(FmtHistory, ZeroDword());
         data.SetData(FmtCloud,   ZeroDword());
-        try { Clipboard.SetDataObject(data, copy: false); } catch { }
+        try { Clipboard.SetDataObject(data, copy: true); } catch { }
     }
 
     private static MemoryStream ZeroDword() => new(new byte[] { 0, 0, 0, 0 });
