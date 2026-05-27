@@ -83,7 +83,6 @@ public sealed class App : IDisposable
             case Keys.PageUp:
             case Keys.PageDown:
             case Keys.Enter:
-            case Keys.Return:
             case Keys.Tab:
             case Keys.Escape:
                 _buffer.Clear();
