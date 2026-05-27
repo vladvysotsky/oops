@@ -11,6 +11,7 @@ namespace KeyLangSwitcher;
 public sealed class App : IDisposable
 {
     public AppSettings Settings { get; }
+    public event EventHandler<string>? HotkeyFired;
     private readonly TypingBuffer _buffer = new();
     private readonly KeyboardHook _kbHook = new();
     private readonly MouseHook _mouseHook = new();
@@ -51,6 +52,9 @@ public sealed class App : IDisposable
             System.Diagnostics.Debug.WriteLine($"[hotkey] matched on {e.VirtualKey} ctrl={e.Ctrl} alt={e.Alt} shift={e.Shift} win={e.Win}");
             // Глотаем событие, чтобы оно не дошло до приложения
             e.Handled = true;
+            // Визуальный фидбек (balloon в трее)
+            var info = $"match {e.VirtualKey} buf={_buffer.Length}";
+            _uiContext.Post(_ => HotkeyFired?.Invoke(this, info), null);
 
             // Выполняем в UI-потоке — нужен для clipboard
             _uiContext.Post(_ => RunConvert(), null);
