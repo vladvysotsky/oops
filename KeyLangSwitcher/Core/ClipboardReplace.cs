@@ -39,7 +39,7 @@ public static class ClipboardReplace
         IDataObject? original = null;
         try { original = Clipboard.GetDataObject(); } catch { }
 
-        try { Clipboard.SetText(newText); } catch { return; }
+        ClipboardSafe.SetText(newText);
 
         SelectLastN(n);
         System.Threading.Thread.Sleep(60);
