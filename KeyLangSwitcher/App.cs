@@ -48,6 +48,7 @@ public sealed class App : IDisposable
         // 1) Хоткей конвертации
         if (Settings.ConvertHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
+            System.Diagnostics.Debug.WriteLine($"[hotkey] matched on {e.VirtualKey} ctrl={e.Ctrl} alt={e.Alt} shift={e.Shift} win={e.Win}");
             // Глотаем событие, чтобы оно не дошло до приложения
             e.Handled = true;
 
