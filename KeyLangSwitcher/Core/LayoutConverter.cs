@@ -38,6 +38,7 @@ public static class LayoutConverter
         ('$',';'),  // Shift+4
         ('^',':'),  // Shift+6
         ('&','?'),  // Shift+7
+        ('|','/'),  // Shift+\ : US "|" ↔ RU "/"
     };
 
     private static readonly Dictionary<char, char> EnToRu = new();
