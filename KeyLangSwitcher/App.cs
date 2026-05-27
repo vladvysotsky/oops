@@ -112,9 +112,10 @@ public sealed class App : IDisposable
             Sender.ReleaseHotkeyModifiers();
             // 1) Довозим реальную каретку до конца буфера (если курсор был в середине после правок).
             if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
-            // 2) Выделяем весь набранный текст справа налево, кладём конвертированный в clipboard и вставляем.
-            //    Замена визуально мгновенная (одно событие paste), не зависит от частоты обновления приёмника.
-            ClipboardReplace.ReplaceLastN(buffered.Length, converted);
+            // 2) Стираем буфер бэкспейсами (надёжно во всех приложениях, включая UWP).
+            Sender.SendBackspaces(buffered.Length);
+            // 3) Вставляем конвертированный текст одним Ctrl+V из clipboard — атомарно, без посимвольного ввода.
+            ClipboardPaste.Paste(converted);
             SwitchSystemLayout(dir);
         }
         _buffer.Clear();
