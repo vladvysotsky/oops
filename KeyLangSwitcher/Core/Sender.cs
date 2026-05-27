@@ -11,6 +11,11 @@ public static class Sender
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint KEYEVENTF_UNICODE = 0x0004;
     private const ushort VK_BACK = 0x08;
+    private const ushort VK_CONTROL = 0x11;
+    private const ushort VK_SHIFT = 0x10;
+    private const ushort VK_MENU = 0x12;
+    private const ushort VK_LWIN = 0x5B;
+    private const ushort VK_RWIN = 0x5C;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
@@ -55,6 +60,26 @@ public static class Sender
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+    /// <summary>
+    /// Снимает потенциально зажатые пользователем модификаторы хоткея (Ctrl/Shift/Alt/Win).
+    /// Должно вызываться перед последовательностью бэкспейсов / Unicode-ввода,
+    /// иначе зажатый Ctrl превратит Backspace в Ctrl+Backspace (удаление слова),
+    /// а Win-down под Backspace может сработать как системный шорткат.
+    /// </summary>
+    public static void ReleaseHotkeyModifiers()
+    {
+        var inputs = new[]
+        {
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_SHIFT,   dwFlags = KEYEVENTF_KEYUP } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU,    dwFlags = KEYEVENTF_KEYUP } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN,    dwFlags = KEYEVENTF_KEYUP } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN,    dwFlags = KEYEVENTF_KEYUP } } },
+        };
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        System.Threading.Thread.Sleep(20); // даём приложению переварить key-up'ы
+    }
+
     public static void SendBackspaces(int count)
     {
         if (count <= 0) return;
@@ -85,12 +110,6 @@ public static class Sender
             System.Threading.Thread.Sleep(25);
         }
     }
-
-    private const ushort VK_CONTROL = 0x11;
-    private const ushort VK_SHIFT = 0x10;
-    private const ushort VK_MENU = 0x12;
-    private const ushort VK_LWIN = 0x5B;
-    private const ushort VK_RWIN = 0x5C;
 
     /// <summary>
     /// Эмуляция Ctrl+C / Ctrl+V. Перед основной комбинацией снимаем все "лишние"
