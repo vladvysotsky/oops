@@ -11,7 +11,6 @@ namespace KeyLangSwitcher;
 public sealed class App : IDisposable
 {
     public AppSettings Settings { get; }
-    public event EventHandler<string>? HotkeyFired;
     private readonly TypingBuffer _buffer = new();
     private readonly KeyboardHook _kbHook = new();
     private readonly MouseHook _mouseHook = new();
@@ -49,12 +48,8 @@ public sealed class App : IDisposable
         // 1) Хоткей конвертации
         if (Settings.ConvertHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
-            System.Diagnostics.Debug.WriteLine($"[hotkey] matched on {e.VirtualKey} ctrl={e.Ctrl} alt={e.Alt} shift={e.Shift} win={e.Win}");
             // Глотаем событие, чтобы оно не дошло до приложения
             e.Handled = true;
-            // Визуальный фидбек (balloon в трее)
-            var info = $"match {e.VirtualKey} buf={_buffer.Length}";
-            _uiContext.Post(_ => HotkeyFired?.Invoke(this, info), null);
 
             // Выполняем в UI-потоке — нужен для clipboard
             _uiContext.Post(_ => RunConvert(), null);
@@ -95,14 +90,16 @@ public sealed class App : IDisposable
             return;
         }
 
-        // 2) Иначе — буферный режим: заменяем последние N символов через clipboard.
+        // 2) Иначе — буферный режим: стираем N символов и печатаем новые.
         var buffered = _buffer.Snapshot();
         if (buffered.Length == 0) return;
 
         var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
         if (converted != buffered)
         {
-            ClipboardReplace.ReplaceLastN(buffered.Length, converted);
+            Sender.ReleaseHotkeyModifiers();
+            Sender.SendBackspaces(buffered.Length);
+            Sender.SendUnicode(converted);
             SwitchSystemLayout(dir);
         }
         _buffer.Clear();

@@ -46,14 +46,6 @@ public sealed class TrayContext : ApplicationContext
             ContextMenuStrip = menu,
         };
         _icon.DoubleClick += (_, _) => ShowSettings();
-
-        // Связываем хук-события с визуальной индикацией.
-        app.HotkeyFired += (_, info) =>
-        {
-            var msg = $"KLS {DateTime.Now:HH:mm:ss} {info}";
-            _icon.Text = msg.Length > 63 ? msg.Substring(0, 63) : msg;
-            try { _icon.ShowBalloonTip(800, "KeyLangSwitcher", $"Хоткей: {info}", ToolTipIcon.Info); } catch { }
-        };
     }
 
     private static System.Drawing.Icon LoadIcon()
