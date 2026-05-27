@@ -120,10 +120,17 @@ public sealed class KeyboardHook : IDisposable
 
             // GetAsyncKeyState даёт системно-актуальное состояние, в отличие от GetKeyState
             // (которое читает состояние нашего потока и в LL-хуке может отставать).
-            bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
-            bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
-            bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
-            bool win = (GetAsyncKeyState(0x5B) & 0x8000) != 0 || (GetAsyncKeyState(0x5C) & 0x8000) != 0;
+            // Дополнительно: если САМА текущая клавиша — модификатор, считаем флаг true сразу,
+            // т.к. GetAsyncKeyState в момент WM_KEYDOWN может ещё не отражать только что нажатый VK.
+            bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0
+                || vk is Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey;
+            bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0
+                || vk is Keys.ControlKey or Keys.LControlKey or Keys.RControlKey;
+            bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0
+                || vk is Keys.Menu or Keys.LMenu or Keys.RMenu;
+            bool win = (GetAsyncKeyState(0x5B) & 0x8000) != 0
+                || (GetAsyncKeyState(0x5C) & 0x8000) != 0
+                || vk is Keys.LWin or Keys.RWin;
 
             char? typed = null;
             if (!ctrl && !alt)
