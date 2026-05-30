@@ -91,7 +91,55 @@ public sealed class App : IDisposable
 
         // 3) Накопление символов
         if (e.TypedChar.HasValue)
-            _buffer.Append(e.TypedChar.Value);
+        {
+            var c = e.TypedChar.Value;
+            _buffer.Append(c);
+
+            // 4) Авто-определение: на разделителе анализируем только что завершённое слово.
+            if (Settings.AutoDetectWrongLayout && IsWordSeparator(c))
+                _uiContext.Post(_ => TryAutoConvertLastWord(), null);
+        }
+    }
+
+    private static bool IsWordSeparator(char c) =>
+        c == ' ' || c == '\t' || c == ',' || c == '.' || c == ';' || c == ':'
+        || c == '!' || c == '?' || c == '/' || c == '\\' || c == '"' || c == '\''
+        || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}';
+
+    private void TryAutoConvertLastWord()
+    {
+        // Берём буфер; последний символ — только что вставленный разделитель.
+        var snap = _buffer.Snapshot();
+        if (snap.Length < 2) return;
+        var sep = snap[^1];
+
+        // Ищем границу предыдущего слова.
+        int wordEnd = snap.Length - 1;          // индекс разделителя
+        int wordStart = wordEnd;
+        while (wordStart > 0 && !IsWordSeparator(snap[wordStart - 1])) wordStart--;
+        var word = snap.Substring(wordStart, wordEnd - wordStart);
+
+        var verdict = AutoDetector.Analyze(word);
+        if (verdict == AutoDetector.Verdict.Keep) return;
+
+        var converted = verdict == AutoDetector.Verdict.WasMeantRussian
+            ? LayoutConverter.ToRussian(word)
+            : LayoutConverter.ToEnglish(word);
+        if (converted == word) return;
+
+        // Заменяем слово в активном поле: стираем (word.Length + 1) символов
+        // (само слово плюс разделитель), потом печатаем converted + sep.
+        Sender.ReleaseHotkeyModifiers();
+        Sender.SendBackspaces(word.Length + 1);
+        ClipboardPaste.Paste(converted + sep);
+
+        SwitchSystemLayout(verdict == AutoDetector.Verdict.WasMeantRussian
+            ? LayoutConverter.Direction.ToRu : LayoutConverter.Direction.ToEn);
+
+        // Синхронизируем буфер с тем, что теперь на экране.
+        _buffer.Clear();
+        foreach (var ch in converted) _buffer.Append(ch);
+        _buffer.Append(sep);
     }
 
     private void RunConvert()

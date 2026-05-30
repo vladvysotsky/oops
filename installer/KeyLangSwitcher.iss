@@ -37,7 +37,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-SetupIconFile=
+SetupIconFile=..\KeyLangSwitcher\Resources\icon.ico
 CloseApplications=yes
 RestartApplications=no
 
