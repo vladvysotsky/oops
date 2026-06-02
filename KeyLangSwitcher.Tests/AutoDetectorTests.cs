@@ -6,55 +6,53 @@ namespace KeyLangSwitcher.Tests;
 public class AutoDetectorTests
 {
     [Theory]
-    [InlineData("ghbdtn")]       // привет — RU набранное в EN
-    [InlineData("vfvfxrf")]      // мамачка — нет EN-гласных
-    [InlineData("ghjuhfvvf")]    // программа — нет гласных в EN-слое
-    public void EnWordWithoutVowels_DetectedAsRussian(string word)
+    [InlineData("ghbdtn")]       // привет — в RU-словаре
+    [InlineData("vfvf")]         // мама — в RU-словаре
+    public void DictionaryHit_OnConvertedLatin_TriggersRu(string word)
     {
         Assert.Equal(AutoDetector.Verdict.WasMeantRussian, AutoDetector.Analyze(word));
     }
 
     [Theory]
-    [InlineData("руддщ")]        // hello — RU-слой EN-слова, нет ru-гласных
-    public void RuWordWithoutVowels_DetectedAsEnglish(string word)
+    [InlineData("руддщ")]        // hello — в EN-словаре после layout-конвертации
+    public void DictionaryHit_OnConvertedCyrillic_TriggersEn(string word)
     {
         Assert.Equal(AutoDetector.Verdict.WasMeantEnglish, AutoDetector.Analyze(word));
     }
 
     [Theory]
-    [InlineData("hello")]        // нормальное EN-слово, есть гласные
-    [InlineData("привет")]       // нормальное RU-слово, есть гласные
-    [InlineData("abc")]          // только 1 гласная, но есть — keep
-    public void RegularWordsAreKept(string word)
+    [InlineData("hello")]        // известно в EN
+    [InlineData("привет")]       // известно в RU
+    [InlineData("the")]
+    [InlineData("я")]
+    public void KnownWord_InNativeLanguage_IsKept(string word)
+    {
+        Assert.Equal(AutoDetector.Verdict.Keep, AutoDetector.Analyze(word));
+    }
+
+    [Theory]
+    [InlineData("a")]
+    [InlineData("")]
+    public void EmptyOrSingleChar_AreKept(string word)
+    {
+        Assert.Equal(AutoDetector.Verdict.Keep, AutoDetector.Analyze(word));
+    }
+
+    [Theory]
+    [InlineData("helloпривет")]
+    [InlineData("abc123")]
+    [InlineData("hi!")]
+    public void MixedScriptOrNonLetters_AreKept(string word)
     {
         Assert.Equal(AutoDetector.Verdict.Keep, AutoDetector.Analyze(word));
     }
 
     [Fact]
-    public void Limitation_AcronymWithoutVowels_FalsePositive()
+    public void UnknownWordWithoutVowels_FallsBackToVowelHeuristic()
     {
-        // Документированное ограничение эвристики: "XML", "PDF", "BMW" и т.п. —
-        // короткие аббревиатуры без гласных классифицируются как "набрано в EN
-        // на месте RU". Мы фиксируем это поведение тестом, чтобы знать, если что-то
-        // изменится при следующей итерации детектора.
-        Assert.Equal(AutoDetector.Verdict.WasMeantRussian, AutoDetector.Analyze("XML"));
-    }
-
-    [Theory]
-    [InlineData("a")]
-    [InlineData("ab")]
-    [InlineData("")]
-    public void ShortWordsAreNeverFlagged(string word)
-    {
-        Assert.Equal(AutoDetector.Verdict.Keep, AutoDetector.Analyze(word));
-    }
-
-    [Theory]
-    [InlineData("helloпривет")]   // смешанные алфавиты
-    [InlineData("abc123")]         // с цифрами
-    [InlineData("hi!")]            // с пунктуацией
-    public void MixedScriptOrNonLetters_AreKept(string word)
-    {
-        Assert.Equal(AutoDetector.Verdict.Keep, AutoDetector.Analyze(word));
+        // Слово которого нет ни в одном словаре, но без EN-гласных →
+        // эвристика всё равно классифицирует как набранное в EN на месте RU.
+        // "xczxsd" — гарантированно отсутствует в словаре.
+        Assert.Equal(AutoDetector.Verdict.WasMeantRussian, AutoDetector.Analyze("xczxsd"));
     }
 }
