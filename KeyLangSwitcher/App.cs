@@ -12,6 +12,7 @@ public sealed class App : IDisposable
 {
     public AppSettings Settings { get; }
     private readonly TypingBuffer _buffer = new();
+    private readonly LayoutTracker _layoutTracker = new();
     private readonly KeyboardHook _kbHook = new();
     private readonly MouseHook _mouseHook = new();
     private readonly ForegroundWatcher _fgWatcher = new();
@@ -29,7 +30,11 @@ public sealed class App : IDisposable
 
         _kbHook.KeyDown += OnKeyDown;
         _mouseHook.Clicked += (_, _) => _buffer.Clear();
-        _fgWatcher.ForegroundChanged += (_, _) => _buffer.Clear();
+        _fgWatcher.ForegroundChanged += (_, _) =>
+        {
+            _buffer.Clear();
+            _layoutTracker.Reset();
+        };
 
         _kbHook.Install();
         _mouseHook.Install();
@@ -44,6 +49,12 @@ public sealed class App : IDisposable
     private void OnKeyDown(object? sender, KeyboardHook.KeyEvent e)
     {
         if (!Settings.Enabled) return;
+
+        // 0) Если пользователь сам сменил раскладку (Alt+Shift, Win+Space и т.п.) —
+        //    дальнейшие нажатия будут идти в другой системе букв, наш буфер уже
+        //    не соответствует тому, что попадает на экран. Сбрасываем.
+        if (_layoutTracker.LayoutChangedSinceLastCheck())
+            _buffer.Clear();
 
         // 1) Хоткей конвертации
         if (Settings.ConvertHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
