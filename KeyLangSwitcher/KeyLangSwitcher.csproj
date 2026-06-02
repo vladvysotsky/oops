@@ -19,6 +19,8 @@
     <None Update="Resources\icon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <EmbeddedResource Include="Resources\words_en.txt" />
+    <EmbeddedResource Include="Resources\words_ru.txt" />
   </ItemGroup>
 
 </Project>

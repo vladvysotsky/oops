@@ -106,9 +106,9 @@ public sealed class App : IDisposable
             var c = e.TypedChar.Value;
             _buffer.Append(c);
 
-            // 4) Авто-определение: на разделителе анализируем только что завершённое слово.
-            if (Settings.AutoDetectWrongLayout && IsWordSeparator(c))
-                _uiContext.Post(_ => TryAutoConvertLastWord(), null);
+            // 4) Авто-правка на разделителе: layout + typography.
+            if ((Settings.AutoDetectWrongLayout || Settings.AutoFixTypography) && IsWordSeparator(c))
+                _uiContext.Post(_ => TryAutoFixLastWord(), null);
         }
     }
 
@@ -117,39 +117,54 @@ public sealed class App : IDisposable
         || c == '!' || c == '?' || c == '/' || c == '\\' || c == '"' || c == '\''
         || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}';
 
-    private void TryAutoConvertLastWord()
+    private void TryAutoFixLastWord()
     {
-        // Берём буфер; последний символ — только что вставленный разделитель.
         var snap = _buffer.Snapshot();
         if (snap.Length < 2) return;
         var sep = snap[^1];
 
-        // Ищем границу предыдущего слова.
-        int wordEnd = snap.Length - 1;          // индекс разделителя
+        int wordEnd = snap.Length - 1;
         int wordStart = wordEnd;
         while (wordStart > 0 && !IsWordSeparator(snap[wordStart - 1])) wordStart--;
         var word = snap.Substring(wordStart, wordEnd - wordStart);
+        if (word.Length == 0) return;
 
-        var verdict = AutoDetector.Analyze(word);
-        if (verdict == AutoDetector.Verdict.Keep) return;
+        string corrected = word;
+        var layoutDir = LayoutConverter.Direction.None;
 
-        var converted = verdict == AutoDetector.Verdict.WasMeantRussian
-            ? LayoutConverter.ToRussian(word)
-            : LayoutConverter.ToEnglish(word);
-        if (converted == word) return;
+        // 1) Слой раскладки.
+        if (Settings.AutoDetectWrongLayout)
+        {
+            var verdict = AutoDetector.Analyze(corrected);
+            if (verdict == AutoDetector.Verdict.WasMeantRussian)
+            {
+                corrected = LayoutConverter.ToRussian(corrected);
+                layoutDir = LayoutConverter.Direction.ToRu;
+            }
+            else if (verdict == AutoDetector.Verdict.WasMeantEnglish)
+            {
+                corrected = LayoutConverter.ToEnglish(corrected);
+                layoutDir = LayoutConverter.Direction.ToEn;
+            }
+        }
 
-        // Заменяем слово в активном поле: стираем (word.Length + 1) символов
-        // (само слово плюс разделитель), потом печатаем converted + sep.
+        // 2) Типографика.
+        if (Settings.AutoFixTypography)
+        {
+            corrected = Typography.FixAccidentalCapsLock(corrected) ?? corrected;
+            corrected = Typography.FixDoubleCapital(corrected) ?? corrected;
+        }
+
+        if (corrected == word) return;
+
         Sender.ReleaseHotkeyModifiers();
         Sender.SendBackspaces(word.Length + 1);
-        ClipboardPaste.Paste(converted + sep);
-
-        SwitchSystemLayout(verdict == AutoDetector.Verdict.WasMeantRussian
-            ? LayoutConverter.Direction.ToRu : LayoutConverter.Direction.ToEn);
+        ClipboardPaste.Paste(corrected + sep);
+        if (layoutDir != LayoutConverter.Direction.None) SwitchSystemLayout(layoutDir);
 
         // Синхронизируем буфер с тем, что теперь на экране.
         _buffer.Clear();
-        foreach (var ch in converted) _buffer.Append(ch);
+        foreach (var ch in corrected) _buffer.Append(ch);
         _buffer.Append(sep);
     }
 

@@ -11,6 +11,7 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _cbEnabled = new() { Text = "Включено", AutoSize = true };
     private readonly CheckBox _cbAutostart = new() { Text = "Запускать при старте Windows", AutoSize = true };
     private readonly CheckBox _cbAutoDetect = new() { Text = "Автоматически исправлять раскладку (бета)", AutoSize = true };
+    private readonly CheckBox _cbAutoTypography = new() { Text = "Авто-правка: CapsLock, ПРивет→Привет", AutoSize = true };
     private readonly NumericUpDown _nudIdle = new() { Minimum = 5, Maximum = 600, Value = 30, Width = 80 };
     private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180 };
     private readonly Button _btnRecord = new() { Text = "Записать...", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 28), Padding = new Padding(6, 2, 6, 2) };
@@ -97,6 +98,7 @@ public sealed class SettingsForm : Form
         layout.Controls.Add(_cbEnabled,    0, row); layout.SetColumnSpan(_cbEnabled, 2);    row++;
         layout.Controls.Add(_cbAutostart,  0, row); layout.SetColumnSpan(_cbAutostart, 2);  row++;
         layout.Controls.Add(_cbAutoDetect, 0, row); layout.SetColumnSpan(_cbAutoDetect, 2); row++;
+        layout.Controls.Add(_cbAutoTypography, 0, row); layout.SetColumnSpan(_cbAutoTypography, 2); row++;
         layout.Controls.Add(lblHotkey,     0, row);
         layout.Controls.Add(hotkeyPanel,   1, row); row++;
         layout.Controls.Add(lblIdle,       0, row);
@@ -110,6 +112,7 @@ public sealed class SettingsForm : Form
         _cbEnabled.Checked = settings.Enabled;
         _cbAutostart.Checked = settings.Autostart;
         _cbAutoDetect.Checked = settings.AutoDetectWrongLayout;
+        _cbAutoTypography.Checked = settings.AutoFixTypography;
         _nudIdle.Value = settings.BufferIdleTimeoutSeconds;
         _hotkeyBox.Text = _hotkey.ToString();
 
@@ -131,6 +134,7 @@ public sealed class SettingsForm : Form
         _settings.Enabled = _cbEnabled.Checked;
         _settings.Autostart = _cbAutostart.Checked;
         _settings.AutoDetectWrongLayout = _cbAutoDetect.Checked;
+        _settings.AutoFixTypography = _cbAutoTypography.Checked;
         _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
         _settings.ConvertHotkey = _hotkey;
     }

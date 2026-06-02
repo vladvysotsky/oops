@@ -8,6 +8,7 @@ public sealed class AppSettings
     public bool Enabled { get; set; } = true;
     public bool Autostart { get; set; } = false;
     public bool AutoDetectWrongLayout { get; set; } = false;
+    public bool AutoFixTypography { get; set; } = false;
     public int BufferIdleTimeoutSeconds { get; set; } = 30;
 
     public HotkeyConfig ConvertHotkey { get; set; } = HotkeyConfig.Default;

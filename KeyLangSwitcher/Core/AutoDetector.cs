@@ -1,34 +1,26 @@
 namespace KeyLangSwitcher.Core;
 
 /// <summary>
-/// Эвристический детектор неправильно набранной раскладки. Анализирует ОДНО слово
-/// (последнее перед пробелом/пунктуацией) и решает, выглядит ли оно "иностранно"
-/// для текущей раскладки.
+/// Многоуровневый детектор неправильно набранной раскладки.
 ///
-/// Эвристика проста:
-///   - если слово в EN-латинице и НЕ содержит ни одной английской гласной (a/e/i/o/u/y)
-///     при длине ≥ 3 — скорее всего, это RU-слово, набранное в EN-раскладке;
-///   - если слово в RU-кириллице и НЕ содержит ни одной русской гласной
-///     при длине ≥ 3 — это EN-слово, набранное в RU-раскладке.
-///
-/// Это не статистическая модель и даст ложные срабатывания (например, "xml", "kk"),
-/// поэтому подходит только в качестве дополнения к ручному хоткею. На словах ≤ 2 символа
-/// отключается. Не трогает слова со смешанными алфавитами и со специальными символами.
+/// Иерархия эвристик (срабатывает первая давшая однозначный ответ):
+///   1) Словарь: если слово известно в исходном языке — оставляем; если оно
+///      известно после layout-конвертации в другом языке, а в исходном нет —
+///      конвертируем.
+///   2) Гласные: для слов вне словаря — латиница ≥3 символов без a/e/i/o/u/y
+///      классифицируется как RU-набранное-в-EN, и симметрично для кириллицы.
 /// </summary>
 public static class AutoDetector
 {
-    private const int MinWordLength = 3;
+    private const int MinWordLength = 2;
+    private const int MinFallbackWordLength = 3;
     private static readonly HashSet<char> EnVowels = new("aeiouyAEIOUY");
     private static readonly HashSet<char> RuVowels = new("аеёиоуыэюяАЕЁИОУЫЭЮЯ");
 
-    /// <summary>Решение детектора.</summary>
     public enum Verdict
     {
-        /// <summary>Слово выглядит нормально или неоднозначно — ничего не делать.</summary>
         Keep,
-        /// <summary>Слово выглядит как RU, ошибочно набранное в EN — конвертировать в RU.</summary>
         WasMeantRussian,
-        /// <summary>Слово выглядит как EN, ошибочно набранное в RU — конвертировать в EN.</summary>
         WasMeantEnglish,
     }
 
@@ -36,31 +28,55 @@ public static class AutoDetector
     {
         if (string.IsNullOrEmpty(word) || word.Length < MinWordLength) return Verdict.Keep;
 
-        int en = 0, ru = 0, enVowels = 0, ruVowels = 0;
+        // Классификация по алфавиту.
+        int latin = 0, cyr = 0, other = 0;
         foreach (var c in word)
         {
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-            {
-                en++;
-                if (EnVowels.Contains(c)) enVowels++;
-            }
-            else if ((c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё')
-            {
-                ru++;
-                if (RuVowels.Contains(c)) ruVowels++;
-            }
-            else
-            {
-                // Цифры, пунктуация в середине слова — не классифицируем.
-                return Verdict.Keep;
-            }
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
+            else if ((c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё') cyr++;
+            else other++;
+        }
+        if (other > 0) return Verdict.Keep;          // пунктуация/цифры в слове — не классифицируем
+        if (latin > 0 && cyr > 0) return Verdict.Keep; // смешанные
+
+        var lower = word.ToLowerInvariant();
+
+        if (latin > 0)
+        {
+            bool knownEn = WordDictionary.IsKnownEn(lower);
+            var converted = LayoutConverter.ToRussian(lower);
+            bool knownRu = WordDictionary.IsKnownRu(converted);
+
+            if (knownEn && !knownRu) return Verdict.Keep;
+            if (!knownEn && knownRu) return Verdict.WasMeantRussian;
+            // если оба известны / оба неизвестны — fallback
+        }
+        else // cyr > 0
+        {
+            bool knownRu = WordDictionary.IsKnownRu(lower);
+            var converted = LayoutConverter.ToEnglish(lower).ToLowerInvariant();
+            bool knownEn = WordDictionary.IsKnownEn(converted);
+
+            if (knownRu && !knownEn) return Verdict.Keep;
+            if (!knownRu && knownEn) return Verdict.WasMeantEnglish;
         }
 
-        // Смешанные слова игнорируем — слишком высок шанс ошибки.
-        if (en > 0 && ru > 0) return Verdict.Keep;
-
-        if (en >= MinWordLength && enVowels == 0) return Verdict.WasMeantRussian;
-        if (ru >= MinWordLength && ruVowels == 0) return Verdict.WasMeantEnglish;
+        // Fallback по гласным.
+        if (word.Length < MinFallbackWordLength) return Verdict.Keep;
+        if (latin >= MinFallbackWordLength && !HasAnyEnVowel(word)) return Verdict.WasMeantRussian;
+        if (cyr >= MinFallbackWordLength && !HasAnyRuVowel(word)) return Verdict.WasMeantEnglish;
         return Verdict.Keep;
+    }
+
+    private static bool HasAnyEnVowel(string word)
+    {
+        foreach (var c in word) if (EnVowels.Contains(c)) return true;
+        return false;
+    }
+
+    private static bool HasAnyRuVowel(string word)
+    {
+        foreach (var c in word) if (RuVowels.Contains(c)) return true;
+        return false;
     }
 }
