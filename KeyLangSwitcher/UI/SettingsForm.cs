@@ -37,8 +37,8 @@ public sealed class SettingsForm : Form
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new System.Drawing.Size(580, 360);
-        MinimumSize = new System.Drawing.Size(580, 360);
+        ClientSize = new System.Drawing.Size(620, 380);
+        MinimumSize = new System.Drawing.Size(620, 380);
 
         // --- Buttons row (docked bottom). Add BEFORE the content panel so Fill respects it. ---
         var buttons = new FlowLayoutPanel
@@ -57,12 +57,13 @@ public sealed class SettingsForm : Form
 
         // --- Content ---
         var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
-        var lblIdle   = new Label { Text = "Забывать набранное через (сек):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
+        var lblIdle   = new Label { Text = "Сброс через (сек):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
         _nudIdle.Margin = new Padding(3, 6, 3, 3);
 
         var tooltip = new ToolTip { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 200, ShowAlways = true };
         tooltip.SetToolTip(lblIdle,
-            "Если в течение N секунд ничего не печатать, накопленный текст\n" +
+            "Забывать набранное после N секунд бездействия:\n" +
+            "если столько времени ничего не печатать, накопленный текст\n" +
             "перестаёт быть кандидатом на конвертацию по хоткею. Это нужно,\n" +
             "чтобы при возврате к окну через минуту хоткей не пытался\n" +
             "переписать давно забытый ввод.");
@@ -91,7 +92,7 @@ public sealed class SettingsForm : Form
             ColumnCount = 2,
             Padding = new Padding(14),
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         int row = 0;
