@@ -13,7 +13,7 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _cbAutoDetect = new() { Text = "Автоматически исправлять раскладку (бета)", AutoSize = true };
     private readonly CheckBox _cbAutoTypography = new() { Text = "Авто-правка: CapsLock, ПРивет→Привет", AutoSize = true };
     private readonly NumericUpDown _nudIdle = new() { Minimum = 5, Maximum = 600, Value = 30, Width = 80 };
-    private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180 };
+    private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180, Margin = new Padding(0, 0, 6, 0) };
     private readonly Button _btnRecord = new() { Text = "Записать...", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 28), Padding = new Padding(6, 2, 6, 2) };
     private readonly Button _btnSave = new() { Text = "Сохранить", DialogResult = DialogResult.OK, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 30), Padding = new Padding(10, 4, 10, 4) };
     private readonly Button _btnCancel = new() { Text = "Отмена", DialogResult = DialogResult.Cancel, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(90, 30), Padding = new Padding(10, 4, 10, 4) };
@@ -56,9 +56,9 @@ public sealed class SettingsForm : Form
         Controls.Add(buttons);
 
         // --- Content ---
-        var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
-        var lblIdle   = new Label { Text = "Сброс через (сек):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 8, 3, 3) };
-        _nudIdle.Margin = new Padding(3, 6, 3, 3);
+        var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
+        var lblIdle   = new Label { Text = "Сброс через (сек):", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
+        _nudIdle.Margin = new Padding(0, 0, 0, 0);
 
         var tooltip = new ToolTip { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 200, ShowAlways = true };
         tooltip.SetToolTip(lblIdle,
@@ -69,43 +69,53 @@ public sealed class SettingsForm : Form
             "переписать давно забытый ввод.");
         tooltip.SetToolTip(_nudIdle, tooltip.GetToolTip(lblIdle));
         tooltip.SetToolTip(_cbAutoDetect,
-            "Бета: пытается сама поправить раскладку, как только распознает\n" +
-            "слово, набранное не в той раскладке. Пока не реализовано.");
+            "Бета: на пробеле/пунктуации проверяет завершённое слово по словарю\n" +
+            "и при необходимости конвертирует и переключает раскладку.");
+        tooltip.SetToolTip(_cbAutoTypography,
+            "Автоматически исправляет 'пРИВЕТ' (забытый CapsLock) и 'ПРивет'\n" +
+            "(двойная заглавная). Аббревиатуры в верхнем регистре не трогает.");
         tooltip.SetToolTip(_cbEnabled, "Глобально включает / выключает работу хоткея и буфера.");
         tooltip.SetToolTip(_cbAutostart, "Прописать запуск программы в реестр HKCU\\...\\Run.");
         tooltip.SetToolTip(_hotkeyBox, "Текущая комбинация. Жми \"Записать...\" чтобы сменить.");
         _btnRecord.Click += (_, _) => RecordHotkey();
 
-        var hotkeyPanel = new FlowLayoutPanel
+        // Каждая строка — своя горизонтальная FlowLayoutPanel. Никакого TableLayoutPanel,
+        // никаких неожиданных выравниваний между ячейками разной высоты.
+        Panel Row(params Control[] children)
         {
-            FlowDirection = FlowDirection.LeftToRight,
-            AutoSize = true,
-            WrapContents = false,
-            Margin = new Padding(0),
-        };
-        hotkeyPanel.Controls.Add(_hotkeyBox);
-        hotkeyPanel.Controls.Add(_btnRecord);
+            var p = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Margin = new Padding(0, 0, 0, 6),
+            };
+            foreach (var c in children)
+            {
+                if (c is Label) c.Anchor = AnchorStyles.Left;
+                p.Controls.Add(c);
+            }
+            return p;
+        }
 
-        var layout = new TableLayoutPanel
+        var content = new FlowLayoutPanel
         {
+            FlowDirection = FlowDirection.TopDown,
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            Padding = new Padding(14),
+            AutoSize = false,
+            WrapContents = false,
+            Padding = new Padding(16),
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        int row = 0;
-        layout.Controls.Add(_cbEnabled,    0, row); layout.SetColumnSpan(_cbEnabled, 2);    row++;
-        layout.Controls.Add(_cbAutostart,  0, row); layout.SetColumnSpan(_cbAutostart, 2);  row++;
-        layout.Controls.Add(_cbAutoDetect, 0, row); layout.SetColumnSpan(_cbAutoDetect, 2); row++;
-        layout.Controls.Add(_cbAutoTypography, 0, row); layout.SetColumnSpan(_cbAutoTypography, 2); row++;
-        layout.Controls.Add(lblHotkey,     0, row);
-        layout.Controls.Add(hotkeyPanel,   1, row); row++;
-        layout.Controls.Add(lblIdle,       0, row);
-        layout.Controls.Add(_nudIdle,      1, row); row++;
+        content.Controls.Add(_cbEnabled);
+        content.Controls.Add(_cbAutostart);
+        content.Controls.Add(_cbAutoDetect);
+        content.Controls.Add(_cbAutoTypography);
+        content.Controls.Add(Row(lblHotkey, _hotkeyBox, _btnRecord));
+        content.Controls.Add(Row(lblIdle, _nudIdle));
 
-        Controls.Add(layout);
+        Controls.Add(content);
         AcceptButton = _btnSave;
         CancelButton = _btnCancel;
 

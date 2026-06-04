@@ -13,9 +13,16 @@ public sealed class App : IDisposable
     public AppSettings Settings { get; }
     private readonly TypingBuffer _buffer = new();
     private readonly LayoutTracker _layoutTracker = new();
+    private readonly NeverFixList _neverFix = new();
     private readonly KeyboardHook _kbHook = new();
     private readonly MouseHook _mouseHook = new();
     private readonly ForegroundWatcher _fgWatcher = new();
+
+    // Запись о последней автокоррекции — для отката по Pause/Break
+    // и обучения по немедленному Backspace.
+    private sealed record AutoCorrection(string Original, string Corrected, char Separator, DateTime At, LayoutConverter.Direction Dir);
+    private AutoCorrection? _lastAutoCorrection;
+    private static readonly TimeSpan UndoWindow = TimeSpan.FromSeconds(5);
 
     // UI-поток нужен для clipboard-операций
     private readonly SynchronizationContext _uiContext;
@@ -64,6 +71,31 @@ public sealed class App : IDisposable
 
             // Выполняем в UI-потоке — нужен для clipboard
             _uiContext.Post(_ => RunConvert(), null);
+            return;
+        }
+
+        // 1.5) Pause/Break — отмена последней автокоррекции.
+        if (e.VirtualKey == Keys.Pause && _lastAutoCorrection != null)
+        {
+            e.Handled = true;
+            _uiContext.Post(_ => UndoLastAutoCorrection(), null);
+            return;
+        }
+
+        // 1.6) Backspace сразу после автокоррекции — пользователь явно её не хотел.
+        //      Откатываем и запоминаем оригинальное слово как "не трогать".
+        if (e.VirtualKey == Keys.Back
+            && _lastAutoCorrection != null
+            && DateTime.UtcNow - _lastAutoCorrection.At < UndoWindow)
+        {
+            var lc = _lastAutoCorrection;
+            _lastAutoCorrection = null;
+            e.Handled = true;
+            _uiContext.Post(_ =>
+            {
+                _neverFix.Add(lc.Original);
+                UndoCorrection(lc);
+            }, null);
             return;
         }
 
@@ -129,6 +161,10 @@ public sealed class App : IDisposable
         var word = snap.Substring(wordStart, wordEnd - wordStart);
         if (word.Length == 0) return;
 
+        // Пользователь уже один раз отказался от автокоррекции этого слова —
+        // больше не трогаем.
+        if (_neverFix.Contains(word)) return;
+
         string corrected = word;
         var layoutDir = LayoutConverter.Direction.None;
 
@@ -166,6 +202,35 @@ public sealed class App : IDisposable
         _buffer.Clear();
         foreach (var ch in corrected) _buffer.Append(ch);
         _buffer.Append(sep);
+
+        // Запоминаем коррекцию — для возможного отката пользователем.
+        _lastAutoCorrection = new AutoCorrection(word, corrected, sep, DateTime.UtcNow, layoutDir);
+    }
+
+    /// <summary>
+    /// Откат последней автокоррекции: на экране сейчас "corrected + sep",
+    /// стираем это и печатаем "original + sep". Раскладку возвращаем обратно.
+    /// </summary>
+    private void UndoLastAutoCorrection()
+    {
+        var lc = _lastAutoCorrection;
+        if (lc == null) return;
+        _lastAutoCorrection = null;
+        UndoCorrection(lc);
+    }
+
+    private void UndoCorrection(AutoCorrection lc)
+    {
+        Sender.ReleaseHotkeyModifiers();
+        Sender.SendBackspaces(lc.Corrected.Length + 1);
+        ClipboardPaste.Paste(lc.Original + lc.Separator);
+        // Раскладку возвращаем обратно.
+        if (lc.Dir == LayoutConverter.Direction.ToRu) SwitchSystemLayout(LayoutConverter.Direction.ToEn);
+        else if (lc.Dir == LayoutConverter.Direction.ToEn) SwitchSystemLayout(LayoutConverter.Direction.ToRu);
+
+        _buffer.Clear();
+        foreach (var ch in lc.Original) _buffer.Append(ch);
+        _buffer.Append(lc.Separator);
     }
 
     private void RunConvert()
