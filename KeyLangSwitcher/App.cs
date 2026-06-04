@@ -23,6 +23,12 @@ public sealed class App : IDisposable
     private sealed record AutoCorrection(string Original, string Corrected, char Separator, DateTime At, LayoutConverter.Direction Dir);
     private AutoCorrection? _lastAutoCorrection;
     private static readonly TimeSpan UndoWindow = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan AutoFixCooldown = TimeSpan.FromSeconds(2);
+
+    // Скользящий контекст последних N "осмысленных" слов — для подавления
+    // ложных автокоррекций посреди фразы в одном языке.
+    private readonly Queue<AutoDetector.ContextLanguage> _recentLangs = new();
+    private const int ContextWindowSize = 4;
 
     // UI-поток нужен для clipboard-операций
     private readonly SynchronizationContext _uiContext;
@@ -161,17 +167,29 @@ public sealed class App : IDisposable
         var word = snap.Substring(wordStart, wordEnd - wordStart);
         if (word.Length == 0) return;
 
-        // Пользователь уже один раз отказался от автокоррекции этого слова —
-        // больше не трогаем.
-        if (_neverFix.Contains(word)) return;
+        // Cool-down — после автокоррекции не трогаем следующее слово в течение N секунд,
+        // чтобы каскад исправлений не мешал пользователю.
+        if (_lastAutoCorrection != null
+            && DateTime.UtcNow - _lastAutoCorrection.At < AutoFixCooldown)
+        {
+            UpdateContext(word);
+            return;
+        }
+
+        // Пользователь уже один раз отказался от автокоррекции этого слова — пропускаем.
+        if (_neverFix.Contains(word))
+        {
+            UpdateContext(word);
+            return;
+        }
 
         string corrected = word;
         var layoutDir = LayoutConverter.Direction.None;
 
-        // 1) Слой раскладки.
+        // 1) Слой раскладки — с учётом контекста недавних слов.
         if (Settings.AutoDetectWrongLayout)
         {
-            var verdict = AutoDetector.Analyze(corrected);
+            var verdict = AutoDetector.Analyze(corrected, DominantRecentLanguage());
             if (verdict == AutoDetector.Verdict.WasMeantRussian)
             {
                 corrected = LayoutConverter.ToRussian(corrected);
@@ -191,20 +209,58 @@ public sealed class App : IDisposable
             corrected = Typography.FixDoubleCapital(corrected) ?? corrected;
         }
 
-        if (corrected == word) return;
+        if (corrected == word)
+        {
+            UpdateContext(word);
+            return;
+        }
 
         Sender.ReleaseHotkeyModifiers();
         Sender.SendBackspaces(word.Length + 1);
         ClipboardPaste.Paste(corrected + sep);
         if (layoutDir != LayoutConverter.Direction.None) SwitchSystemLayout(layoutDir);
 
-        // Синхронизируем буфер с тем, что теперь на экране.
         _buffer.Clear();
         foreach (var ch in corrected) _buffer.Append(ch);
         _buffer.Append(sep);
 
-        // Запоминаем коррекцию — для возможного отката пользователем.
         _lastAutoCorrection = new AutoCorrection(word, corrected, sep, DateTime.UtcNow, layoutDir);
+        UpdateContext(corrected); // в контекст идёт уже исправленное слово
+    }
+
+    private void UpdateContext(string word)
+    {
+        var lang = LanguageOf(word);
+        if (lang == AutoDetector.ContextLanguage.Unknown) return; // не учитываем "шум"
+        _recentLangs.Enqueue(lang);
+        while (_recentLangs.Count > ContextWindowSize) _recentLangs.Dequeue();
+    }
+
+    private static AutoDetector.ContextLanguage LanguageOf(string word)
+    {
+        int latin = 0, cyr = 0;
+        foreach (var c in word)
+        {
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
+            else if ((c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё') cyr++;
+        }
+        if (latin > 0 && cyr == 0) return AutoDetector.ContextLanguage.English;
+        if (cyr > 0 && latin == 0) return AutoDetector.ContextLanguage.Russian;
+        return AutoDetector.ContextLanguage.Unknown;
+    }
+
+    private AutoDetector.ContextLanguage DominantRecentLanguage()
+    {
+        int en = 0, ru = 0;
+        foreach (var l in _recentLangs)
+        {
+            if (l == AutoDetector.ContextLanguage.English) en++;
+            else if (l == AutoDetector.ContextLanguage.Russian) ru++;
+        }
+        // нужна явная доминанта (большинство), иначе считаем неоднозначным
+        if (en >= 3 && en > ru) return AutoDetector.ContextLanguage.English;
+        if (ru >= 3 && ru > en) return AutoDetector.ContextLanguage.Russian;
+        return AutoDetector.ContextLanguage.Unknown;
     }
 
     /// <summary>
