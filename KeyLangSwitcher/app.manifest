@@ -4,9 +4,11 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <!-- Нужны права админа, чтобы SendInput работал в окнах, запущенных от имени администратора
-             (RegEdit, Task Manager, любые elevated-приложения). Без этого UIPI блокирует ввод. -->
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+        <!-- asInvoker, чтобы autostart через HKCU\Run работал штатно
+             (UAC силой не игнорирует записи без elevation).
+             Если нужна поддержка elevated-окон (RegEdit, Task Manager) —
+             пользователь должен запустить exe вручную через "Run as administrator". -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
       </requestedPrivileges>
     </security>
   </trustInfo>
