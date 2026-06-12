@@ -3,26 +3,29 @@ using System.Windows.Forms;
 namespace KeyLangSwitcher.Core;
 
 /// <summary>
-/// Конвертирует выделенный текст: Ctrl+C -> читаем clipboard -> конвертируем -> Ctrl+V.
-/// Исходное содержимое буфера обмена восстанавливается.
+/// Конвертирует выделенный текст: Ctrl+C → читаем clipboard → конвертируем → Ctrl+V.
+/// Исходное содержимое буфера обмена восстанавливается (только текстовое содержимое,
+/// чтобы избежать COM-крахов от просроченного IDataObject).
 /// Вызывать только из UI-потока (Clipboard требует STA).
+///
+/// В этом режиме конвертация ВСЕГДА безусловная и применяется ко всему выделению —
+/// если пользователь явно что-то выделил и нажал хоткей, его намерение однозначно.
 /// </summary>
 public static class SelectionConverter
 {
     public static bool TryConvertSelection()
     {
-        // 1) Сохраняем clipboard
-        IDataObject? original = null;
-        try { original = Clipboard.GetDataObject(); } catch { }
+        string? originalText = null;
+        try
+        {
+            if (Clipboard.ContainsText()) originalText = Clipboard.GetText();
+        }
+        catch { }
 
-        // 2) Очищаем, чтобы понять — пришёл ли новый текст
         try { Clipboard.Clear(); } catch { }
 
-        // 3) Шлём Ctrl+C
         Sender.SendCtrlKey('C');
 
-        // 4) Ждём появления текста. Таймаут короткий — это "проба" на каждый хоткей,
-        //    при отсутствии выделения мы должны быстро упасть в буферный режим.
         string? text = null;
         var deadline = DateTime.UtcNow.AddMilliseconds(250);
         while (DateTime.UtcNow < deadline)
@@ -42,29 +45,27 @@ public static class SelectionConverter
 
         if (string.IsNullOrEmpty(text))
         {
-            // ничего не выделено — восстанавливаем clipboard и выходим
-            RestoreClipboard(original);
+            RestoreText(originalText);
             return false;
         }
 
-        // 5) Конвертация и вставка
+        // Безусловная конвертация всего выделения в доминантную раскладку —
+        // пользователь сам выделил и явно хочет переключить всё это.
         var (converted, dir) = LayoutConverter.AutoConvertWithDirection(text);
         ClipboardSafe.SetText(converted);
         Sender.SendCtrlKey('V');
 
-        // Переключаем системную раскладку в "правильную" сторону.
         if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
         else if (dir == LayoutConverter.Direction.ToEn) LayoutSwitcher.SwitchToEnglish();
 
-        // 6) Возврат оригинального clipboard с небольшой задержкой, чтобы Ctrl+V успел сработать
         System.Threading.Thread.Sleep(150);
-        RestoreClipboard(original);
+        RestoreText(originalText);
         return true;
     }
 
-    private static void RestoreClipboard(IDataObject? original)
+    private static void RestoreText(string? snapshot)
     {
-        if (original == null) return;
-        try { Clipboard.SetDataObject(original, copy: true); } catch { }
+        if (snapshot == null) return;
+        try { ClipboardSafe.SetText(snapshot); } catch { }
     }
 }

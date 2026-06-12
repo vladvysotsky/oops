@@ -60,6 +60,23 @@ public class AutoDetectorTests
     }
 
     [Fact]
+    public void Y_IsNotTreatedAsEnglishVowel_SoCyrillicLooseTranliterationsAreCaught()
+    {
+        // 'rjvvtyns' = 'комменты' набранное в EN. Содержит 'y' (мапится на 'н' в RU),
+        // но 'y' больше НЕ считается английской гласной → fallback срабатывает,
+        // плюс 'комменты' теперь в расширенном словаре.
+        Assert.Equal(AutoDetector.Verdict.WasMeantRussian, AutoDetector.Analyze("rjvvtyns"));
+    }
+
+    [Fact]
+    public void Tot_IsCorrectlyDetectedThroughEYoNormalization()
+    {
+        // 'tot' → 'еще'. В словаре есть 'ещё', но не 'еще';
+        // нормализация ё↔е должна это поймать.
+        Assert.Equal(AutoDetector.Verdict.WasMeantRussian, AutoDetector.Analyze("tot"));
+    }
+
+    [Fact]
     public void ContextEnglish_SuppressesAmbiguousLatinFallback()
     {
         // Длинная латиница без гласных — обычно WasMeantRussian, но если
