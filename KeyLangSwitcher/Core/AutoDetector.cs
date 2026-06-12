@@ -68,7 +68,13 @@ public static class AutoDetector
 
             if (knownEn && !knownRu) return Verdict.Keep;
             if (!knownEn && knownRu) return Verdict.WasMeantRussian;
-            // оба или ни одного — fallback
+
+            // Точное совпадение не сработало — пробуем с допуском на одну опечатку.
+            // Это ловит слова типа 'привкт' (опечатка от 'привет').
+            bool fuzzyEn = WordDictionary.IsKnownEnFuzzy(lower);
+            bool fuzzyRu = WordDictionary.IsKnownRuFuzzy(converted);
+            if (fuzzyEn && !fuzzyRu) return Verdict.Keep;
+            if (!fuzzyEn && fuzzyRu) return Verdict.WasMeantRussian;
         }
         else
         {
@@ -78,31 +84,64 @@ public static class AutoDetector
 
             if (knownRu && !knownEn) return Verdict.Keep;
             if (!knownRu && knownEn) return Verdict.WasMeantEnglish;
+
+            bool fuzzyRu = WordDictionary.IsKnownRuFuzzy(lower);
+            bool fuzzyEn = WordDictionary.IsKnownEnFuzzy(converted);
+            if (fuzzyRu && !fuzzyEn) return Verdict.Keep;
+            if (!fuzzyRu && fuzzyEn) return Verdict.WasMeantEnglish;
         }
 
-        // 3) Fallback по гласным — только для длинных слов.
+        // 3) Fallback по плотности гласных — только для длинных слов.
         if (word.Length < MinFallbackWordLength) return Verdict.Keep;
 
-        bool latinNoVowels = latin >= MinFallbackWordLength && !HasAny(word, EnVowels);
-        bool cyrNoVowels = cyr >= MinFallbackWordLength && !HasAny(word, RuVowels);
+        if (latin > 0)
+        {
+            // Сравниваем сколько гласных в исходном слове (EN) и в его конвертации в RU.
+            // Если после layout-конвертации гласных значительно БОЛЬШЕ — значит набор
+            // выглядит как русское слово, набранное на EN-клавиатуре.
+            int enVowels = CountVowels(word, EnVowels);
+            var ruCandidate = LayoutConverter.ToRussian(word);
+            int ruVowelsAfter = CountVowels(ruCandidate, RuVowels);
 
-        // 4) Контекст: если недавно писали в определённом языке и эвристика хочет нас перенести —
-        //    подавляем "слабые" срабатывания. Перевод в ДРУГОЙ язык — только если эвристика реально
-        //    говорит "это не текущий язык".
-        if (latinNoVowels)
-        {
-            // Латиница без гласных — обычно русское слово, набранное в EN. НО: если контекст
-            // явно EN, возможно это специфический термин (например, "rhythm" — нет гласных
-            // в широком смысле, но... в нашем определении 'y' — гласная, так что не сработает).
-            if (recent == ContextLanguage.English) return Verdict.Keep;
-            return Verdict.WasMeantRussian;
+            if (RuLooksMorePlausible(enVowels, ruVowelsAfter, word.Length))
+            {
+                if (recent == ContextLanguage.English) return Verdict.Keep;
+                return Verdict.WasMeantRussian;
+            }
         }
-        if (cyrNoVowels)
+        else if (cyr > 0)
         {
-            if (recent == ContextLanguage.Russian) return Verdict.Keep;
-            return Verdict.WasMeantEnglish;
+            int ruVowels = CountVowels(word, RuVowels);
+            var enCandidate = LayoutConverter.ToEnglish(word);
+            int enVowelsAfter = CountVowels(enCandidate, EnVowels);
+
+            if (RuLooksMorePlausible(ruVowels, enVowelsAfter, word.Length) == false
+                && enVowelsAfter > ruVowels)
+            {
+                if (recent == ContextLanguage.Russian) return Verdict.Keep;
+                return Verdict.WasMeantEnglish;
+            }
         }
         return Verdict.Keep;
+    }
+
+    /// <summary>
+    /// Эвристика: считаем русскую интерпретацию более правдоподобной если в ней
+    /// строго больше гласных И плотность гласных в EN-оригинале ниже типичной
+    /// для английского (≈30%).
+    /// </summary>
+    private static bool RuLooksMorePlausible(int enVowels, int ruVowels, int length)
+    {
+        if (ruVowels <= enVowels) return false;
+        // Минимум одна "лишняя" гласная и доля EN-гласных < 30%.
+        return enVowels * 10 < length * 3;
+    }
+
+    private static int CountVowels(string word, HashSet<char> set)
+    {
+        int n = 0;
+        foreach (var c in word) if (set.Contains(c)) n++;
+        return n;
     }
 
     public enum ContextLanguage { Unknown, English, Russian }

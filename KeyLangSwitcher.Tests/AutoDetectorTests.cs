@@ -77,6 +77,24 @@ public class AutoDetectorTests
     }
 
     [Fact]
+    public void VowelDensity_DetectsRussianWordEvenWithEnVowelLetter()
+    {
+        // 'gjvtyztim' → 'поменяешь'. В EN-исходнике есть 'i' (формально EN-гласная),
+        // но в RU-конвертации 4 гласных против 1 — явно русское слово.
+        Assert.Equal(AutoDetector.Verdict.WasMeantRussian, AutoDetector.Analyze("gjvtyztim"));
+    }
+
+    [Theory]
+    [InlineData("ghbdrn")]   // привкт → опечатка от привет
+    [InlineData("ghbdfn")]   // привфн → опечатка от привет (другая буква)
+    [InlineData("ghbidtn")]  // лишняя буква
+    public void TypoTolerance_FuzzyMatchCatchesSingleEditMistakes(string word)
+    {
+        // С допуском на одну ошибку конвертация должна определять "русское слово в EN".
+        Assert.Equal(AutoDetector.Verdict.WasMeantRussian, AutoDetector.Analyze(word));
+    }
+
+    [Fact]
     public void ContextEnglish_SuppressesAmbiguousLatinFallback()
     {
         // Длинная латиница без гласных — обычно WasMeantRussian, но если
