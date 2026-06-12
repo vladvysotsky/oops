@@ -34,6 +34,69 @@ public static class WordDictionary
     /// </summary>
     public static bool IsKnownRu(string lowerWord) => _ru.Contains(NormalizeRu(lowerWord));
 
+    /// <summary>
+    /// Fuzzy-проверка: считаем слово знакомым, если в словаре есть слово с edit-distance ≤ 1
+    /// (одна замена / пропуск / лишняя буква / перестановка соседних). Включается для
+    /// поддержки типичных опечаток вроде 'привкт' (привет), 'прривет' (двойная буква),
+    /// 'пирвет' (перестановка).
+    /// </summary>
+    public static bool IsKnownEnFuzzy(string lowerWord)
+        => Contains(_en, lowerWord, EnAlphabet);
+
+    public static bool IsKnownRuFuzzy(string lowerWord)
+        => Contains(_ru, NormalizeRu(lowerWord), RuAlphabet);
+
+    private const string EnAlphabet = "abcdefghijklmnopqrstuvwxyz";
+    // Без ё — мы нормализуем к 'е'.
+    private const string RuAlphabet = "абвгдежзийклмнопрстуфхцчшщъыьэюя";
+
+    private static bool Contains(HashSet<string> dict, string word, string alphabet)
+    {
+        if (dict.Contains(word)) return true;
+        if (word.Length < 3) return false; // на коротких словах fuzzy даёт слишком много ложных срабатываний
+
+        // Замена одной буквы.
+        var chars = word.ToCharArray();
+        for (int i = 0; i < chars.Length; i++)
+        {
+            char orig = chars[i];
+            foreach (var c in alphabet)
+            {
+                if (c == orig) continue;
+                chars[i] = c;
+                if (dict.Contains(new string(chars))) return true;
+            }
+            chars[i] = orig;
+        }
+
+        // Удаление одной буквы.
+        for (int i = 0; i < word.Length; i++)
+        {
+            var candidate = word.Remove(i, 1);
+            if (dict.Contains(candidate)) return true;
+        }
+
+        // Вставка одной буквы.
+        for (int i = 0; i <= word.Length; i++)
+        {
+            foreach (var c in alphabet)
+            {
+                var candidate = word.Insert(i, c.ToString());
+                if (dict.Contains(candidate)) return true;
+            }
+        }
+
+        // Перестановка соседних букв.
+        for (int i = 0; i + 1 < word.Length; i++)
+        {
+            var arr = word.ToCharArray();
+            (arr[i], arr[i + 1]) = (arr[i + 1], arr[i]);
+            if (dict.Contains(new string(arr))) return true;
+        }
+
+        return false;
+    }
+
     private static string NormalizeRu(string s) =>
         s.IndexOf('ё') >= 0 ? s.Replace('ё', 'е') : s;
 
