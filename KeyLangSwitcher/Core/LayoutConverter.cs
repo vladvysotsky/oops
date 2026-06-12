@@ -96,4 +96,59 @@ public static class LayoutConverter
     /// иначе — в EN. Символы вне обеих раскладок не учитываются.
     /// </summary>
     public static string AutoConvert(string text) => AutoConvertWithDirection(text).Result;
+
+    /// <summary>
+    /// Пословная конвертация: проходит по тексту, для каждого слова запускает AutoDetector,
+    /// и конвертирует ТОЛЬКО те слова, которые набраны в неправильной раскладке.
+    /// Разделители (пробелы, пунктуация, цифры) сохраняются как есть.
+    /// Это нужно когда буфер содержит смешанный текст: основная часть правильная,
+    /// и только последний кусок попал в другую раскладку — конвертируем только его.
+    /// </summary>
+    public static (string Result, Direction FinalDirection, bool AnyChange) AutoConvertPerWord(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return (text, Direction.None, false);
+
+        var sb = new System.Text.StringBuilder(text.Length);
+        Direction lastConvertDir = Direction.None;
+        bool anyChange = false;
+        int i = 0;
+        while (i < text.Length)
+        {
+            // Накапливаем разделители как есть.
+            int sepStart = i;
+            while (i < text.Length && !IsLetter(text[i])) i++;
+            if (i > sepStart) sb.Append(text, sepStart, i - sepStart);
+            if (i >= text.Length) break;
+
+            // Накапливаем слово (одного алфавита).
+            int wordStart = i;
+            bool firstIsLatin = IsLatin(text[i]);
+            while (i < text.Length && IsLetter(text[i]) && IsLatin(text[i]) == firstIsLatin) i++;
+            var word = text.Substring(wordStart, i - wordStart);
+
+            var verdict = AutoDetector.Analyze(word);
+            if (verdict == AutoDetector.Verdict.WasMeantRussian)
+            {
+                sb.Append(ToRussian(word));
+                lastConvertDir = Direction.ToRu;
+                anyChange = true;
+            }
+            else if (verdict == AutoDetector.Verdict.WasMeantEnglish)
+            {
+                sb.Append(ToEnglish(word));
+                lastConvertDir = Direction.ToEn;
+                anyChange = true;
+            }
+            else
+            {
+                sb.Append(word);
+            }
+        }
+        return (sb.ToString(), lastConvertDir, anyChange);
+    }
+
+    private static bool IsLetter(char c) => IsLatin(c) || IsCyrillic(c);
+    private static bool IsLatin(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    private static bool IsCyrillic(char c) =>
+        (c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё';
 }

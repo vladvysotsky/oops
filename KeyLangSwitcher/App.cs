@@ -300,18 +300,34 @@ public sealed class App : IDisposable
             return;
         }
 
-        var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
+        // Пословная конвертация: проходим по буферу, и переводим только те слова,
+        // которые AutoDetector считает набранными в неправильной раскладке.
+        var (converted, dir, anyChange) = LayoutConverter.AutoConvertPerWord(buffered);
+        bool switchLayout = false;
+
+        if (!anyChange)
+        {
+            // Fallback: ни одно слово не определено как "битое" по словарю —
+            // конвертируем всё в доминантную раскладку (старое поведение).
+            // В этом случае также переключаем системную раскладку, потому что
+            // буфер целиком был в "неправильной" и пользователь явно хотел переключиться.
+            var fallback = LayoutConverter.AutoConvertWithDirection(buffered);
+            converted = fallback.Result;
+            dir = fallback.Dir;
+            switchLayout = true;
+        }
+        // При пословной конвертации (часть текста правильная) системную раскладку НЕ
+        // переключаем: пользователь уже печатает в нужной раскладке, "битые" слова
+        // были единичными опечатками.
+
         if (converted != buffered)
         {
             int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
             Sender.ReleaseHotkeyModifiers();
-            // 1) Довозим реальную каретку до конца буфера (если курсор был в середине после правок).
             if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
-            // 2) Стираем буфер бэкспейсами (надёжно во всех приложениях, включая UWP).
             Sender.SendBackspaces(buffered.Length);
-            // 3) Вставляем конвертированный текст одним Ctrl+V из clipboard — атомарно, без посимвольного ввода.
             ClipboardPaste.Paste(converted);
-            SwitchSystemLayout(dir);
+            if (switchLayout) SwitchSystemLayout(dir);
         }
         _buffer.Clear();
     }
