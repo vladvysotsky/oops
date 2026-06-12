@@ -19,7 +19,11 @@ public static class AutoDetector
 {
     private const int MinWordLength = 2;
     private const int MinFallbackWordLength = 5;
-    private static readonly HashSet<char> EnVowels = new("aeiouyAEIOUY");
+    // 'y' намеренно НЕ включена: в Russian-typed-on-EN-keys 'y' соответствует
+    // 'н' (согласная). Считать её гласной — значит постоянно пропускать
+    // русские слова типа 'комменты' (rjvvtyns), у которых единственный
+    // "EN-vowel" — это якобы 'y'.
+    private static readonly HashSet<char> EnVowels = new("aeiouAEIOU");
     private static readonly HashSet<char> RuVowels = new("аеёиоуыэюяАЕЁИОУЫЭЮЯ");
 
     public enum Verdict

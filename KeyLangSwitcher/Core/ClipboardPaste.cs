@@ -13,23 +13,32 @@ public static class ClipboardPaste
     {
         if (string.IsNullOrEmpty(text)) return;
 
-        IDataObject? original = null;
-        try { original = Clipboard.GetDataObject(); } catch { }
+        // Снимаем СНИМОК содержимого clipboard как текст. Не храним IDataObject —
+        // его COM-прокси становится невалидным к моменту отложенного восстановления,
+        // и SetDataObject крашит процесс через combase.dll (STATUS_FATAL_USER_CALLBACK_EXCEPTION).
+        string? originalText = null;
+        try
+        {
+            if (Clipboard.ContainsText()) originalText = Clipboard.GetText();
+        }
+        catch { }
 
         ClipboardSafe.SetText(text);
-        System.Threading.Thread.Sleep(40); // даём clipboard стабилизироваться
+        System.Threading.Thread.Sleep(40);
         Sender.SendCtrlKey('V');
 
-        // Восстанавливаем оригинальный clipboard через 1сек — даём Ctrl+V гарантированно
+        // Восстанавливаем оригинал через 1сек — даём Ctrl+V гарантированно
         // отработать в приёмнике (особенно UWP, где paste обрабатывается асинхронно).
-        if (original != null)
+        if (originalText != null)
         {
             var uiCtx = System.Threading.SynchronizationContext.Current;
+            var snapshot = originalText;
             _ = System.Threading.Tasks.Task.Run(async () =>
             {
                 await System.Threading.Tasks.Task.Delay(1000);
-                uiCtx?.Post(_ => { try { Clipboard.SetDataObject(original, copy: true); } catch { } }, null);
+                uiCtx?.Post(_ => { try { ClipboardSafe.SetText(snapshot); } catch { } }, null);
             });
         }
     }
 }
+
