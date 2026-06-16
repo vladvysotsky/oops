@@ -15,30 +15,27 @@ public sealed class SettingsForm : Form
     private readonly NumericUpDown _nudIdle = new() { Minimum = 5, Maximum = 600, Value = 30, Width = 80 };
     private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180, Margin = new Padding(0, 0, 6, 0) };
     private readonly Button _btnRecord = new() { Text = "Записать...", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 28), Padding = new Padding(6, 2, 6, 2) };
+    private readonly TextBox _caseHotkeyBox = new() { ReadOnly = true, Width = 180, Margin = new Padding(0, 0, 6, 0) };
+    private readonly Button _btnRecordCase = new() { Text = "Записать...", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 28), Padding = new Padding(6, 2, 6, 2) };
     private readonly Button _btnSave = new() { Text = "Сохранить", DialogResult = DialogResult.OK, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 30), Padding = new Padding(10, 4, 10, 4) };
     private readonly Button _btnCancel = new() { Text = "Отмена", DialogResult = DialogResult.Cancel, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(90, 30), Padding = new Padding(10, 4, 10, 4) };
 
     private HotkeyConfig _hotkey;
+    private HotkeyConfig _caseHotkey;
 
     public SettingsForm(AppSettings settings)
     {
         _settings = settings;
-        _hotkey = new HotkeyConfig
-        {
-            Ctrl = settings.ConvertHotkey.Ctrl,
-            Shift = settings.ConvertHotkey.Shift,
-            Alt = settings.ConvertHotkey.Alt,
-            Win = settings.ConvertHotkey.Win,
-            Key = settings.ConvertHotkey.Key,
-        };
+        _hotkey = Clone(settings.ConvertHotkey);
+        _caseHotkey = Clone(settings.ChangeCaseHotkey);
 
         Text = "KeyLangSwitcher — настройки";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new System.Drawing.Size(620, 380);
-        MinimumSize = new System.Drawing.Size(620, 380);
+        ClientSize = new System.Drawing.Size(620, 420);
+        MinimumSize = new System.Drawing.Size(620, 420);
 
         // --- Buttons row (docked bottom). Add BEFORE the content panel so Fill respects it. ---
         var buttons = new FlowLayoutPanel
@@ -57,6 +54,7 @@ public sealed class SettingsForm : Form
 
         // --- Content ---
         var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
+        var lblCaseHotkey = new Label { Text = "Хоткей смены регистра:", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
         var lblIdle   = new Label { Text = "Сброс через (сек):", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
         _nudIdle.Margin = new Padding(0, 0, 0, 0);
 
@@ -77,7 +75,12 @@ public sealed class SettingsForm : Form
         tooltip.SetToolTip(_cbEnabled, "Глобально включает / выключает работу хоткея и буфера.");
         tooltip.SetToolTip(_cbAutostart, "Прописать запуск программы в реестр HKCU\\...\\Run.");
         tooltip.SetToolTip(_hotkeyBox, "Текущая комбинация. Жми \"Записать...\" чтобы сменить.");
-        _btnRecord.Click += (_, _) => RecordHotkey();
+        tooltip.SetToolTip(_caseHotkeyBox,
+            "Хоткей смены регистра выделенного текста.\n" +
+            "Если в выделении есть хоть одна заглавная — всё опускается в нижний,\n" +
+            "иначе всё поднимается в верхний.");
+        _btnRecord.Click += (_, _) => _hotkey = RecordHotkey(_hotkey, _hotkeyBox) ?? _hotkey;
+        _btnRecordCase.Click += (_, _) => _caseHotkey = RecordHotkey(_caseHotkey, _caseHotkeyBox) ?? _caseHotkey;
 
         // Каждая строка — своя горизонтальная FlowLayoutPanel. Никакого TableLayoutPanel,
         // никаких неожиданных выравниваний между ячейками разной высоты.
@@ -113,6 +116,7 @@ public sealed class SettingsForm : Form
         content.Controls.Add(_cbAutoDetect);
         content.Controls.Add(_cbAutoTypography);
         content.Controls.Add(Row(lblHotkey, _hotkeyBox, _btnRecord));
+        content.Controls.Add(Row(lblCaseHotkey, _caseHotkeyBox, _btnRecordCase));
         content.Controls.Add(Row(lblIdle, _nudIdle));
 
         Controls.Add(content);
@@ -126,19 +130,30 @@ public sealed class SettingsForm : Form
         _cbAutoTypography.Checked = settings.AutoFixTypography;
         _nudIdle.Value = settings.BufferIdleTimeoutSeconds;
         _hotkeyBox.Text = _hotkey.ToString();
+        _caseHotkeyBox.Text = _caseHotkey.ToString();
 
         _btnSave.Click += (_, _) => ApplyToSettings();
     }
 
-    private void RecordHotkey()
+    /// <summary>
+    /// Открывает диалог записи; возвращает записанную комбинацию или null если отменили.
+    /// Также синхронизирует текст в указанном поле.
+    /// </summary>
+    private HotkeyConfig? RecordHotkey(HotkeyConfig current, TextBox display)
     {
         using var dlg = new HotkeyRecordDialog();
         if (dlg.ShowDialog(this) == DialogResult.OK && dlg.Result != null)
         {
-            _hotkey = dlg.Result;
-            _hotkeyBox.Text = _hotkey.ToString();
+            display.Text = dlg.Result.ToString();
+            return dlg.Result;
         }
+        return null;
     }
+
+    private static HotkeyConfig Clone(HotkeyConfig h) => new()
+    {
+        Ctrl = h.Ctrl, Shift = h.Shift, Alt = h.Alt, Win = h.Win, Key = h.Key,
+    };
 
     private void ApplyToSettings()
     {
@@ -148,6 +163,7 @@ public sealed class SettingsForm : Form
         _settings.AutoFixTypography = _cbAutoTypography.Checked;
         _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
         _settings.ConvertHotkey = _hotkey;
+        _settings.ChangeCaseHotkey = _caseHotkey;
     }
 }
 
