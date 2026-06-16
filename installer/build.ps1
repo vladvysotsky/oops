@@ -38,9 +38,7 @@ foreach ($p in @(
     if (Test-Path $p) { $Iscc = $p; break }
 }
 if (-not $Iscc) {
-    # Windows PowerShell 5.1 не поддерживает оператор `?.`, поэтому проверяем явно.
-    $cmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
-    if ($cmd) { $Iscc = $cmd.Source }
+    $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue)?.Source
 }
 if (-not $Iscc) {
     throw "Inno Setup 6 не найден. Установите: https://jrsoftware.org/isinfo.php"
