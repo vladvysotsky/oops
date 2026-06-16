@@ -28,6 +28,14 @@ public sealed class HotkeyConfig
         Key = 0,
     };
 
+    /// <summary>Смена регистра выделенного текста — Alt+Shift+S по умолчанию.</summary>
+    public static HotkeyConfig ChangeCaseDefault => new()
+    {
+        Alt = true,
+        Shift = true,
+        Key = (int)Keys.S,
+    };
+
     public bool Matches(Keys vk, bool ctrl, bool shift, bool alt, bool win)
     {
         if (Ctrl != ctrl) return false;

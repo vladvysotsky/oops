@@ -100,27 +100,26 @@ public static class LayoutConverter
     /// <summary>
     /// Пословная конвертация: проходит по тексту, для каждого слова запускает AutoDetector,
     /// и конвертирует ТОЛЬКО те слова, которые набраны в неправильной раскладке.
-    /// Разделители (пробелы, пунктуация, цифры) сохраняются как есть.
-    /// Это нужно когда буфер содержит смешанный текст: основная часть правильная,
-    /// и только последний кусок попал в другую раскладку — конвертируем только его.
+    /// Также возвращает признак того, что хотя бы одно слово было ОПОЗНАНО как правильное
+    /// в своём языке — в этом случае вызывающий код может НЕ делать whole-buffer fallback,
+    /// иначе он перевернёт корректный текст в гибериш.
     /// </summary>
-    public static (string Result, Direction FinalDirection, bool AnyChange) AutoConvertPerWord(string text)
+    public static (string Result, Direction FinalDirection, bool AnyChange, bool AnyKnown) AutoConvertPerWord(string text)
     {
-        if (string.IsNullOrEmpty(text)) return (text, Direction.None, false);
+        if (string.IsNullOrEmpty(text)) return (text, Direction.None, false, false);
 
         var sb = new System.Text.StringBuilder(text.Length);
         Direction lastConvertDir = Direction.None;
         bool anyChange = false;
+        bool anyKnown = false;
         int i = 0;
         while (i < text.Length)
         {
-            // Накапливаем разделители как есть.
             int sepStart = i;
             while (i < text.Length && !IsLetter(text[i])) i++;
             if (i > sepStart) sb.Append(text, sepStart, i - sepStart);
             if (i >= text.Length) break;
 
-            // Накапливаем слово (одного алфавита).
             int wordStart = i;
             bool firstIsLatin = IsLatin(text[i]);
             while (i < text.Length && IsLetter(text[i]) && IsLatin(text[i]) == firstIsLatin) i++;
@@ -142,9 +141,21 @@ public static class LayoutConverter
             else
             {
                 sb.Append(word);
+                // Keep — но только если слово действительно опознано в своём языке (есть в словаре).
+                // Это отличает "правильное слово" от "неизвестного шума".
+                if (IsKnownInOwnLanguage(word)) anyKnown = true;
             }
         }
-        return (sb.ToString(), lastConvertDir, anyChange);
+        return (sb.ToString(), lastConvertDir, anyChange, anyKnown);
+    }
+
+    private static bool IsKnownInOwnLanguage(string word)
+    {
+        var lower = word.ToLowerInvariant();
+        bool isLatin = lower.Length > 0 && IsLatin(lower[0]);
+        if (isLatin)
+            return WordDictionary.IsKnownEn(lower) || WordDictionary.IsKnownEnFuzzy(lower);
+        return WordDictionary.IsKnownRu(lower) || WordDictionary.IsKnownRuFuzzy(lower);
     }
 
     private static bool IsLetter(char c) => IsLatin(c) || IsCyrillic(c);

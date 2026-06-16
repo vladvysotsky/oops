@@ -12,6 +12,7 @@ public sealed class AppSettings
     public int BufferIdleTimeoutSeconds { get; set; } = 30;
 
     public HotkeyConfig ConvertHotkey { get; set; } = HotkeyConfig.Default;
+    public HotkeyConfig ChangeCaseHotkey { get; set; } = HotkeyConfig.ChangeCaseDefault;
 
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

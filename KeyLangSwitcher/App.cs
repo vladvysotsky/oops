@@ -80,6 +80,14 @@ public sealed class App : IDisposable
             return;
         }
 
+        // 1.1) Хоткей смены регистра выделения
+        if (Settings.ChangeCaseHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
+        {
+            e.Handled = true;
+            _uiContext.Post(_ => CaseConverter.TryToggleSelectionCase(), null);
+            return;
+        }
+
         // 1.5) Pause/Break — отмена последней автокоррекции.
         if (e.VirtualKey == Keys.Pause && _lastAutoCorrection != null)
         {
@@ -302,23 +310,18 @@ public sealed class App : IDisposable
 
         // Пословная конвертация: проходим по буферу, и переводим только те слова,
         // которые AutoDetector считает набранными в неправильной раскладке.
-        var (converted, dir, anyChange) = LayoutConverter.AutoConvertPerWord(buffered);
-        bool switchLayout = false;
+        var (converted, dir, anyChange, anyKnown) = LayoutConverter.AutoConvertPerWord(buffered);
 
-        if (!anyChange)
+        // Whole-buffer fallback ТОЛЬКО когда per-word ничего не сделал И ни одно слово
+        // не опознано как правильное в своём языке (то есть буфер целиком "не-наш"
+        // и пользователь явно хотел всё перевернуть). Если в буфере есть опознанные
+        // правильные слова — fallback бы испортил их в гибериш.
+        if (!anyChange && !anyKnown)
         {
-            // Fallback: ни одно слово не определено как "битое" по словарю —
-            // конвертируем всё в доминантную раскладку (старое поведение).
-            // В этом случае также переключаем системную раскладку, потому что
-            // буфер целиком был в "неправильной" и пользователь явно хотел переключиться.
             var fallback = LayoutConverter.AutoConvertWithDirection(buffered);
             converted = fallback.Result;
             dir = fallback.Dir;
-            switchLayout = true;
         }
-        // При пословной конвертации (часть текста правильная) системную раскладку НЕ
-        // переключаем: пользователь уже печатает в нужной раскладке, "битые" слова
-        // были единичными опечатками.
 
         if (converted != buffered)
         {
@@ -327,7 +330,9 @@ public sealed class App : IDisposable
             if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
             Sender.SendBackspaces(buffered.Length);
             ClipboardPaste.Paste(converted);
-            if (switchLayout) SwitchSystemLayout(dir);
+            // Переключаем системную раскладку в сторону последней конвертации,
+            // чтобы пользователь мог продолжить печатать в правильной раскладке.
+            SwitchSystemLayout(dir);
         }
         _buffer.Clear();
     }

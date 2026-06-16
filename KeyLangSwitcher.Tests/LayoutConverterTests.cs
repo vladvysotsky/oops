@@ -57,18 +57,16 @@ public class LayoutConverterTests
     [Fact]
     public void AutoConvertPerWord_LeavesCorrectTextAlone()
     {
-        // Правильно набранный RU текст должен остаться нетронутым.
-        var (result, _, anyChange) = LayoutConverter.AutoConvertPerWord("это правильный текст");
+        var (result, _, anyChange, anyKnown) = LayoutConverter.AutoConvertPerWord("это правильный текст");
         Assert.Equal("это правильный текст", result);
         Assert.False(anyChange);
+        Assert.True(anyKnown); // 'это' и 'текст' опознаются как RU
     }
 
     [Fact]
     public void AutoConvertPerWord_FixesOnlyWrongLayoutWord()
     {
-        // Смешанный текст: основная часть в правильной раскладке, одно слово в EN
-        // (на самом деле RU слово в EN раскладке) — переводится только оно.
-        var (result, dir, anyChange) = LayoutConverter.AutoConvertPerWord("это vfvf слово");
+        var (result, dir, anyChange, _) = LayoutConverter.AutoConvertPerWord("это vfvf слово");
         Assert.Equal("это мама слово", result);
         Assert.True(anyChange);
         Assert.Equal(LayoutConverter.Direction.ToRu, dir);
@@ -77,21 +75,20 @@ public class LayoutConverterTests
     [Fact]
     public void AutoConvertPerWord_PreservesPunctuationAndSeparators()
     {
-        var (result, _, _) = LayoutConverter.AutoConvertPerWord("hello, vfvf!");
+        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord("hello, vfvf!");
         Assert.Equal("hello, мама!", result);
     }
 
     [Fact]
-    public void AutoConvertPerWord_AppliedToUsersExampleStructure()
+    public void AutoConvertPerWord_CorrectRussianWithOneBadWord_KeepsRestIntact()
     {
-        // Структурно похоже на пример пользователя: длинный правильный текст +
-        // короткий "битый" хвост.
-        var input = "Файл это до замены, а - gjckt vfvf";
-        var (result, _, anyChange) = LayoutConverter.AutoConvertPerWord(input);
-        Assert.True(anyChange);
-        Assert.Contains("после", result);
-        Assert.Contains("мама", result);
-        Assert.Contains("Файл это до замены", result); // RU-часть не тронута
+        // Регрессионный тест из бага пользователя: была проблема, что fallback на
+        // whole-buffer перевирал весь правильный русский текст в EN-гибериш, если
+        // per-word ничего не сконвертировал. Теперь fallback подавляется когда
+        // в буфере есть опознанные слова.
+        var (result, _, _, anyKnown) = LayoutConverter.AutoConvertPerWord("проведи симуляцию и сохрани");
+        Assert.True(anyKnown);
+        Assert.Equal("проведи симуляцию и сохрани", result);
     }
 
     [Theory]
