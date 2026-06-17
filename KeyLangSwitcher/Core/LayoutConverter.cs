@@ -159,7 +159,19 @@ public static class LayoutConverter
     }
 
     private static bool IsLetter(char c) => IsLatin(c) || IsCyrillic(c);
-    private static bool IsLatin(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+
+    /// <summary>
+    /// "Латинский скрипт" в нашем смысле: настоящие латинские буквы плюс знаки
+    /// на EN-клавиатуре, которые на RU-раскладке дают БУКВЫ (а не пунктуацию).
+    /// Это нужно, чтобы 'hfccr;b' читалось как одно слово 'расскжи',
+    /// а не как 'расск' + ';' + 'b'. Намеренно НЕ включаем ',' '.' '/' —
+    /// они полноценная пунктуация и в RU тоже.
+    /// </summary>
+    private static bool IsLatin(char c) =>
+        (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+        || c == ';' || c == '\'' || c == '[' || c == ']' || c == '`'
+        || c == ':' || c == '"' || c == '{' || c == '}' || c == '~';
+
     private static bool IsCyrillic(char c) =>
         (c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё';
 }
