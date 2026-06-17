@@ -80,6 +80,33 @@ public class LayoutConverterTests
     }
 
     [Fact]
+    public void AutoConvertPerWord_SemicolonInsideWord_TreatedAsRuLetter()
+    {
+        // 'hfccr;b' — пользователь набирал "расскжи" в EN-раскладке.
+        // Символ ';' на EN-раскладке соответствует RU-букве 'ж', поэтому он
+        // должен быть частью слова, а не разделителем. Результат — 'расскжи'.
+        var (result, _, anyChange, _) = LayoutConverter.AutoConvertPerWord("hfccr;b");
+        Assert.True(anyChange);
+        Assert.Equal("расскжи", result);
+    }
+
+    [Fact]
+    public void AutoConvertPerWord_BracketsAndApostropheAreRuLetters()
+    {
+        // [ → х, ] → ъ, ' → э — тоже летеры на RU-раскладке.
+        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord("[fnf'");
+        Assert.Equal("хатаэ", result);
+    }
+
+    [Fact]
+    public void AutoConvertPerWord_RealPunctuation_StillSplitsWords()
+    {
+        // ',' '.' '/' остаются настоящими разделителями.
+        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord("vfvf, gfgf.");
+        Assert.Equal("мама, папа.", result);
+    }
+
+    [Fact]
     public void AutoConvertPerWord_CorrectRussianWithOneBadWord_KeepsRestIntact()
     {
         // Регрессионный тест из бага пользователя: была проблема, что fallback на
