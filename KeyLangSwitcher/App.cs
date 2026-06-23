@@ -339,6 +339,14 @@ public sealed class App : IDisposable
 
     private void RunCaseToggle()
     {
+        // 1) Сначала пробуем выделение (через clipboard round-trip).
+        if (CaseConverter.TryToggleSelectionCase())
+        {
+            _buffer.Clear(); // выделение могло быть в буфере, теперь оно уже изменено
+            return;
+        }
+
+        // 2) Если выделения не было — работаем с буфером напрямую через Backspace+SendUnicode.
         var buffered = _buffer.Snapshot();
         if (buffered.Length == 0) return;
 
@@ -351,7 +359,6 @@ public sealed class App : IDisposable
         Sender.SendBackspaces(buffered.Length);
         Sender.SendUnicode(toggled);
 
-        // Синхронизируем буфер с тем, что теперь на экране.
         _buffer.Clear();
         foreach (var ch in toggled) _buffer.Append(ch);
     }
