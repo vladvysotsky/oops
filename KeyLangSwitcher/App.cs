@@ -299,10 +299,8 @@ public sealed class App : IDisposable
 
     private void RunConvert()
     {
-        // Простая и предсказуемая семантика: ничего не угадываем по словарю.
-        // Если буфер пуст — пробуем выделенный текст. Иначе — тупо переворачиваем
-        // ВЕСЬ буфер в доминантную раскладку (сравниваем сколько в нём латиницы
-        // и сколько кириллицы). Один-в-один посимвольная конверсия.
+        // Приоритет — буферный режим: то, что пользователь только что набрал.
+        // Если буфер пуст, пробуем выделение.
         var buffered = _buffer.Snapshot();
         if (buffered.Length == 0)
         {
@@ -310,7 +308,22 @@ public sealed class App : IDisposable
             return;
         }
 
-        var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
+        // Умная пословная конвертация: каждое слово анализируется через словарь
+        // (с fuzzy-match на одну опечатку) и плотность гласных. Конвертируются
+        // ТОЛЬКО те слова, которые набраны в неправильной раскладке.
+        var (converted, dir, anyChange, anyKnown) = LayoutConverter.AutoConvertPerWord(buffered);
+
+        // Whole-buffer fallback срабатывает ТОЛЬКО когда per-word ничего не сделал
+        // И ни одно слово не опознано как правильное в своём языке (буфер целиком
+        // "не-наш" и пользователь явно хотел перевернуть всё). Если в буфере есть
+        // опознанные правильные слова — fallback испортил бы их в гибериш.
+        if (!anyChange && !anyKnown)
+        {
+            var fallback = LayoutConverter.AutoConvertWithDirection(buffered);
+            converted = fallback.Result;
+            dir = fallback.Dir;
+        }
+
         if (converted != buffered)
         {
             int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
