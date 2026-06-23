@@ -80,11 +80,12 @@ public sealed class App : IDisposable
             return;
         }
 
-        // 1.1) Хоткей смены регистра выделения
+        // 1.1) Хоткей смены регистра — работает с буфером (тем, что только что напечатано),
+        //      напрямую через Backspace+SendUnicode, без clipboard. Жёсткое 1-в-1 преобразование.
         if (Settings.ChangeCaseHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
             e.Handled = true;
-            _uiContext.Post(_ => CaseConverter.TryToggleSelectionCase(), null);
+            _uiContext.Post(_ => RunCaseToggle(), null);
             return;
         }
 
@@ -334,6 +335,25 @@ public sealed class App : IDisposable
             SwitchSystemLayout(dir);
         }
         _buffer.Clear();
+    }
+
+    private void RunCaseToggle()
+    {
+        var buffered = _buffer.Snapshot();
+        if (buffered.Length == 0) return;
+
+        var toggled = CaseConverter.Toggle(buffered);
+        if (toggled == buffered) return;
+
+        int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
+        Sender.ReleaseHotkeyModifiers();
+        if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
+        Sender.SendBackspaces(buffered.Length);
+        Sender.SendUnicode(toggled);
+
+        // Синхронизируем буфер с тем, что теперь на экране.
+        _buffer.Clear();
+        foreach (var ch in toggled) _buffer.Append(ch);
     }
 
     private static void SwitchSystemLayout(LayoutConverter.Direction dir)
