@@ -10,7 +10,7 @@ public sealed class SettingsForm : Form
     private readonly AppSettings _settings;
     private readonly CheckBox _cbEnabled = new() { Text = "Включено", AutoSize = true };
     private readonly CheckBox _cbAutostart = new() { Text = "Запускать при старте Windows", AutoSize = true };
-    private readonly CheckBox _cbAutoDetect = new() { Text = "Автоматически исправлять раскладку (бета)", AutoSize = true };
+    private readonly CheckBox _cbAutoDetect = new() { Text = "Автоматически исправлять раскладку (эксперимент)", AutoSize = true };
     private readonly CheckBox _cbAutoTypography = new() { Text = "Авто-правка: CapsLock, ПРивет→Привет", AutoSize = true };
     private readonly NumericUpDown _nudIdle = new() { Minimum = 5, Maximum = 600, Value = 30, Width = 80 };
     private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180, Margin = new Padding(0, 0, 6, 0) };

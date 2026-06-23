@@ -299,8 +299,10 @@ public sealed class App : IDisposable
 
     private void RunConvert()
     {
-        // Приоритет — буферный режим: то, что пользователь только что набрал в текущей сессии.
-        // Если буфер пуст, пробуем выделенный текст (через Ctrl+C round-trip).
+        // Простая и предсказуемая семантика: ничего не угадываем по словарю.
+        // Если буфер пуст — пробуем выделенный текст. Иначе — тупо переворачиваем
+        // ВЕСЬ буфер в доминантную раскладку (сравниваем сколько в нём латиницы
+        // и сколько кириллицы). Один-в-один посимвольная конверсия.
         var buffered = _buffer.Snapshot();
         if (buffered.Length == 0)
         {
@@ -308,21 +310,7 @@ public sealed class App : IDisposable
             return;
         }
 
-        // Пословная конвертация: проходим по буферу, и переводим только те слова,
-        // которые AutoDetector считает набранными в неправильной раскладке.
-        var (converted, dir, anyChange, anyKnown) = LayoutConverter.AutoConvertPerWord(buffered);
-
-        // Whole-buffer fallback ТОЛЬКО когда per-word ничего не сделал И ни одно слово
-        // не опознано как правильное в своём языке (то есть буфер целиком "не-наш"
-        // и пользователь явно хотел всё перевернуть). Если в буфере есть опознанные
-        // правильные слова — fallback бы испортил их в гибериш.
-        if (!anyChange && !anyKnown)
-        {
-            var fallback = LayoutConverter.AutoConvertWithDirection(buffered);
-            converted = fallback.Result;
-            dir = fallback.Dir;
-        }
-
+        var (converted, dir) = LayoutConverter.AutoConvertWithDirection(buffered);
         if (converted != buffered)
         {
             int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
@@ -330,8 +318,6 @@ public sealed class App : IDisposable
             if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
             Sender.SendBackspaces(buffered.Length);
             ClipboardPaste.Paste(converted);
-            // Переключаем системную раскладку в сторону последней конвертации,
-            // чтобы пользователь мог продолжить печатать в правильной раскладке.
             SwitchSystemLayout(dir);
         }
         _buffer.Clear();
