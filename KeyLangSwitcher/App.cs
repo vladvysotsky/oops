@@ -311,21 +311,16 @@ public sealed class App : IDisposable
 
         // Умная пословная конвертация: каждое слово анализируется через словарь
         // (с fuzzy-match на одну опечатку) и плотность гласных. Конвертируются
-        // ТОЛЬКО те слова, которые набраны в неправильной раскладке.
-        var (converted, dir, anyChange, anyKnown) = LayoutConverter.AutoConvertPerWord(buffered);
+        // ТОЛЬКО те слова, которые УВЕРЕННО набраны в неправильной раскладке.
+        //
+        // НИКАКОГО whole-buffer fallback: если ни одно слово не распознано как
+        // битое — НЕ ДЕЛАЕМ НИЧЕГО. Раньше fallback переворачивал весь буфер в
+        // доминантную раскладку и портил корректный двуязычный текст в гибериш.
+        // Чтобы перевернуть всё целиком — пользователь выделяет текст и жмёт хоткей
+        // (выделение = безусловная конверсия, ветка выше при пустом буфере).
+        var (converted, dir, anyChange, _) = LayoutConverter.AutoConvertPerWord(buffered);
 
-        // Whole-buffer fallback срабатывает ТОЛЬКО когда per-word ничего не сделал
-        // И ни одно слово не опознано как правильное в своём языке (буфер целиком
-        // "не-наш" и пользователь явно хотел перевернуть всё). Если в буфере есть
-        // опознанные правильные слова — fallback испортил бы их в гибериш.
-        if (!anyChange && !anyKnown)
-        {
-            var fallback = LayoutConverter.AutoConvertWithDirection(buffered);
-            converted = fallback.Result;
-            dir = fallback.Dir;
-        }
-
-        if (converted != buffered)
+        if (anyChange && converted != buffered)
         {
             int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
             Sender.ReleaseHotkeyModifiers();

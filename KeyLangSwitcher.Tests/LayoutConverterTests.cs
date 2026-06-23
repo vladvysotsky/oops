@@ -5,6 +5,25 @@ namespace KeyLangSwitcher.Tests;
 
 public class LayoutConverterTests
 {
+    [Fact]
+    public void AutoConvertPerWord_MixedSentence_DoesNotTouchCorrectRussian()
+    {
+        // Регрессия на главный баг: длинный корректный русский текст с одним
+        // фрагментом в EN-раскладке. Раньше whole-buffer fallback переворачивал
+        // ВЕСЬ текст в гибериш (у→e, я→z). Теперь корректная часть не трогается;
+        // конвертируются только уверенно-битые слова.
+        var input = "У меня есть вопрос по тамаре. Я короче правил кое-что в коде MPXJ b xnj";
+        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord(input);
+
+        // Корректные русские слова остаются на месте.
+        Assert.Contains("меня есть вопрос", result);
+        Assert.Contains("короче правил", result);
+        // Аббревиатура MPXJ (всё заглавными) не трогается.
+        Assert.Contains("MPXJ", result);
+        // Не должно быть латинской каши вместо русского.
+        Assert.DoesNotContain("vtyz", result); // меня→vtyz если бы flip всего
+    }
+
     [Theory]
     [InlineData("vfvf", "мама")]
     [InlineData("Z nt,z k.,k.", "Я тебя люблю")]
