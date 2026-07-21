@@ -1,4 +1,3 @@
-using System.Windows.Forms;
 using KeyLangSwitcher.Core;
 using KeyLangSwitcher.Hooks;
 using KeyLangSwitcher.Settings;
@@ -6,31 +5,19 @@ using KeyLangSwitcher.Settings;
 namespace KeyLangSwitcher;
 
 /// <summary>
-/// Главный координатор: связывает хуки, буфер, конвертер и хоткей.
+/// Главный координатор. МАКСИМАЛЬНО ПРОСТАЯ модель:
+///   - работает ТОЛЬКО с ВЫДЕЛЕННЫМ текстом;
+///   - никакого буфера набранного текста, никаких словарей и автокоррекции;
+///   - хоткей конвертации: выделение → 1-в-1 смена раскладки + переключение системной раскладки;
+///   - хоткей смены регистра: выделение → toggle upper/lower.
+/// Результат печатается напрямую (SendUnicode), заменяя выделение. Clipboard
+/// используется только для ЧТЕНИЯ выделения (Ctrl+C) и сразу восстанавливается —
+/// в историю Win+V наш конвертированный текст не попадает.
 /// </summary>
 public sealed class App : IDisposable
 {
     public AppSettings Settings { get; }
-    private readonly TypingBuffer _buffer = new();
-    private readonly LayoutTracker _layoutTracker = new();
-    private readonly NeverFixList _neverFix = new();
     private readonly KeyboardHook _kbHook = new();
-    private readonly MouseHook _mouseHook = new();
-    private readonly ForegroundWatcher _fgWatcher = new();
-
-    // Запись о последней автокоррекции — для отката по Pause/Break
-    // и обучения по немедленному Backspace.
-    private sealed record AutoCorrection(string Original, string Corrected, char Separator, DateTime At, LayoutConverter.Direction Dir);
-    private AutoCorrection? _lastAutoCorrection;
-    private static readonly TimeSpan UndoWindow = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan AutoFixCooldown = TimeSpan.FromSeconds(2);
-
-    // Скользящий контекст последних N "осмысленных" слов — для подавления
-    // ложных автокоррекций посреди фразы в одном языке.
-    private readonly Queue<AutoDetector.ContextLanguage> _recentLangs = new();
-    private const int ContextWindowSize = 4;
-
-    // UI-поток нужен для clipboard-операций
     private readonly SynchronizationContext _uiContext;
 
     public App(AppSettings settings)
@@ -39,335 +26,32 @@ public sealed class App : IDisposable
         _uiContext = SynchronizationContext.Current
             ?? throw new InvalidOperationException("App must be created on the UI thread");
 
-        ApplySettings();
-
         _kbHook.KeyDown += OnKeyDown;
-        _mouseHook.Clicked += (_, _) => _buffer.Clear();
-        _fgWatcher.ForegroundChanged += (_, _) =>
-        {
-            _buffer.Clear();
-            _layoutTracker.Reset();
-        };
-
         _kbHook.Install();
-        _mouseHook.Install();
-        _fgWatcher.Install();
     }
 
-    public void ApplySettings()
-    {
-        _buffer.IdleTimeout = TimeSpan.FromSeconds(Settings.BufferIdleTimeoutSeconds);
-    }
+    public void ApplySettings() { /* нет состояния для применения */ }
 
     private void OnKeyDown(object? sender, KeyboardHook.KeyEvent e)
     {
         if (!Settings.Enabled) return;
 
-        // 0) Если пользователь сам сменил раскладку (Alt+Shift, Win+Space и т.п.) —
-        //    дальнейшие нажатия будут идти в другой системе букв, наш буфер уже
-        //    не соответствует тому, что попадает на экран. Сбрасываем.
-        if (_layoutTracker.LayoutChangedSinceLastCheck())
-            _buffer.Clear();
-
-        // 1) Хоткей конвертации
+        // Хоткей конвертации раскладки выделенного текста.
         if (Settings.ConvertHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
-            // Глотаем событие, чтобы оно не дошло до приложения
             e.Handled = true;
-
-            // Выполняем в UI-потоке — нужен для clipboard
-            _uiContext.Post(_ => RunConvert(), null);
+            _uiContext.Post(_ => SelectionConverter.ConvertSelection(), null);
             return;
         }
 
-        // 1.1) Хоткей смены регистра — работает с буфером (тем, что только что напечатано),
-        //      напрямую через Backspace+SendUnicode, без clipboard. Жёсткое 1-в-1 преобразование.
+        // Хоткей смены регистра выделенного текста.
         if (Settings.ChangeCaseHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
             e.Handled = true;
-            _uiContext.Post(_ => RunCaseToggle(), null);
+            _uiContext.Post(_ => SelectionConverter.ToggleSelectionCase(), null);
             return;
         }
-
-        // 1.5) Pause/Break — отмена последней автокоррекции.
-        if (e.VirtualKey == Keys.Pause && _lastAutoCorrection != null)
-        {
-            e.Handled = true;
-            _uiContext.Post(_ => UndoLastAutoCorrection(), null);
-            return;
-        }
-
-        // 1.6) Backspace сразу после автокоррекции — пользователь явно её не хотел.
-        //      Откатываем и запоминаем оригинальное слово как "не трогать".
-        if (e.VirtualKey == Keys.Back
-            && _lastAutoCorrection != null
-            && DateTime.UtcNow - _lastAutoCorrection.At < UndoWindow)
-        {
-            var lc = _lastAutoCorrection;
-            _lastAutoCorrection = null;
-            e.Handled = true;
-            _uiContext.Post(_ =>
-            {
-                _neverFix.Add(lc.Original);
-                UndoCorrection(lc);
-            }, null);
-            return;
-        }
-
-        // 2) Навигация / редактирование, влияющее на буфер
-        switch (e.VirtualKey)
-        {
-            case Keys.Back:
-                _buffer.Backspace();
-                return;
-            case Keys.Delete:
-                _buffer.Delete();
-                return;
-            case Keys.Left:
-                _buffer.MoveLeft();
-                return;
-            case Keys.Right:
-                _buffer.MoveRight();
-                return;
-            case Keys.Home:
-                _buffer.MoveHome();
-                return;
-            case Keys.End:
-                _buffer.MoveEnd();
-                return;
-            // Вертикальная навигация и завершающие действия — мы теряем контекст.
-            case Keys.Up:
-            case Keys.Down:
-            case Keys.PageUp:
-            case Keys.PageDown:
-            case Keys.Enter:
-            case Keys.Tab:
-            case Keys.Escape:
-                _buffer.Clear();
-                return;
-        }
-
-        // 3) Накопление символов
-        if (e.TypedChar.HasValue)
-        {
-            var c = e.TypedChar.Value;
-            _buffer.Append(c);
-
-            // 4) Авто-правка на разделителе: layout + typography.
-            if ((Settings.AutoDetectWrongLayout || Settings.AutoFixTypography) && IsWordSeparator(c))
-                _uiContext.Post(_ => TryAutoFixLastWord(), null);
-        }
     }
 
-    private static bool IsWordSeparator(char c) =>
-        c == ' ' || c == '\t' || c == ',' || c == '.' || c == ';' || c == ':'
-        || c == '!' || c == '?' || c == '/' || c == '\\' || c == '"' || c == '\''
-        || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}';
-
-    private void TryAutoFixLastWord()
-    {
-        var snap = _buffer.Snapshot();
-        if (snap.Length < 2) return;
-        var sep = snap[^1];
-
-        int wordEnd = snap.Length - 1;
-        int wordStart = wordEnd;
-        while (wordStart > 0 && !IsWordSeparator(snap[wordStart - 1])) wordStart--;
-        var word = snap.Substring(wordStart, wordEnd - wordStart);
-        if (word.Length == 0) return;
-
-        // Cool-down — после автокоррекции не трогаем следующее слово в течение N секунд,
-        // чтобы каскад исправлений не мешал пользователю.
-        if (_lastAutoCorrection != null
-            && DateTime.UtcNow - _lastAutoCorrection.At < AutoFixCooldown)
-        {
-            UpdateContext(word);
-            return;
-        }
-
-        // Пользователь уже один раз отказался от автокоррекции этого слова — пропускаем.
-        if (_neverFix.Contains(word))
-        {
-            UpdateContext(word);
-            return;
-        }
-
-        string corrected = word;
-        var layoutDir = LayoutConverter.Direction.None;
-
-        // 1) Слой раскладки — с учётом контекста недавних слов.
-        if (Settings.AutoDetectWrongLayout)
-        {
-            var verdict = AutoDetector.Analyze(corrected, DominantRecentLanguage());
-            if (verdict == AutoDetector.Verdict.WasMeantRussian)
-            {
-                corrected = LayoutConverter.ToRussian(corrected);
-                layoutDir = LayoutConverter.Direction.ToRu;
-            }
-            else if (verdict == AutoDetector.Verdict.WasMeantEnglish)
-            {
-                corrected = LayoutConverter.ToEnglish(corrected);
-                layoutDir = LayoutConverter.Direction.ToEn;
-            }
-        }
-
-        // 2) Типографика.
-        if (Settings.AutoFixTypography)
-        {
-            corrected = Typography.FixAccidentalCapsLock(corrected) ?? corrected;
-            corrected = Typography.FixDoubleCapital(corrected) ?? corrected;
-        }
-
-        if (corrected == word)
-        {
-            UpdateContext(word);
-            return;
-        }
-
-        Sender.ReleaseHotkeyModifiers();
-        Sender.SendBackspaces(word.Length + 1);
-        ClipboardPaste.Paste(corrected + sep);
-        if (layoutDir != LayoutConverter.Direction.None) SwitchSystemLayout(layoutDir);
-
-        _buffer.Clear();
-        foreach (var ch in corrected) _buffer.Append(ch);
-        _buffer.Append(sep);
-
-        _lastAutoCorrection = new AutoCorrection(word, corrected, sep, DateTime.UtcNow, layoutDir);
-        UpdateContext(corrected); // в контекст идёт уже исправленное слово
-    }
-
-    private void UpdateContext(string word)
-    {
-        var lang = LanguageOf(word);
-        if (lang == AutoDetector.ContextLanguage.Unknown) return; // не учитываем "шум"
-        _recentLangs.Enqueue(lang);
-        while (_recentLangs.Count > ContextWindowSize) _recentLangs.Dequeue();
-    }
-
-    private static AutoDetector.ContextLanguage LanguageOf(string word)
-    {
-        int latin = 0, cyr = 0;
-        foreach (var c in word)
-        {
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
-            else if ((c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё') cyr++;
-        }
-        if (latin > 0 && cyr == 0) return AutoDetector.ContextLanguage.English;
-        if (cyr > 0 && latin == 0) return AutoDetector.ContextLanguage.Russian;
-        return AutoDetector.ContextLanguage.Unknown;
-    }
-
-    private AutoDetector.ContextLanguage DominantRecentLanguage()
-    {
-        int en = 0, ru = 0;
-        foreach (var l in _recentLangs)
-        {
-            if (l == AutoDetector.ContextLanguage.English) en++;
-            else if (l == AutoDetector.ContextLanguage.Russian) ru++;
-        }
-        // нужна явная доминанта (большинство), иначе считаем неоднозначным
-        if (en >= 3 && en > ru) return AutoDetector.ContextLanguage.English;
-        if (ru >= 3 && ru > en) return AutoDetector.ContextLanguage.Russian;
-        return AutoDetector.ContextLanguage.Unknown;
-    }
-
-    /// <summary>
-    /// Откат последней автокоррекции: на экране сейчас "corrected + sep",
-    /// стираем это и печатаем "original + sep". Раскладку возвращаем обратно.
-    /// </summary>
-    private void UndoLastAutoCorrection()
-    {
-        var lc = _lastAutoCorrection;
-        if (lc == null) return;
-        _lastAutoCorrection = null;
-        UndoCorrection(lc);
-    }
-
-    private void UndoCorrection(AutoCorrection lc)
-    {
-        Sender.ReleaseHotkeyModifiers();
-        Sender.SendBackspaces(lc.Corrected.Length + 1);
-        ClipboardPaste.Paste(lc.Original + lc.Separator);
-        // Раскладку возвращаем обратно.
-        if (lc.Dir == LayoutConverter.Direction.ToRu) SwitchSystemLayout(LayoutConverter.Direction.ToEn);
-        else if (lc.Dir == LayoutConverter.Direction.ToEn) SwitchSystemLayout(LayoutConverter.Direction.ToRu);
-
-        _buffer.Clear();
-        foreach (var ch in lc.Original) _buffer.Append(ch);
-        _buffer.Append(lc.Separator);
-    }
-
-    private void RunConvert()
-    {
-        // 1) ВСЕГДА сначала пробуем выделение. Если пользователь что-то выделил и
-        //    нажал хоткей — его намерение однозначно: сконвертировать ровно это,
-        //    1-в-1 по таблице раскладок (запятые, точки, пунктуация — всё маппится
-        //    корректно, никаких пословных догадок). Детерминированно и быстро.
-        //    Раньше выделение проверялось только при пустом буфере, из-за чего
-        //    "напечатал → выделил → хоткей" уходило в кривой пословный режим.
-        if (SelectionConverter.TryConvertSelection())
-        {
-            _buffer.Clear();
-            return;
-        }
-
-        // 2) Выделения нет → работаем с буфером (то, что только что набрано).
-        //    Умная пословная конвертация: конвертируем ТОЛЬКО уверенно-битые слова.
-        //    Если ничего уверенно-битого нет — НЕ ДЕЛАЕМ НИЧЕГО (не портим текст).
-        var buffered = _buffer.Snapshot();
-        if (buffered.Length == 0) return;
-
-        var (converted, dir, anyChange, _) = LayoutConverter.AutoConvertPerWord(buffered);
-
-        if (anyChange && converted != buffered)
-        {
-            int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
-            Sender.ReleaseHotkeyModifiers();
-            if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
-            Sender.SendBackspaces(buffered.Length);
-            ClipboardPaste.Paste(converted);
-            SwitchSystemLayout(dir);
-        }
-        _buffer.Clear();
-    }
-
-    private void RunCaseToggle()
-    {
-        // 1) Сначала пробуем выделение (через clipboard round-trip).
-        if (CaseConverter.TryToggleSelectionCase())
-        {
-            _buffer.Clear(); // выделение могло быть в буфере, теперь оно уже изменено
-            return;
-        }
-
-        // 2) Если выделения не было — работаем с буфером напрямую через Backspace+SendUnicode.
-        var buffered = _buffer.Snapshot();
-        if (buffered.Length == 0) return;
-
-        var toggled = CaseConverter.Toggle(buffered);
-        if (toggled == buffered) return;
-
-        int tailAfterCursor = buffered.Length - _buffer.CursorPosition;
-        Sender.ReleaseHotkeyModifiers();
-        if (tailAfterCursor > 0) Sender.SendRightArrow(tailAfterCursor);
-        Sender.SendBackspaces(buffered.Length);
-        Sender.SendUnicode(toggled);
-
-        _buffer.Clear();
-        foreach (var ch in toggled) _buffer.Append(ch);
-    }
-
-    private static void SwitchSystemLayout(LayoutConverter.Direction dir)
-    {
-        if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
-        else if (dir == LayoutConverter.Direction.ToEn) LayoutSwitcher.SwitchToEnglish();
-    }
-
-    public void Dispose()
-    {
-        _kbHook.Dispose();
-        _mouseHook.Dispose();
-        _fgWatcher.Dispose();
-    }
+    public void Dispose() => _kbHook.Dispose();
 }
