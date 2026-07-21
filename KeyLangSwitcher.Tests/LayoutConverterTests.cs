@@ -5,25 +5,6 @@ namespace KeyLangSwitcher.Tests;
 
 public class LayoutConverterTests
 {
-    [Fact]
-    public void AutoConvertPerWord_MixedSentence_DoesNotTouchCorrectRussian()
-    {
-        // Регрессия на главный баг: длинный корректный русский текст с одним
-        // фрагментом в EN-раскладке. Раньше whole-buffer fallback переворачивал
-        // ВЕСЬ текст в гибериш (у→e, я→z). Теперь корректная часть не трогается;
-        // конвертируются только уверенно-битые слова.
-        var input = "У меня есть вопрос по тамаре. Я короче правил кое-что в коде MPXJ b xnj";
-        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord(input);
-
-        // Корректные русские слова остаются на месте.
-        Assert.Contains("меня есть вопрос", result);
-        Assert.Contains("короче правил", result);
-        // Аббревиатура MPXJ (всё заглавными) не трогается.
-        Assert.Contains("MPXJ", result);
-        // Не должно быть латинской каши вместо русского.
-        Assert.DoesNotContain("vtyz", result); // меня→vtyz если бы flip всего
-    }
-
     [Theory]
     [InlineData("vfvf", "мама")]
     [InlineData("Z nt,z k.,k.", "Я тебя люблю")]
@@ -74,67 +55,12 @@ public class LayoutConverterTests
     }
 
     [Fact]
-    public void AutoConvertPerWord_LeavesCorrectTextAlone()
+    public void AutoConvert_WholeSelection_ConvertsPunctuationOneToOne()
     {
-        var (result, _, anyChange, anyKnown) = LayoutConverter.AutoConvertPerWord("это правильный текст");
-        Assert.Equal("это правильный текст", result);
-        Assert.False(anyChange);
-        Assert.True(anyKnown); // 'это' и 'текст' опознаются как RU
-    }
-
-    [Fact]
-    public void AutoConvertPerWord_FixesOnlyWrongLayoutWord()
-    {
-        var (result, dir, anyChange, _) = LayoutConverter.AutoConvertPerWord("это vfvf слово");
-        Assert.Equal("это мама слово", result);
-        Assert.True(anyChange);
-        Assert.Equal(LayoutConverter.Direction.ToRu, dir);
-    }
-
-    [Fact]
-    public void AutoConvertPerWord_PreservesPunctuationAndSeparators()
-    {
-        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord("hello, vfvf!");
-        Assert.Equal("hello, мама!", result);
-    }
-
-    [Fact]
-    public void AutoConvertPerWord_SemicolonInsideWord_TreatedAsRuLetter()
-    {
-        // 'hfccr;b' — пользователь набирал "расскжи" в EN-раскладке.
-        // Символ ';' на EN-раскладке соответствует RU-букве 'ж', поэтому он
-        // должен быть частью слова, а не разделителем. Результат — 'расскжи'.
-        var (result, _, anyChange, _) = LayoutConverter.AutoConvertPerWord("hfccr;b");
-        Assert.True(anyChange);
-        Assert.Equal("расскжи", result);
-    }
-
-    [Fact]
-    public void AutoConvertPerWord_BracketsAndApostropheAreRuLetters()
-    {
-        // [ → х, ] → ъ, ' → э — тоже летеры на RU-раскладке.
-        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord("[fnf'");
-        Assert.Equal("хатаэ", result);
-    }
-
-    [Fact]
-    public void AutoConvertPerWord_RealPunctuation_StillSplitsWords()
-    {
-        // ',' '.' '/' остаются настоящими разделителями.
-        var (result, _, _, _) = LayoutConverter.AutoConvertPerWord("vfvf, gfgf.");
-        Assert.Equal("мама, папа.", result);
-    }
-
-    [Fact]
-    public void AutoConvertPerWord_CorrectRussianWithOneBadWord_KeepsRestIntact()
-    {
-        // Регрессионный тест из бага пользователя: была проблема, что fallback на
-        // whole-buffer перевирал весь правильный русский текст в EN-гибериш, если
-        // per-word ничего не сконвертировал. Теперь fallback подавляется когда
-        // в буфере есть опознанные слова.
-        var (result, _, _, anyKnown) = LayoutConverter.AutoConvertPerWord("проведи симуляцию и сохрани");
-        Assert.True(anyKnown);
-        Assert.Equal("проведи симуляцию и сохрани", result);
+        // 1-в-1 конверсия выделения: запятая (',' = 'б') и апостроф маппятся корректно.
+        // Это ключевой сценарий: выделил → сконвертировалось целиком.
+        Assert.Equal("скажи где взять ошибку импорта",
+            LayoutConverter.ToRussian("crf;b ult dpznm jib,re bvgjhnf"));
     }
 
     [Theory]
@@ -151,5 +77,13 @@ public class LayoutConverterTests
     {
         Assert.Equal(ru.ToString(), LayoutConverter.ToRussian(en.ToString()));
         Assert.Equal(en.ToString(), LayoutConverter.ToEnglish(ru.ToString()));
+    }
+
+    [Fact]
+    public void ToggleCase_LowersWhenAnyUpper_UppersWhenAllLower()
+    {
+        Assert.Equal("hello", SelectionConverter.Toggle("Hello"));
+        Assert.Equal("HELLO", SelectionConverter.Toggle("hello"));
+        Assert.Equal("привет мир", SelectionConverter.Toggle("Привет Мир"));
     }
 }

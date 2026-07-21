@@ -10,9 +10,6 @@ public sealed class SettingsForm : Form
     private readonly AppSettings _settings;
     private readonly CheckBox _cbEnabled = new() { Text = "Включено", AutoSize = true };
     private readonly CheckBox _cbAutostart = new() { Text = "Запускать при старте Windows", AutoSize = true };
-    private readonly CheckBox _cbAutoDetect = new() { Text = "Автоматически исправлять раскладку (эксперимент)", AutoSize = true };
-    private readonly CheckBox _cbAutoTypography = new() { Text = "Авто-правка: CapsLock, ПРивет→Привет", AutoSize = true };
-    private readonly NumericUpDown _nudIdle = new() { Minimum = 5, Maximum = 600, Value = 30, Width = 80 };
     private readonly TextBox _hotkeyBox = new() { ReadOnly = true, Width = 180, Margin = new Padding(0, 0, 6, 0) };
     private readonly Button _btnRecord = new() { Text = "Записать...", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new System.Drawing.Size(110, 28), Padding = new Padding(6, 2, 6, 2) };
     private readonly TextBox _caseHotkeyBox = new() { ReadOnly = true, Width = 180, Margin = new Padding(0, 0, 6, 0) };
@@ -34,8 +31,8 @@ public sealed class SettingsForm : Form
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new System.Drawing.Size(620, 420);
-        MinimumSize = new System.Drawing.Size(620, 420);
+        ClientSize = new System.Drawing.Size(620, 300);
+        MinimumSize = new System.Drawing.Size(620, 300);
 
         // --- Buttons row (docked bottom). Add BEFORE the content panel so Fill respects it. ---
         var buttons = new FlowLayoutPanel
@@ -55,30 +52,16 @@ public sealed class SettingsForm : Form
         // --- Content ---
         var lblHotkey = new Label { Text = "Хоткей конвертации:", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
         var lblCaseHotkey = new Label { Text = "Хоткей смены регистра:", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
-        var lblIdle   = new Label { Text = "Сброс через (сек):", AutoSize = true, MinimumSize = new System.Drawing.Size(220, 0), TextAlign = System.Drawing.ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 8, 0) };
-        _nudIdle.Margin = new Padding(0, 0, 0, 0);
 
         var tooltip = new ToolTip { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 200, ShowAlways = true };
-        tooltip.SetToolTip(lblIdle,
-            "Забывать набранное после N секунд бездействия:\n" +
-            "если столько времени ничего не печатать, накопленный текст\n" +
-            "перестаёт быть кандидатом на конвертацию по хоткею. Это нужно,\n" +
-            "чтобы при возврате к окну через минуту хоткей не пытался\n" +
-            "переписать давно забытый ввод.");
-        tooltip.SetToolTip(_nudIdle, tooltip.GetToolTip(lblIdle));
-        tooltip.SetToolTip(_cbAutoDetect,
-            "Бета: на пробеле/пунктуации проверяет завершённое слово по словарю\n" +
-            "и при необходимости конвертирует и переключает раскладку.");
-        tooltip.SetToolTip(_cbAutoTypography,
-            "Автоматически исправляет 'пРИВЕТ' (забытый CapsLock) и 'ПРивет'\n" +
-            "(двойная заглавная). Аббревиатуры в верхнем регистре не трогает.");
-        tooltip.SetToolTip(_cbEnabled, "Глобально включает / выключает работу хоткея и буфера.");
+        tooltip.SetToolTip(_cbEnabled, "Глобально включает / выключает работу хоткеев.");
         tooltip.SetToolTip(_cbAutostart, "Прописать запуск программы в реестр HKCU\\...\\Run.");
-        tooltip.SetToolTip(_hotkeyBox, "Текущая комбинация. Жми \"Записать...\" чтобы сменить.");
+        tooltip.SetToolTip(_hotkeyBox,
+            "Конвертирует раскладку ВЫДЕЛЕННОГО текста (1-в-1) и переключает\n" +
+            "системную раскладку. Жми \"Записать...\" чтобы сменить комбинацию.");
         tooltip.SetToolTip(_caseHotkeyBox,
-            "Хоткей смены регистра выделенного текста.\n" +
-            "Если в выделении есть хоть одна заглавная — всё опускается в нижний,\n" +
-            "иначе всё поднимается в верхний.");
+            "Меняет регистр ВЫДЕЛЕННОГО текста.\n" +
+            "Если есть хоть одна заглавная — всё в нижний, иначе всё в верхний.");
         _btnRecord.Click += (_, _) => _hotkey = RecordHotkey(_hotkey, _hotkeyBox) ?? _hotkey;
         _btnRecordCase.Click += (_, _) => _caseHotkey = RecordHotkey(_caseHotkey, _caseHotkeyBox) ?? _caseHotkey;
 
@@ -113,11 +96,8 @@ public sealed class SettingsForm : Form
 
         content.Controls.Add(_cbEnabled);
         content.Controls.Add(_cbAutostart);
-        content.Controls.Add(_cbAutoDetect);
-        content.Controls.Add(_cbAutoTypography);
         content.Controls.Add(Row(lblHotkey, _hotkeyBox, _btnRecord));
         content.Controls.Add(Row(lblCaseHotkey, _caseHotkeyBox, _btnRecordCase));
-        content.Controls.Add(Row(lblIdle, _nudIdle));
 
         Controls.Add(content);
         AcceptButton = _btnSave;
@@ -126,9 +106,6 @@ public sealed class SettingsForm : Form
         // populate
         _cbEnabled.Checked = settings.Enabled;
         _cbAutostart.Checked = settings.Autostart;
-        _cbAutoDetect.Checked = settings.AutoDetectWrongLayout;
-        _cbAutoTypography.Checked = settings.AutoFixTypography;
-        _nudIdle.Value = settings.BufferIdleTimeoutSeconds;
         _hotkeyBox.Text = _hotkey.ToString();
         _caseHotkeyBox.Text = _caseHotkey.ToString();
 
@@ -159,9 +136,6 @@ public sealed class SettingsForm : Form
     {
         _settings.Enabled = _cbEnabled.Checked;
         _settings.Autostart = _cbAutostart.Checked;
-        _settings.AutoDetectWrongLayout = _cbAutoDetect.Checked;
-        _settings.AutoFixTypography = _cbAutoTypography.Checked;
-        _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
         _settings.ConvertHotkey = _hotkey;
         _settings.ChangeCaseHotkey = _caseHotkey;
     }
