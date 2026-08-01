@@ -128,6 +128,26 @@ public static class Sender
     }
 
     /// <summary>
+    /// Нейтрализует «тап» модификатора. Если хоткей содержит Alt, то Windows видит
+    /// последовательность Alt-down → Alt-up без промежуточных клавиш и трактует её как
+    /// активацию строки меню: фокус уходит из поля ввода, и последующий SendUnicode
+    /// печатает в никуда. Вставка безобидного Ctrl-тапа между ними ломает этот шаблон —
+    /// Windows видит Alt-down → Ctrl → Alt-up и меню не активирует.
+    ///
+    /// Вызывать СРАЗУ при срабатывании хоткея, пока пользователь ещё держит Alt.
+    /// Ctrl без последующей буквы ничего не делает ни в одном приложении.
+    /// </summary>
+    public static void CancelAltMenuActivation()
+    {
+        var inputs = new[]
+        {
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
+        };
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    /// <summary>
     /// Эмуляция Ctrl+C / Ctrl+V. Перед основной комбинацией снимаем все "лишние"
     /// модификаторы (Shift/Alt/Win), которые мог удерживать пользователь от хоткея —
     /// иначе приложение увидит, например, Ctrl+Alt+C вместо чистого Ctrl+C и copy не сработает.

@@ -29,15 +29,15 @@ public sealed class HotkeyConfig
     };
 
     /// <summary>
-    /// Смена регистра выделенного текста — Ctrl+Shift+U по умолчанию.
+    /// Смена регистра выделенного текста — Alt+Win по умолчанию (modifier-only).
     /// НЕ использовать Alt+Shift: это системный шорткат переключения раскладки
-    /// Windows, он перехватывается до нас и ломает хоткей.
+    /// Windows, он перехватывается до нас и хоткей не срабатывает.
     /// </summary>
     public static HotkeyConfig ChangeCaseDefault => new()
     {
-        Ctrl = true,
-        Shift = true,
-        Key = (int)Keys.U,
+        Alt = true,
+        Win = true,
+        Key = 0,
     };
 
     public bool Matches(Keys vk, bool ctrl, bool shift, bool alt, bool win)
