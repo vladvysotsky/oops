@@ -125,6 +125,12 @@ public static class SelectionConverter
 
     private static void WaitForModifiersReleased()
     {
+        // Если хоткей содержит Alt, пользователь ещё держит его. Одиночный тап Alt
+        // активирует строку меню и уводит фокус — гасим это Ctrl-тапом ДО того,
+        // как пользователь отпустит Alt.
+        if ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0)
+            Sender.CancelAltMenuActivation();
+
         var deadline = DateTime.UtcNow.AddMilliseconds(1000);
         while (DateTime.UtcNow < deadline && AnyModifierDown())
         {
