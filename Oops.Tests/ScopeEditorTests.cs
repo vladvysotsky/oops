@@ -103,6 +103,28 @@ public class ScopeEditorTests
     }
 
     [Fact]
+    public void ExpansionSurvivesSlowSteps_WhenPressesAreTimedByKeyDown()
+    {
+        // Регрессия: момент нажатия должен фиксироваться в обработчике клавиши,
+        // а не после ожидания модификаторов и посимвольной печати. Иначе на
+        // длинных словах наша собственная задержка съедает окно расширения и
+        // область перестаёт расти.
+        var s = new ScopeEditor { ExpandWindow = TimeSpan.FromSeconds(2) };
+        const string typed = "ghbdtn rfr ltkf";
+
+        var a = s.NextLayoutStep(typed, T0);
+        Assert.Equal("дела", a.Text);
+
+        // Нажатия идут с интервалом 700 мс — пользователь укладывается в окно,
+        // даже если обработка каждого шага заняла заметное время.
+        var b = s.NextLayoutStep(a.NewBufferContent, T0.AddMilliseconds(700));
+        Assert.Equal("как дела", b.Text);
+
+        var c = s.NextLayoutStep(b.NewBufferContent, T0.AddMilliseconds(1400));
+        Assert.Equal("привет как дела", c.Text);
+    }
+
+    [Fact]
     public void ResetSession_ForcesNextPressToStartOver()
     {
         var s = new ScopeEditor();

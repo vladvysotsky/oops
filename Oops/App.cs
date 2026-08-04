@@ -68,15 +68,22 @@ public sealed class App : IDisposable
 
         // Пользователь сам сменил раскладку (Alt+Shift, Win+Space) — дальнейшие
         // нажатия дают другие буквы, наша лента больше не соответствует экрану.
-        if (_layoutTracker.LayoutChangedSinceLastCheck())
+        // Наши собственные переключения после конвертации сюда не попадают.
+        if (_layoutTracker.UserChangedLayout())
             ResetAll();
+
+        // Момент нажатия фиксируем здесь, а не внутри RunStep: там мы сперва ждём,
+        // пока пользователь отпустит модификаторы, и печатаем текст посимвольно.
+        // Окно расширения должно мерить ритм нажатий пользователя, а не нашу
+        // собственную задержку, иначе на длинных словах область перестаёт расти.
+        var pressedAtUtc = DateTime.UtcNow;
 
         if (Settings.ConvertHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
             e.Handled = true;
             // Пока Alt ещё зажат — гасим активацию строки меню, иначе уедет фокус.
             Sender.CancelAltMenuActivation();
-            _uiContext.Post(_ => RunStep(layout: true), null);
+            _uiContext.Post(_ => RunStep(layout: true, pressedAtUtc), null);
             return;
         }
 
@@ -84,7 +91,7 @@ public sealed class App : IDisposable
         {
             e.Handled = true;
             Sender.CancelAltMenuActivation();
-            _uiContext.Post(_ => RunStep(layout: false), null);
+            _uiContext.Post(_ => RunStep(layout: false, pressedAtUtc), null);
             return;
         }
 
@@ -140,7 +147,7 @@ public sealed class App : IDisposable
           or Keys.Menu or Keys.LMenu or Keys.RMenu
           or Keys.LWin or Keys.RWin;
 
-    private void RunStep(bool layout)
+    private void RunStep(bool layout, DateTime pressedAtUtc)
     {
         // Ждём, пока пользователь отпустит модификаторы хоткея: иначе зажатый Ctrl
         // превратит наши Backspace в Ctrl+Backspace (удаление слова целиком),
@@ -156,7 +163,7 @@ public sealed class App : IDisposable
         // Порядок важен ещё и потому, что в новом Notepad (UWP) Ctrl+C без выделения
         // копирует всю текущую строку — проба выделения при непустой ленте
         // приняла бы эту строку за выделение и переписала бы её целиком.
-        if (_buffer.Length > 0) ConvertBufferScope(layout);
+        if (_buffer.Length > 0) ConvertBufferScope(layout, pressedAtUtc);
         else TryConvertSelection(layout);
     }
 
@@ -178,8 +185,7 @@ public sealed class App : IDisposable
         if (converted != selection)
         {
             Sender.SendUnicode(converted);
-            if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
-            else if (dir == LayoutConverter.Direction.ToEn) LayoutSwitcher.SwitchToEnglish();
+            SwitchSystemLayout(dir);
         }
 
         // Мы переписали не то, что вели в ленте — она больше не отражает экран.
@@ -188,25 +194,39 @@ public sealed class App : IDisposable
     }
 
     /// <summary>Шаг расширяющейся области по набранному тексту.</summary>
-    private void ConvertBufferScope(bool layout)
+    private void ConvertBufferScope(bool layout, DateTime pressedAtUtc)
     {
         var text = _buffer.Snapshot();
         if (text.Length == 0) return;
 
         var edit = layout
-            ? _scope.NextLayoutStep(text, DateTime.UtcNow)
-            : _scope.NextCaseStep(text, DateTime.UtcNow);
+            ? _scope.NextLayoutStep(text, pressedAtUtc)
+            : _scope.NextCaseStep(text, pressedAtUtc);
 
         if (edit.IsEmpty) return;
 
         Sender.SendBackspaces(edit.EraseCount);
         Sender.SendUnicode(edit.Text);
 
-        if (edit.Direction == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
-        else if (edit.Direction == LayoutConverter.Direction.ToEn) LayoutSwitcher.SwitchToEnglish();
+        SwitchSystemLayout(edit.Direction);
 
         // Лента теперь соответствует тому, что на экране.
         _buffer.Reset(edit.NewBufferContent);
+    }
+
+    /// <summary>
+    /// Переключает системную раскладку и помечает смену как нашу, чтобы
+    /// LayoutTracker не принял её за ручное переключение пользователем
+    /// и не сбросил ленту — иначе следующее нажатие хоткея не смогло бы
+    /// расширить область.
+    /// </summary>
+    private void SwitchSystemLayout(LayoutConverter.Direction dir)
+    {
+        if (dir == LayoutConverter.Direction.None) return;
+
+        _layoutTracker.NoteSelfSwitch();
+        if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
+        else LayoutSwitcher.SwitchToEnglish();
     }
 
     public void Dispose()
