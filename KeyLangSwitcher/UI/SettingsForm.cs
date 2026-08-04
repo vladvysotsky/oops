@@ -7,8 +7,11 @@ using KeyLangSwitcher.Settings;
 namespace KeyLangSwitcher.UI;
 
 /// <summary>
-/// Окно настроек. Построено по дизайн-системе из <see cref="Theme"/>:
-/// секции-карточки, 8px-сетка, один акцентный цвет, хоткеи показаны «клавишами».
+/// Окно настроек по дизайн-системе из <see cref="Theme"/>.
+///
+/// Вся разметка построена на вложенных TableLayoutPanel с AutoSize. Фиксированные
+/// высоты строк и карточек намеренно не используются: при DPI-масштабировании
+/// (125%/150%) и переносе строк контент в них не помещается и обрезается.
 /// </summary>
 public sealed class SettingsForm : Form
 {
@@ -38,84 +41,78 @@ public sealed class SettingsForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Theme.Canvas;
         Font = Theme.Body;
-        ClientSize = new Size(560, 620);
 
         BuildLayout();
         Populate();
+
+        // Подгоняем окно под фактическую высоту содержимого, чтобы не появлялась прокрутка.
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
     }
 
     // ---------------------------------------------------------------- layout
 
+    /// <summary>Ширина колонки контента (карточки, заголовки). Масштабируется системой по DPI.</summary>
+    private const int ContentWidth = 480;
+
     private void BuildLayout()
     {
-        var content = new FlowLayoutPanel
+        var content = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true,
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Theme.Canvas,
             Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S2),
+            Margin = new Padding(0),
         };
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
 
-        content.Controls.Add(Header());
-        content.Controls.Add(SectionLabel("ОБЩИЕ"));
-        content.Controls.Add(GeneralCard());
-        content.Controls.Add(SectionLabel("ГОРЯЧИЕ КЛАВИШИ"));
-        content.Controls.Add(HotkeysCard());
-        content.Controls.Add(SectionLabel("ПОВЕДЕНИЕ"));
-        content.Controls.Add(BehaviourCard());
+        AddAutoRow(content, Header());
+        AddAutoRow(content, SectionLabel("ОБЩИЕ"));
+        AddAutoRow(content, GeneralCard());
+        AddAutoRow(content, SectionLabel("ГОРЯЧИЕ КЛАВИШИ"));
+        AddAutoRow(content, HotkeysCard());
+        AddAutoRow(content, SectionLabel("ПОВЕДЕНИЕ"));
+        AddAutoRow(content, BehaviourCard());
+        AddAutoRow(content, Footer());
 
-        // Явная сетка вместо Dock.Fill + Dock.Bottom: порядок докинга в WinForms
-        // зависит от z-order и легко ломается при правках.
-        var grid = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = Theme.Canvas,
-        };
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        grid.Controls.Add(content, 0, 0);
-        grid.Controls.Add(Footer(), 0, 1);
+        Controls.Add(content);
+    }
 
-        Controls.Add(grid);
+    private static void AddAutoRow(TableLayoutPanel host, Control child)
+    {
+        host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        host.Controls.Add(child, 0, host.RowCount);
+        host.RowCount++;
     }
 
     private Control Header()
     {
-        var panel = new Panel
-        {
-            Width = CardWidth,
-            Height = 64,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0, 0, 0, Theme.S3),
-        };
+        var stack = Stack();
+        stack.Margin = new Padding(0, 0, 0, Theme.S2);
 
-        var title = new Label
+        AddAutoRow(stack, new Label
         {
             Text = "KeyLangSwitcher",
             Font = Theme.Title,
             ForeColor = Theme.Text,
             AutoSize = true,
-            Location = new Point(0, 0),
+            Margin = new Padding(0, 0, 0, Theme.S1),
             BackColor = Color.Transparent,
-        };
-        var subtitle = new Label
+        });
+        AddAutoRow(stack, new Label
         {
-            Text = "Правит раскладку и регистр только что набранного текста.\n"
-                 + "Границу задаёте вы: каждое следующее нажатие захватывает ещё одно слово.",
+            Text = "Правит раскладку и регистр набранного текста. Границу задаёте вы: "
+                 + "каждое следующее нажатие хоткея захватывает ещё одно слово.",
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
-            MaximumSize = new Size(CardWidth, 0),
-            Location = new Point(0, 26),
+            MaximumSize = new Size(ContentWidth, 0),  // перенос по ширине колонки
+            Margin = new Padding(0),
             BackColor = Color.Transparent,
-        };
-        panel.Controls.Add(title);
-        panel.Controls.Add(subtitle);
-        return panel;
+        });
+        return stack;
     }
 
     private static Control SectionLabel(string text) => new Label
@@ -128,199 +125,217 @@ public sealed class SettingsForm : Form
         BackColor = Color.Transparent,
     };
 
-    private const int CardWidth = 496;
-
     private Control GeneralCard()
     {
-        var card = new Card { Width = CardWidth, Height = 116, Margin = new Padding(0) };
-        var rows = StackInside(card);
-        rows.Controls.Add(CheckRow(_cbEnabled, "Включено",
-            "Глобально включает и выключает горячие клавиши."));
-        rows.Controls.Add(Divider());
-        rows.Controls.Add(CheckRow(_cbAutostart, "Запускать при старте Windows",
-            "Запись в реестр HKCU\\…\\Run."));
+        var card = NewCard(out var rows);
+        AddAutoRow(rows, CheckRow(_cbEnabled, "Включено",
+            "Глобально включает и выключает горячие клавиши"));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, CheckRow(_cbAutostart, "Запускать при старте Windows",
+            "Запись в реестр HKCU\\…\\Run"));
         return card;
     }
 
     private Control HotkeysCard()
     {
-        var card = new Card { Width = CardWidth, Height = 172, Margin = new Padding(0) };
-        var rows = StackInside(card);
-        rows.Controls.Add(HotkeyRow(
-            "Раскладка",
-            "Меняет RU ↔ EN у последнего слова. Ещё нажатие — ещё слово.",
-            _convertKeys,
-            () => RecordInto(ref _convertHotkey, _convertKeys)));
-        rows.Controls.Add(Divider());
-        rows.Controls.Add(HotkeyRow(
-            "Регистр",
-            "ВЕРХНИЙ ↔ нижний по той же логике области.",
-            _caseKeys,
-            () => RecordInto(ref _caseHotkey, _caseKeys)));
+        var card = NewCard(out var rows);
+        AddAutoRow(rows, HotkeyRow(
+            "Раскладка", "Меняет RU ↔ EN у последнего слова",
+            _convertKeys, () => RecordInto(ref _convertHotkey, _convertKeys)));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, HotkeyRow(
+            "Регистр", "ВЕРХНИЙ ↔ нижний по той же логике",
+            _caseKeys, () => RecordInto(ref _caseHotkey, _caseKeys)));
         return card;
     }
 
     private Control BehaviourCard()
     {
-        var card = new Card { Width = CardWidth, Height = 168, Margin = new Padding(0) };
-        var rows = StackInside(card);
+        var card = NewCard(out var rows);
 
         _nudExpand.Minimum = 1; _nudExpand.Maximum = 10;
-        rows.Controls.Add(NumberRow(_nudExpand, "Окно расширения", "сек",
-            "Столько времени следующее нажатие продолжает расширять ту же область,\nа не начинает новую."));
-        rows.Controls.Add(Divider());
+        AddAutoRow(rows, NumberRow(_nudExpand, "Окно расширения", "сек",
+            "Столько времени нажатие расширяет ту же область"));
+        AddAutoRow(rows, Divider());
 
         _nudIdle.Minimum = 5; _nudIdle.Maximum = 600;
-        rows.Controls.Add(NumberRow(_nudIdle, "Забывать набранное", "сек",
-            "После стольких секунд без ввода набранное перестаёт быть\nкандидатом на исправление."));
+        AddAutoRow(rows, NumberRow(_nudIdle, "Забывать набранное", "сек",
+            "Через столько секунд без ввода буфер очищается"));
         return card;
     }
 
     private Control Footer()
     {
-        var bar = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Canvas,
-            Padding = new Padding(Theme.S4, Theme.S2, Theme.S4, Theme.S3),
-        };
-
         var save = new FlatButton { Text = "Сохранить", Primary = true, Size = new Size(124, 34), DialogResult = DialogResult.OK };
         var cancel = new FlatButton { Text = "Отмена", Size = new Size(104, 34), DialogResult = DialogResult.Cancel };
         save.Click += (_, _) => ApplyToSettings();
 
         var flow = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Anchor = AnchorStyles.Right,
             BackColor = Theme.Canvas,
+            Margin = new Padding(0, Theme.S4, 0, Theme.S2),
         };
-        save.Margin = new Padding(Theme.S2, Theme.S1, 0, 0);
-        cancel.Margin = new Padding(Theme.S2, Theme.S1, 0, 0);
+        save.Margin = new Padding(Theme.S2, 0, 0, 0);
+        cancel.Margin = new Padding(Theme.S2, 0, 0, 0);
         flow.Controls.Add(save);
         flow.Controls.Add(cancel);
-        bar.Controls.Add(flow);
 
         AcceptButton = save;
         CancelButton = cancel;
-        return bar;
+        return flow;
     }
 
     // ------------------------------------------------------------- building blocks
 
-    private static FlowLayoutPanel StackInside(Card card)
+    /// <summary>Вертикальный стек с авторазмером — базовый строительный блок разметки.</summary>
+    private static TableLayoutPanel Stack() => new()
     {
-        var stack = new FlowLayoutPanel
+        ColumnCount = 1,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        BackColor = Color.Transparent,
+        Margin = new Padding(0),
+    };
+
+    private static Card NewCard(out TableLayoutPanel rows)
+    {
+        var card = new Card
         {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            BackColor = Color.Transparent,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new Padding(0),
+            Width = ContentWidth,
         };
-        card.Controls.Add(stack);
-        return stack;
+        rows = Stack();
+        rows.Width = ContentWidth - Theme.S3 * 2;
+        card.Controls.Add(rows);
+        return card;
     }
 
     private static Control Divider() => new Panel
     {
-        Width = CardWidth - Theme.S3 * 2,
         Height = 1,
+        Width = ContentWidth - Theme.S3 * 2,
         BackColor = Theme.Border,
         Margin = new Padding(0, Theme.S2, 0, Theme.S2),
     };
 
-    private const int RowWidth = CardWidth - Theme.S3 * 2;
-
-    /// <summary>Строка «заголовок + пояснение» слева и произвольный контрол справа.</summary>
-    private static Panel Row(string title, string hint, Control right, int rightWidth, int height)
+    /// <summary>
+    /// Строка «заголовок + пояснение» слева, контрол справа.
+    /// Обе колонки авторазмерные, поэтому строка растёт под содержимое —
+    /// текст не обрезается ни при каком масштабе.
+    /// </summary>
+    private static TableLayoutPanel Row(string title, string hint, Control right)
     {
-        var row = new Panel
+        var row = new TableLayoutPanel
         {
-            Width = RowWidth,
-            Height = height,
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Color.Transparent,
             Margin = new Padding(0),
         };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var lblTitle = new Label
+        var text = Stack();
+        text.Anchor = AnchorStyles.Left;
+        AddAutoRow(text, new Label
         {
             Text = title,
             Font = Theme.BodyStrong,
             ForeColor = Theme.Text,
             AutoSize = true,
-            Location = new Point(0, 0),
+            Margin = new Padding(0, 0, 0, 2),
             BackColor = Color.Transparent,
-        };
-        var lblHint = new Label
+        });
+        AddAutoRow(text, new Label
         {
             Text = hint,
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
-            MaximumSize = new Size(RowWidth - rightWidth - Theme.S3, 0),
-            Location = new Point(0, 18),
+            Margin = new Padding(0),
             BackColor = Color.Transparent,
-        };
+        });
 
-        right.Width = rightWidth;
-        right.Location = new Point(RowWidth - rightWidth, 0);
-        right.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        right.Anchor = AnchorStyles.Right;
+        right.Margin = new Padding(Theme.S3, 0, 0, 0);
 
-        row.Controls.Add(lblTitle);
-        row.Controls.Add(lblHint);
-        row.Controls.Add(right);
+        row.Controls.Add(text, 0, 0);
+        row.Controls.Add(right, 1, 0);
         return row;
     }
 
-    private static Panel CheckRow(CheckBox box, string title, string hint)
+    private static Control CheckRow(CheckBox box, string title, string hint)
     {
         box.Text = string.Empty;
         box.AutoSize = false;
         box.Size = new Size(20, 20);
         box.BackColor = Color.Transparent;
         box.Cursor = Cursors.Hand;
-        return Row(title, hint, box, 20, 40);
+        return Row(title, hint, box);
     }
 
-    private Panel HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
+    private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
     {
-        var right = new Panel { Height = 34, BackColor = Color.Transparent };
+        display.Size = new Size(150, 30);
+        display.Margin = new Padding(0, 0, Theme.S2, 0);
 
-        display.Size = new Size(148, 30);
-        display.Location = new Point(0, 2);
-
-        var btn = new FlatButton { Text = "Изменить", Size = new Size(88, 30), Location = new Point(152, 2) };
+        var btn = new FlatButton { Text = "Изменить", Size = new Size(92, 30), Margin = new Padding(0) };
         btn.Click += (_, _) => record();
 
-        right.Controls.Add(display);
-        right.Controls.Add(btn);
-        return Row(title, hint, right, 240, 52);
+        var group = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
+        group.Controls.Add(display);
+        group.Controls.Add(btn);
+
+        return Row(title, hint, group);
     }
 
-    private static Panel NumberRow(NumericUpDown nud, string title, string unit, string hint)
+    private static Control NumberRow(NumericUpDown nud, string title, string unit, string hint)
     {
-        var right = new Panel { Height = 30, BackColor = Color.Transparent };
-
         nud.Size = new Size(64, 26);
-        nud.Location = new Point(0, 2);
         nud.Font = Theme.Body;
         nud.BorderStyle = BorderStyle.FixedSingle;
         nud.TextAlign = HorizontalAlignment.Center;
+        nud.Margin = new Padding(0, 2, Theme.S2, 0);
 
-        var lblUnit = new Label
+        var group = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
+        group.Controls.Add(nud);
+        group.Controls.Add(new Label
         {
             Text = unit,
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
-            Location = new Point(70, 8),
+            Margin = new Padding(0, 8, 0, 0),
             BackColor = Color.Transparent,
-        };
+        });
 
-        right.Controls.Add(nud);
-        right.Controls.Add(lblUnit);
-        return Row(title, hint, right, 104, 52);
+        return Row(title, hint, group);
     }
 
     // ------------------------------------------------------------------ data
@@ -386,29 +401,47 @@ public sealed class HotkeyRecordDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(380, 168);
         BackColor = Theme.Canvas;
+        Font = Theme.Body;
         KeyPreview = true;
 
         var card = new Card
         {
-            Location = new Point(Theme.S4, Theme.S4),
-            Size = new Size(380 - Theme.S4 * 2, 72),
+            Width = 340,
+            Height = 66,
+            Margin = new Padding(0, 0, 0, Theme.S3),
         };
-        _preview.Size = new Size(card.Width - Theme.S3 * 2, 34);
-        _preview.Location = new Point(Theme.S3, 19);
+        _preview.Size = new Size(340 - Theme.S3 * 2, 34);
+        _preview.Location = new Point(Theme.S3, 16);
         _preview.SetCombo(string.Empty);
         card.Controls.Add(_preview);
 
-        _hint.Text = "Нажмите сочетание и отпустите клавиши.\nAlt+Shift занят системой — выберите другое.";
+        _hint.Text = "Нажмите сочетание и отпустите клавиши.";
         _hint.Font = Theme.Caption;
         _hint.ForeColor = Theme.TextMuted;
         _hint.AutoSize = true;
+        _hint.MaximumSize = new Size(340, 0);
+        _hint.Margin = new Padding(0);
         _hint.BackColor = Color.Transparent;
-        _hint.Location = new Point(Theme.S4, Theme.S4 + 72 + Theme.S3);
 
-        Controls.Add(card);
-        Controls.Add(_hint);
+        var root = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Theme.Canvas,
+            Padding = new Padding(Theme.S4),
+        };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.Controls.Add(card, 0, 0);
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.Controls.Add(_hint, 0, 1);
+        root.RowCount = 2;
+
+        Controls.Add(root);
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
         KeyDown += OnKeyDown;
         KeyUp += OnKeyUp;
@@ -450,7 +483,7 @@ public sealed class HotkeyRecordDialog : Form
         // Alt+Shift — системный шорткат смены раскладки Windows: до нас он не дойдёт.
         if (_alt && _shift && !_ctrl && !_win)
         {
-            _hint.Text = "Alt+Shift занят Windows (смена раскладки).\nВыберите другое сочетание.";
+            _hint.Text = "Alt+Shift занят Windows (смена раскладки). Выберите другое.";
             _hint.ForeColor = Theme.AccentPressed;
             _ctrl = _shift = _alt = _win = false;
             _key = 0;
