@@ -20,6 +20,14 @@ public sealed class App : IDisposable
 {
     public AppSettings Settings { get; }
 
+    /// <summary>
+    /// Пока открыто окно настроек, хоткеи не работают.
+    /// Без этого диалог записи невозможно использовать: нажатие текущего хоткея
+    /// перехватывалось бы хуком, тот запускал бы чтение выделения, а оно шлёт
+    /// Ctrl+C — и диалог записывал бы именно Ctrl+C вместо нажатого сочетания.
+    /// </summary>
+    public bool HotkeysSuspended { get; set; }
+
     private readonly TypingBuffer _buffer = new();
     private readonly ScopeEditor _scope = new();
     private readonly LayoutTracker _layoutTracker = new();
@@ -64,7 +72,7 @@ public sealed class App : IDisposable
 
     private void OnKeyDown(object? sender, KeyboardHook.KeyEvent e)
     {
-        if (!Settings.Enabled) return;
+        if (!Settings.Enabled || HotkeysSuspended) return;
 
         // Пользователь сам сменил раскладку (Alt+Shift, Win+Space) — дальнейшие
         // нажатия дают другие буквы, наша лента больше не соответствует экрану.
