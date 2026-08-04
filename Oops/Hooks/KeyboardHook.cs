@@ -67,6 +67,14 @@ public sealed class KeyboardHook : IDisposable
     private LowLevelKeyboardProc? _proc;
     private IntPtr _hook = IntPtr.Zero;
 
+    /// <summary>
+    /// Физически зажатые сейчас клавиши. Нужны, чтобы отличить автоповтор от
+    /// нового нажатия: Windows шлёт поток WM_KEYDOWN, пока клавишу держат, и
+    /// modifier-only хоткей (Ctrl+Win) иначе срабатывал бы десятки раз за одно
+    /// удержание.
+    /// </summary>
+    private readonly HashSet<uint> _physicallyDown = new();
+
     public event EventHandler<KeyEvent>? KeyDown;
 
     public sealed class KeyEvent
@@ -75,6 +83,8 @@ public sealed class KeyboardHook : IDisposable
         public uint ScanCode { get; init; }
         public char? TypedChar { get; init; }
         public bool Handled { get; set; }
+        /// <summary>Событие пришло от автоповтора удерживаемой клавиши.</summary>
+        public bool IsRepeat { get; init; }
         public bool Ctrl { get; init; }
         public bool Alt { get; init; }
         public bool Shift { get; init; }
@@ -105,16 +115,29 @@ public sealed class KeyboardHook : IDisposable
     {
         if (nCode < 0) return CallNextHookEx(_hook, nCode, wParam, lParam);
 
+        const uint LLKHF_INJECTED = 0x10;
         int msg = wParam.ToInt32();
+
+        // Отпускания нужны только чтобы вести список зажатых клавиш.
+        if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
+        {
+            var up = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            if ((up.flags & LLKHF_INJECTED) == 0)
+                _physicallyDown.Remove(up.vkCode);
+            return CallNextHookEx(_hook, nCode, wParam, lParam);
+        }
+
         if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
         {
             var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
 
             // Игнорируем события, которые мы сами инжектируем через SendInput —
             // иначе наши Backspace'ы попадут обратно в логику буфера.
-            const uint LLKHF_INJECTED = 0x10;
             if ((data.flags & LLKHF_INJECTED) != 0)
                 return CallNextHookEx(_hook, nCode, wParam, lParam);
+
+            // Если клавиша уже была зажата — это автоповтор, а не новое нажатие.
+            bool isRepeat = !_physicallyDown.Add(data.vkCode);
 
             var vk = (Keys)data.vkCode;
 
@@ -141,6 +164,7 @@ public sealed class KeyboardHook : IDisposable
                 VirtualKey = vk,
                 ScanCode = data.scanCode,
                 TypedChar = typed,
+                IsRepeat = isRepeat,
                 Ctrl = ctrl, Alt = alt, Shift = shift, Win = win,
             };
 

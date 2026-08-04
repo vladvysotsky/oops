@@ -81,6 +81,9 @@ public sealed class App : IDisposable
         if (Settings.ConvertHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
             e.Handled = true;
+            // Автоповтор удерживаемой клавиши — не новое нажатие. Без этой проверки
+            // одно удержание Ctrl+Win даёт десятки шагов подряд.
+            if (e.IsRepeat) return;
             // Пока Alt ещё зажат — гасим активацию строки меню, иначе уедет фокус.
             Sender.CancelAltMenuActivation();
             _uiContext.Post(_ => RunStep(layout: true, pressedAtUtc), null);
@@ -90,6 +93,7 @@ public sealed class App : IDisposable
         if (Settings.ChangeCaseHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
         {
             e.Handled = true;
+            if (e.IsRepeat) return;
             Sender.CancelAltMenuActivation();
             _uiContext.Post(_ => RunStep(layout: false, pressedAtUtc), null);
             return;
