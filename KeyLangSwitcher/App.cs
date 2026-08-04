@@ -121,6 +121,54 @@ public sealed class App : IDisposable
 
     private void RunStep(bool layout)
     {
+        // Ждём, пока пользователь отпустит модификаторы хоткея: иначе зажатый Ctrl
+        // превратит наши Backspace в Ctrl+Backspace (удаление слова целиком),
+        // а Ctrl+C для чтения выделения уйдёт как Ctrl+Alt+C и не сработает.
+        Sender.WaitForModifiersReleased();
+        Sender.ReleaseHotkeyModifiers();
+
+        // Если лента не пуста — пользователь только что печатал, работаем по ней.
+        // Выделение пробуем только когда лента пуста, и это не компромисс, а
+        // следствие: выделить текст можно либо мышью, либо Shift+стрелками, а оба
+        // действия ленту очищают. То есть «есть выделение» ⇒ «лента пуста».
+        //
+        // Порядок важен ещё и потому, что в новом Notepad (UWP) Ctrl+C без выделения
+        // копирует всю текущую строку — проба выделения при непустой ленте
+        // приняла бы эту строку за выделение и переписала бы её целиком.
+        if (_buffer.Length > 0) ConvertBufferScope(layout);
+        else TryConvertSelection(layout);
+    }
+
+    /// <summary>
+    /// Если в активном окне есть выделение — преобразует его целиком и печатает
+    /// поверх (выделение ещё активно, ввод его перетирает). Возвращает false,
+    /// если выделения нет и нужно работать с набранным буфером.
+    /// </summary>
+    private bool TryConvertSelection(bool layout)
+    {
+        var selection = SelectionReader.TryRead();
+        if (string.IsNullOrEmpty(selection)) return false;
+
+        string converted;
+        var dir = LayoutConverter.Direction.None;
+        if (layout) (converted, dir) = LayoutConverter.AutoConvertWithDirection(selection);
+        else converted = ScopeEditor.ToggleCase(selection);
+
+        if (converted != selection)
+        {
+            Sender.SendUnicode(converted);
+            if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
+            else if (dir == LayoutConverter.Direction.ToEn) LayoutSwitcher.SwitchToEnglish();
+        }
+
+        // Мы переписали не то, что вели в ленте — она больше не отражает экран.
+        ResetAll();
+        return true;
+    }
+
+    /// <summary>Шаг расширяющейся области по набранному тексту.</summary>
+    private void ConvertBufferScope(bool layout)
+    {
         var text = _buffer.Snapshot();
         if (text.Length == 0) return;
 
@@ -129,11 +177,6 @@ public sealed class App : IDisposable
             : _scope.NextCaseStep(text, DateTime.UtcNow);
 
         if (edit.IsEmpty) return;
-
-        // Ждём, пока пользователь отпустит модификаторы хоткея: иначе зажатый Ctrl
-        // превратит наши Backspace в Ctrl+Backspace (удаление слова целиком).
-        Sender.WaitForModifiersReleased();
-        Sender.ReleaseHotkeyModifiers();
 
         Sender.SendBackspaces(edit.EraseCount);
         Sender.SendUnicode(edit.Text);
