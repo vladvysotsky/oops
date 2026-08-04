@@ -153,10 +153,18 @@ public static class Sender
         }
     }
 
-    /// <summary>Отправляет строку как последовательность KEYEVENTF_UNICODE — работает в любой раскладке.</summary>
+    /// <summary>
+    /// Отправляет строку как последовательность KEYEVENTF_UNICODE — работает в любой раскладке.
+    ///
+    /// Переводы строк нормализуются к одиночному CR: KEYEVENTF_UNICODE порождает
+    /// WM_CHAR, а стандартные поля ввода трактуют как перенос именно 0x0D. Пара
+    /// "\r\n" дала бы два переноса вместо одного.
+    /// </summary>
     public static void SendUnicode(string text)
     {
         if (string.IsNullOrEmpty(text)) return;
+        text = text.Replace("\r\n", "\r").Replace('\n', '\r');
+
         int sz = Marshal.SizeOf<INPUT>();
         var pair = new INPUT[2];
         foreach (var ch in text)

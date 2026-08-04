@@ -88,6 +88,21 @@ public sealed class App : IDisposable
             return;
         }
 
+        // Любое сочетание с Ctrl или Alt — это команда приложению (Ctrl+A, Ctrl+Z,
+        // Ctrl+V, Ctrl+X…), она может изменить текст как угодно, и наша лента
+        // перестаёт отражать экран. Особенно важен Ctrl+A: без сброса лента
+        // осталась бы непустой, мы пошли бы в режим области, и первый же Backspace
+        // удалил бы всё выделение целиком, а следом напечаталось бы одно слово.
+        //
+        // Сами модификаторы при этом не сбрасывают: наши хоткеи modifier-only
+        // (Ctrl+Win, Alt+Win) срабатывают именно на нажатие модификатора, и сброс
+        // по голому Ctrl убил бы их до того, как нажат Win.
+        if ((e.Ctrl || e.Alt) && !IsModifierKey(e.VirtualKey))
+        {
+            ResetAll();
+            return;
+        }
+
         switch (e.VirtualKey)
         {
             case Keys.Back:
@@ -118,6 +133,12 @@ public sealed class App : IDisposable
             _scope.ResetSession(); // новый ввод прерывает расширение области
         }
     }
+
+    private static bool IsModifierKey(Keys k) =>
+        k is Keys.ControlKey or Keys.LControlKey or Keys.RControlKey
+          or Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey
+          or Keys.Menu or Keys.LMenu or Keys.RMenu
+          or Keys.LWin or Keys.RWin;
 
     private void RunStep(bool layout)
     {

@@ -53,7 +53,17 @@ public sealed class SettingsForm : Form
     // ---------------------------------------------------------------- layout
 
     /// <summary>Ширина колонки контента (карточки, заголовки). Масштабируется системой по DPI.</summary>
-    private const int ContentWidth = 480;
+    private const int ContentWidth = 520;
+
+    /// <summary>Ширина внутренностей карточки (за вычетом её padding).</summary>
+    private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
+
+    // Сколько места резервирует правый контрол в строке. Нужно, чтобы ограничить
+    // ширину подписей: без ограничения AutoSize-лейбл требует свою полную ширину
+    // и выдавливает правую колонку за границу карточки.
+    private const int ReservedCheck = 24;
+    private const int ReservedHotkey = 250;   // клавиши 150 + отступ 8 + кнопка 92
+    private const int ReservedNumber = 104;   // поле 64 + отступ 8 + подпись
 
     private void BuildLayout()
     {
@@ -227,11 +237,15 @@ public sealed class SettingsForm : Form
 
     /// <summary>
     /// Строка «заголовок + пояснение» слева, контрол справа.
-    /// Обе колонки авторазмерные, поэтому строка растёт под содержимое —
-    /// текст не обрезается ни при каком масштабе.
+    /// <paramref name="reservedRight"/> — сколько места занимает правый контрол;
+    /// на эту величину сужается допустимая ширина подписей. Без такого лимита
+    /// AutoSize-лейбл требует свою полную ширину и выталкивает контрол за границу
+    /// карточки (текст не переносится, а строка становится шире карточки).
     /// </summary>
-    private static TableLayoutPanel Row(string title, string hint, Control right)
+    private static TableLayoutPanel Row(string title, string hint, Control right, int reservedRight)
     {
+        int textWidth = CardInnerWidth - reservedRight - Theme.S3;
+
         var row = new TableLayoutPanel
         {
             ColumnCount = 2,
@@ -240,9 +254,10 @@ public sealed class SettingsForm : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Color.Transparent,
             Margin = new Padding(0),
+            Width = CardInnerWidth,
         };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, textWidth + Theme.S3));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, reservedRight));
         row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var text = Stack();
@@ -253,6 +268,7 @@ public sealed class SettingsForm : Form
             Font = Theme.BodyStrong,
             ForeColor = Theme.Text,
             AutoSize = true,
+            MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0, 0, 0, 2),
             BackColor = Color.Transparent,
         });
@@ -262,12 +278,13 @@ public sealed class SettingsForm : Form
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
+            MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0),
             BackColor = Color.Transparent,
         });
 
         right.Anchor = AnchorStyles.Right;
-        right.Margin = new Padding(Theme.S3, 0, 0, 0);
+        right.Margin = new Padding(0);
 
         row.Controls.Add(text, 0, 0);
         row.Controls.Add(right, 1, 0);
@@ -281,7 +298,7 @@ public sealed class SettingsForm : Form
         box.Size = new Size(20, 20);
         box.BackColor = Color.Transparent;
         box.Cursor = Cursors.Hand;
-        return Row(title, hint, box);
+        return Row(title, hint, box, ReservedCheck);
     }
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
@@ -304,7 +321,7 @@ public sealed class SettingsForm : Form
         group.Controls.Add(display);
         group.Controls.Add(btn);
 
-        return Row(title, hint, group);
+        return Row(title, hint, group, ReservedHotkey);
     }
 
     private static Control NumberRow(NumericUpDown nud, string title, string unit, string hint)
@@ -335,7 +352,7 @@ public sealed class SettingsForm : Form
             BackColor = Color.Transparent,
         });
 
-        return Row(title, hint, group);
+        return Row(title, hint, group, ReservedNumber);
     }
 
     // ------------------------------------------------------------------ data
