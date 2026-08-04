@@ -93,7 +93,7 @@ dotnet test
 pwsh -ExecutionPolicy Bypass -File installer\build.ps1
 ```
 
-Готовый `oops-Setup-0.1.0.exe` появится в `dist\`.
+Готовый `oops-Setup-1.0.0.exe` появится в `dist\`.
 
 ## Ограничения
 
