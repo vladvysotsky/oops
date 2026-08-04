@@ -19,6 +19,15 @@ $Project  = Join-Path $RepoRoot "Oops\Oops.csproj"
 $IssFile  = Join-Path $PSScriptRoot "Oops.iss"
 $DistDir  = Join-Path $RepoRoot "dist"
 
+# Запущенная копия держит oops.exe открытым, и publish падает с MSB3027
+# («Could not copy … Exceeded retry count of 10»). Закрываем её заранее.
+$running = Get-Process -Name "oops" -ErrorAction SilentlyContinue
+if ($running) {
+    Write-Host "Закрываю запущенный oops (PID $($running.Id -join ', '))..." -ForegroundColor Yellow
+    $running | Stop-Process -Force
+    Start-Sleep -Milliseconds 500
+}
+
 Write-Host "[1/2] dotnet publish..." -ForegroundColor Cyan
 dotnet publish $Project `
     -c Release `
