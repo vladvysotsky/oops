@@ -137,19 +137,37 @@ public static class Sender
         }
     }
 
+    /// <summary>
+    /// Стирает <paramref name="count"/> символов слева от каретки.
+    ///
+    /// Перед КАЖДЫМ Backspace в той же посылке снимаются модификаторы. Это не
+    /// перестраховка: если пользователь всё ещё физически держит хоткей, Windows
+    /// продолжает автоповтором подтверждать нажатие модификатора, и Backspace
+    /// уходит как Win+Backspace (в большинстве приложений — вообще ничего) или
+    /// Ctrl+Backspace (удаление слова целиком). Одноразовой очистки перед циклом
+    /// не хватает — зажатая клавиша возвращает состояние обратно.
+    /// </summary>
     public static void SendBackspaces(int count)
     {
         if (count <= 0) return;
-        // Шлём по одному, с микро-задержкой между нажатиями.
-        // Electron/браузерные текстарии теряют события из больших batched SendInput-ов.
-        var pair = new INPUT[2];
-        pair[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK } } };
-        pair[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } } };
+
+        // Шлём по одному, с микро-задержкой: Electron и браузерные текстарии
+        // теряют события из больших batched SendInput-ов.
+        var batch = new INPUT[]
+        {
+            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
+            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_SHIFT,   dwFlags = KEYEVENTF_KEYUP } } },
+            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU,    dwFlags = KEYEVENTF_KEYUP } } },
+            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN,    dwFlags = KEYEVENTF_KEYUP } } },
+            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN,    dwFlags = KEYEVENTF_KEYUP } } },
+            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK } } },
+            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } } },
+        };
         int sz = Marshal.SizeOf<INPUT>();
         for (int i = 0; i < count; i++)
         {
-            SendInput(2, pair, sz);
-            System.Threading.Thread.Sleep(50);
+            SendInput((uint)batch.Length, batch, sz);
+            System.Threading.Thread.Sleep(15);
         }
     }
 

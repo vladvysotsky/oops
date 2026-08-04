@@ -1,13 +1,16 @@
 namespace Oops.Core;
 
 /// <summary>
-/// Модель «расширяющейся области» (принцип keyboop / Punto).
+/// Модель «расширяющейся области».
 ///
 /// Программа НЕ угадывает, где началась неправильная раскладка. Границу задаёт
 /// пользователь повторными нажатиями хоткея:
 ///   1-е нажатие — последнее слово,
-///   2-е        — два последних,
-///   3-е        — три, и так далее до всего набранного.
+///   2-е        — весь набранный текст.
+///
+/// Два шага, а не рост по одному слову: на фразе из пяти слов пословное
+/// расширение потребовало бы пяти нажатий, и до конца никто не дожимал.
+/// Практически всегда портится либо последнее слово, либо всё сразу.
 ///
 /// Каждый шаг — тупое преобразование 1-в-1 чётко очерченного куска. Никаких
 /// словарей, никаких догадок. Корректный текст вне области не трогается.
@@ -26,7 +29,7 @@ public sealed class ScopeEditor
     private readonly object _gate = new();
     private string _original = string.Empty;
     private DateTime _lastPressUtc = DateTime.MinValue;
-    private int _wordsInScope;
+    private int _step;              // 0 — сессии нет, 1 — последнее слово, 2 — всё
     private Kind _kind = Kind.None;
 
     private enum Kind { None, Layout, Case }
@@ -56,7 +59,7 @@ public sealed class ScopeEditor
         lock (_gate)
         {
             _kind = Kind.None;
-            _wordsInScope = 0;
+            _step = 0;
             _original = string.Empty;
         }
     }
@@ -70,29 +73,37 @@ public sealed class ScopeEditor
     {
         bool continuing =
             _kind == kind &&
-            _wordsInScope > 0 &&
+            _step > 0 &&
             nowUtc - _lastPressUtc <= ExpandWindow;
 
         if (!continuing)
         {
             // Новая сессия: замораживаем то, что сейчас в буфере, как эталон.
             _original = currentBuffer;
-            _wordsInScope = 0;
+            _step = 0;
             _kind = kind;
         }
         _lastPressUtc = nowUtc;
 
         if (string.IsNullOrEmpty(_original)) { ResetSession(); return Edit.None; }
+        if (TypingBuffer.CountWords(_original) == 0) { ResetSession(); return Edit.None; }
 
-        int totalWords = TypingBuffer.CountWords(_original);
-        if (totalWords == 0) { ResetSession(); return Edit.None; }
+        int nextStep = _step + 1;
+        if (nextStep > 2) return Edit.None;   // дальше расширять некуда
 
-        // Расширяемся, но не дальше всего буфера.
-        int nextWords = Math.Min(_wordsInScope + 1, totalWords);
-        if (nextWords == _wordsInScope) return Edit.None; // уже захвачено всё
-        _wordsInScope = nextWords;
+        // Шаг 1 — последнее слово, шаг 2 — весь набранный текст.
+        int scopeStart = nextStep == 1
+            ? TypingBuffer.StartOfLastWords(_original, 1)
+            : 0;
 
-        int scopeStart = TypingBuffer.StartOfLastWords(_original, _wordsInScope);
+        // Однословный буфер: второй шаг захватил бы ровно то же самое.
+        if (nextStep == 2 && scopeStart == TypingBuffer.StartOfLastWords(_original, 1))
+        {
+            _step = 2;
+            return Edit.None;
+        }
+        _step = nextStep;
+
         var scope = _original.Substring(scopeStart);
 
         string converted;

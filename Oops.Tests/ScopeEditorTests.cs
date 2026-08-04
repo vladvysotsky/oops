@@ -21,35 +21,34 @@ public class ScopeEditorTests
     }
 
     [Fact]
-    public void SecondPress_ExpandsToTwoWords()
+    public void SecondPress_CoversWholeBuffer()
     {
         var s = new ScopeEditor();
-        const string typed = "ghbdtn rfr ltkf";
+        const string typed = "ghjdthrf njuj rfr 'nj hf,jnftn";
 
         var first = s.NextLayoutStep(typed, T0);
-        Assert.Equal("дела", first.Text);
+        Assert.Equal("работает", first.Text);
+        Assert.Equal("hf,jnftn".Length, first.EraseCount);
 
-        // Второе нажатие в пределах окна — область расширяется на слово влево.
+        // Второе нажатие в пределах окна — сразу весь набранный текст.
         var second = s.NextLayoutStep(first.NewBufferContent, T0.AddMilliseconds(400));
-        Assert.Equal("как дела", second.Text);
-        // Стираем ровно то, что сейчас на экране от начала области до каретки.
-        Assert.Equal("rfr ltkf".Length, second.EraseCount);
-        Assert.Equal("ghbdtn как дела", second.NewBufferContent);
+        Assert.Equal("проверка того как это работает", second.Text);
+        Assert.Equal(typed.Length, second.EraseCount);
+        Assert.Equal("проверка того как это работает", second.NewBufferContent);
     }
 
     [Fact]
-    public void ThirdPress_CoversWholeBuffer()
+    public void ThirdPress_DoesNothing_ScopeAlreadyCoversEverything()
     {
         var s = new ScopeEditor();
         const string typed = "ghbdtn rfr ltkf";
 
         var a = s.NextLayoutStep(typed, T0);
         var b = s.NextLayoutStep(a.NewBufferContent, T0.AddMilliseconds(300));
-        var c = s.NextLayoutStep(b.NewBufferContent, T0.AddMilliseconds(600));
+        Assert.Equal("привет как дела", b.Text);
 
-        Assert.Equal("привет как дела", c.Text);
-        Assert.Equal(typed.Length, c.EraseCount);
-        Assert.Equal("привет как дела", c.NewBufferContent);
+        var c = s.NextLayoutStep(b.NewBufferContent, T0.AddMilliseconds(600));
+        Assert.True(c.IsEmpty);
     }
 
     [Fact]
@@ -73,7 +72,7 @@ public class ScopeEditorTests
         Assert.Equal("мама", a.Text);
 
         var b = s.NextLayoutStep(a.NewBufferContent, T0.AddMilliseconds(200));
-        Assert.True(b.IsEmpty); // слово было одно — расширять некуда
+        Assert.True(b.IsEmpty); // слово было одно — второй шаг захватил бы то же самое
     }
 
     [Fact]
@@ -83,8 +82,8 @@ public class ScopeEditorTests
         var a = s.NextCaseStep("привет мир", T0);
         Assert.Equal("МИР", a.Text);
 
-        // Расширение пересчитывается от замороженного оригинала ("привет мир"),
-        // а не от того, что уже на экране — поэтому снова подъём в верхний.
+        // Второй шаг берёт весь текст, пересчитывая от замороженного оригинала
+        // ("привет мир"), а не от того, что уже на экране.
         var b = s.NextCaseStep(a.NewBufferContent, T0.AddMilliseconds(300));
         Assert.Equal("ПРИВЕТ МИР", b.Text);
         Assert.Equal("привет мир".Length, b.EraseCount);
@@ -107,21 +106,15 @@ public class ScopeEditorTests
     {
         // Регрессия: момент нажатия должен фиксироваться в обработчике клавиши,
         // а не после ожидания модификаторов и посимвольной печати. Иначе на
-        // длинных словах наша собственная задержка съедает окно расширения и
-        // область перестаёт расти.
+        // длинных словах наша собственная задержка съедает окно расширения.
         var s = new ScopeEditor { ExpandWindow = TimeSpan.FromSeconds(2) };
         const string typed = "ghbdtn rfr ltkf";
 
         var a = s.NextLayoutStep(typed, T0);
         Assert.Equal("дела", a.Text);
 
-        // Нажатия идут с интервалом 700 мс — пользователь укладывается в окно,
-        // даже если обработка каждого шага заняла заметное время.
-        var b = s.NextLayoutStep(a.NewBufferContent, T0.AddMilliseconds(700));
-        Assert.Equal("как дела", b.Text);
-
-        var c = s.NextLayoutStep(b.NewBufferContent, T0.AddMilliseconds(1400));
-        Assert.Equal("привет как дела", c.Text);
+        var b = s.NextLayoutStep(a.NewBufferContent, T0.AddMilliseconds(1500));
+        Assert.Equal("привет как дела", b.Text);
     }
 
     [Fact]
