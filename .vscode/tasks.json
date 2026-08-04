@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/KeyLangSwitcher/KeyLangSwitcher.csproj",
+                "${workspaceFolder}/Oops/Oops.csproj",
                 "-c", "Debug",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
@@ -21,7 +21,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/KeyLangSwitcher/KeyLangSwitcher.csproj",
+                "${workspaceFolder}/Oops/Oops.csproj",
                 "-c", "Release",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
@@ -35,7 +35,7 @@
             "type": "process",
             "args": [
                 "publish",
-                "${workspaceFolder}/KeyLangSwitcher/KeyLangSwitcher.csproj",
+                "${workspaceFolder}/Oops/Oops.csproj",
                 "-c", "Release",
                 "-r", "win-x64",
                 "--self-contained", "true",
@@ -52,7 +52,7 @@
             "type": "process",
             "args": [
                 "clean",
-                "${workspaceFolder}/KeyLangSwitcher/KeyLangSwitcher.csproj"
+                "${workspaceFolder}/Oops/Oops.csproj"
             ],
             "problemMatcher": "$msCompile"
         },
