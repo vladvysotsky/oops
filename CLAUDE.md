@@ -1,104 +1,111 @@
 # CLAUDE.md — KeyLangSwitcher
 
-Аналог PuntoSwitcher для Windows. Конвертирует набранный/выделенный текст между
-раскладками RU↔EN по горячей клавише, работает глобально во всех приложениях.
+Утилита для Windows: правит раскладку (RU↔EN) и регистр только что набранного
+текста по горячей клавише. Работает глобально во всех приложениях.
 
 ## Стек / сборка
 
 - **C# .NET 8 + WinForms** (`net8.0-windows`, `WinExe`, `UseWindowsForms=true`).
-- **Только Windows** — WinForms + Win32 P/Invoke. На Linux НЕ собирается и НЕ
-  тестируется (нет `Microsoft.NET.Sdk.WindowsDesktop`). Все проверки — на Windows.
-- Собрать/запустить (Windows, PowerShell 7 или cmd):
+- **Только Windows.** На Linux не собирается (нет `Microsoft.NET.Sdk.WindowsDesktop`)
+  — не пытаться, `dotnet build`/`dotnet test` там падают. Проверять на Windows.
+- Сборка и запуск (PowerShell 7 / cmd):
   ```
   dotnet build -c Release
   dotnet run --project KeyLangSwitcher
-  dotnet test                     # xunit, только на Windows
+  dotnet test
   ```
 - Single-file exe:
   ```
   dotnet publish KeyLangSwitcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
   ```
-  Результат: `KeyLangSwitcher\bin\Release\net8.0-windows\win-x64\publish\KeyLangSwitcher.exe`.
-- Инсталлятор: `installer\build.ps1` (нужен Inno Setup 6). Скрипт использует
-  оператор `?.` — требует **PowerShell 7**, не 5.1.
-- Манифест — **asInvoker** (без UAC). ВАЖНО: `requireAdministrator` ломает
-  автозапуск через `HKCU\...\Run` (Windows молча игнорирует elevated-записи на
-  старте). Не возвращать requireAdministrator.
+- Инсталлятор: `installer\build.ps1` (нужен Inno Setup 6). Скрипт использует `?.`
+  — требует **PowerShell 7**, не 5.1.
+- Манифест — **asInvoker**. НЕ ставить `requireAdministrator`: Windows молча
+  игнорирует записи `HKCU\...\Run` для elevated-приложений, и автозапуск ломается.
 
-## Git / рабочий процесс
+## Git
 
-- Ветка разработки: `claude/amazing-bardeen-ZvoqL`. Пушить только в неё.
-- PR #1 уже создан и **замержен**; новые коммиты в ветку обновляют историю.
-- Пользователь собирает и тестирует сам на своей Windows-машине. После каждого
-  изменения он делает `git pull` + `dotnet clean` + `dotnet publish`. Если баг
-  «не воспроизводится» — первым делом проверить, что у него собран последний
-  коммит (`git log --oneline -1`).
+- Ветка разработки: `claude/amazing-bardeen-ZvoqL`. PR #1 замержен.
+- Пользователь собирает и тестирует сам на Windows. Если баг «не воспроизводится» —
+  первым делом проверить, что у него собран последний коммит (`git log --oneline -1`).
 
-## Архитектура (МАКСИМАЛЬНО ПРОСТАЯ — пользователь требовал упростить)
+## ГЛАВНОЕ: модель «расширяющейся области»
 
-Один процесс с трей-иконкой. Работает **ТОЛЬКО с ВЫДЕЛЕННЫМ текстом**.
-**НЕТ буфера набранного текста, словарей, автокоррекции, пословной логики.**
-НЕ возвращать их — пользователь явно потребовал убрать (постоянно ломались).
+Программа **не угадывает**, где началась неправильная раскладка. Границу задаёт
+пользователь повторными нажатиями хоткея:
 
-- `Program.cs` — точка входа, single-instance mutex, установка UI SyncContext.
-- `App.cs` — **координатор**. Ставит ТОЛЬКО keyboard hook. `OnKeyDown` матчит
-  два хоткея и постит в UI-поток `SelectionConverter.ConvertSelection()` /
-  `ToggleSelectionCase()`. Больше ничего.
-- `Hooks/KeyboardHook.cs` — `WH_KEYBOARD_LL`, нужен ТОЛЬКО для детекции хоткеев.
-  Модификаторы через `GetAsyncKeyState`, игнорирует инжектированные
-  (`LLKHF_INJECTED`). Если нажатая клавиша сама модификатор — флаг ставится
-  сразу (иначе Ctrl+Win не матчился из-за тайминга).
-- `Core/SelectionConverter.cs` — **вся логика**. `ConvertSelection` (раскладка)
-  и `ToggleSelectionCase` (регистр). Обе: ждут отпускания модификаторов →
-  сохраняют clipboard как ТЕКСТ → Ctrl+C (проба 120мс) → преобразуют →
-  **`SendUnicode` печатает результат, заменяя выделение (НИКАКОГО Ctrl+V!)** →
-  (для раскладки) переключают системную раскладку → восстанавливают clipboard.
-  Конвертированный текст НИКОГДА не кладётся в clipboard → история Win+V чистая.
+- 1-е нажатие — последнее слово,
+- 2-е (в пределах окна расширения) — два последних,
+- 3-е — три, и так далее до всего набранного.
+
+Каждый шаг — преобразование **1-в-1** чётко очерченного куска. Корректный текст
+вне области не трогается никогда.
+
+**Буфер обмена не используется вообще.** Текст переписывается через
+Backspace × N + `SendInput` с `KEYEVENTF_UNICODE`.
+
+### Что НЕ возвращать
+
+Всё это было и вызывало постоянные жалобы — удалено намеренно:
+словари (`WordDictionary`, `words_ru/en.txt`), угадывание раскладки
+(`AutoDetector`), автокоррекция при печати, типографика (`Typography`),
+пословная конверсия (`AutoConvertPerWord`), whole-buffer fallback,
+работа с выделением через Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
+`ClipboardSafe`), `NeverFixList`.
+
+## Архитектура
+
+- `Program.cs` — точка входа, single-instance mutex, UI SyncContext.
+- `App.cs` — координатор. Ставит хуки, ведёт `TypingBuffer`, матчит два хоткея,
+  дёргает `ScopeEditor` и применяет результат через `Sender`.
+- `Core/ScopeEditor.cs` — **сердце модели**. Держит замороженный `_original` и
+  счётчик слов в области; на каждое нажатие расширяет область на слово и отдаёт
+  `Edit(EraseCount, Text, Direction, NewBufferContent)`.
+  Инвариант, на котором всё держится: **преобразования сохраняют длину**, поэтому
+  «сколько символов на экране от начала области до каретки» = `Original.Length - scopeStart`
+  независимо от числа предыдущих перезаписей. Есть явная проверка длины на случай
+  экзотического Unicode. Потокобезопасен (хук и UI-поток).
+- `Core/TypingBuffer.cs` — лента набранных символов + статические
+  `StartOfLastWords` / `CountWords`. Без курсора и навигации — намеренно.
 - `Core/LayoutConverter.cs` — таблица JCUKEN↔QWERTY (`PairsLower`/`PairsUpper`,
-  Shift-символы `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё`` и т.д.). `ToRussian`/
-  `ToEnglish` — 1-в-1. `AutoConvertWithDirection` — считает латиницу vs
-  кириллицу, конвертит ВЕСЬ текст в доминантную сторону.
-- `Core/Sender.cs` — SendInput: `SendUnicode` (по одному символу с задержкой
-  ~25мс — Electron/React теряют batched), `SendCtrlKey` (снимает лишние
-  модификаторы перед Ctrl+C), `SendBackspaces`, `ReleaseHotkeyModifiers`,
-  `SendRightArrow` (последние три не используются, но оставлены).
-- `Core/ClipboardSafe.cs` — SetText с флагами исключения из истории Win+V и
-  cloud clipboard. **copy:true обязателен** (иначе clipboard пустой).
+  Shift-символы `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё``). `ToRussian`/`ToEnglish` —
+  1-в-1; `AutoConvertWithDirection` выбирает сторону по большинству символов.
+- `Core/Sender.cs` — SendInput: `SendBackspaces`, `SendUnicode` (по одному символу
+  с задержкой — Electron/React теряют batched-события), `WaitForModifiersReleased`,
+  `ReleaseHotkeyModifiers`, `CancelAltMenuActivation`.
 - `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` активному окну.
-- `UI/TrayContext.cs` — NotifyIcon + меню. `UI/SettingsForm.cs` — настройки:
-  Включено, автозапуск, два хоткея (layout через per-row FlowLayoutPanel).
-- `Settings/AppSettings.cs` — JSON в `%AppData%\KeyLangSwitcher\settings.json`
-  (Enabled, Autostart, ConvertHotkey, ChangeCaseHotkey).
+- `Core/LayoutTracker.cs` — детект ручной смены раскладки → сброс буфера.
+- `Hooks/KeyboardHook.cs` — `WH_KEYBOARD_LL`. Символ через `ToUnicodeEx` (флаг 0x4
+  «не менять состояние»), модификаторы через `GetAsyncKeyState`, игнорирует свои
+  инжектированные события (`LLKHF_INJECTED`). Если нажатая клавиша сама модификатор —
+  флаг ставится сразу (иначе Ctrl+Win не матчился из-за тайминга).
+- `Hooks/MouseHook.cs`, `Hooks/ForegroundWatcher.cs` — сброс буфера на клике и
+  смене окна.
+- `UI/Theme.cs` — дизайн-система: палитра, типографика, 8px-сетка, `Card`,
+  `FlatButton`, `HotkeyDisplay` (рисует сочетание «клавишами»).
+- `UI/SettingsForm.cs` — окно настроек на этой системе. Разметка — явный
+  `TableLayoutPanel` (контент + футер), НЕ Dock.Fill+Dock.Bottom: порядок докинга
+  в WinForms зависит от z-order и ломается при правках.
+- `UI/TrayContext.cs` — NotifyIcon и меню.
+- `Settings/AppSettings.cs` — JSON в `%AppData%\KeyLangSwitcher\settings.json`.
+  `Sanitize()` чинит настройки из старых файлов (null → дефолт, Alt+Shift → дефолт).
 - `Settings/Autostart.cs` — реестр `HKCU\...\Run`.
-
-## ПОВЕДЕНИЕ — не усложнять
-
-- **Хоткей конвертации**: выделение → Ctrl+C → 1-в-1 смена раскладки (включая
-  пунктуацию: `,`→б и т.д.) → SendUnicode заменяет выделение → переключение
-  системной раскладки.
-- **Хоткей смены регистра**: выделение → Ctrl+C → toggle (есть заглавная → всё
-  lower, иначе всё upper) → SendUnicode заменяет выделение.
-- Нет выделения → **ничего не делаем**.
-
-НЕ добавлять обратно: буфер, словари, автокоррекцию при печати, пословную
-конверсию, Ctrl+V-вставку. Всё это пользователь потребовал убрать.
 
 ## Хоткеи по умолчанию
 
-- Конвертация: **Ctrl+Win** (modifier-only). Настраивается.
-- Смена регистра: **Alt+Win** (modifier-only). Настраивается.
-- **НЕ ставить Alt+Shift** — системный шорткат смены раскладки Windows,
-  перехватывается до нас. `AppSettings.Sanitize()` сбрасывает такие сохранённые
-  комбинации на дефолт.
-- Alt в хоткее: одиночный тап Alt активирует строку меню и уводит фокус →
-  `Sender.CancelAltMenuActivation()` вставляет Ctrl-тап, пока Alt ещё зажат.
+- Раскладка: **Ctrl+Win** (modifier-only).
+- Регистр: **Alt+Win** (modifier-only).
+- **Alt+Shift ставить нельзя** — системный шорткат смены раскладки Windows,
+  до нас в рабочем виде не доходит. Диалог записи это отклоняет, `Sanitize()`
+  сбрасывает такие сохранённые значения.
 
-## Известные грабли
+## Грабли
 
-- LL keyboard hook отключается Windows при отладке (F5) из-за таймаута — тестить
-  через **Ctrl+F5** (без дебаггера) или опубликованный exe.
-- Восстановление clipboard — ТОЛЬКО как текст, отложенно на UI-потоке. Хранение
-  `IDataObject` через задержку → краш combase.dll (0xc000041d).
-- SendInput большими пачками теряется в Electron/React — слать по одному
-  символу с задержкой.
-- Не гонять `dotnet test` на Linux — не соберётся (WinForms SDK).
+- LL keyboard hook отключается Windows при отладке (F5) по таймауту — тестировать
+  через **Ctrl+F5** или опубликованный exe.
+- Одиночный тап Alt активирует строку меню и уводит фокус → перед работой
+  вызывается `Sender.CancelAltMenuActivation()` (Ctrl-тап, пока Alt зажат).
+- Перед Backspace обязательно `WaitForModifiersReleased()`: зажатый Ctrl превратит
+  Backspace в Ctrl+Backspace (удаление слова целиком).
+- SendInput большими пачками теряется в Electron/React — слать по одному символу
+  с задержкой.

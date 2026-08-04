@@ -8,6 +8,12 @@ public sealed class AppSettings
     public bool Enabled { get; set; } = true;
     public bool Autostart { get; set; } = false;
 
+    /// <summary>Сколько секунд бездействия обнуляют набранный буфер.</summary>
+    public int BufferIdleTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Сколько секунд следующее нажатие продолжает расширять ту же область.</summary>
+    public int ExpandWindowSeconds { get; set; } = 2;
+
     public HotkeyConfig ConvertHotkey { get; set; } = HotkeyConfig.Default;
     public HotkeyConfig ChangeCaseHotkey { get; set; } = HotkeyConfig.ChangeCaseDefault;
 
@@ -31,22 +37,23 @@ public sealed class AppSettings
     }
 
     /// <summary>
-    /// Чинит настройки, пришедшие из старых/битых файлов, чтобы хоткей не «молчал»:
+    /// Чинит настройки из старых/битых файлов, чтобы хоткей не «молчал»:
     ///   - null после десериализации (свойства не было в старом файле) → дефолт;
-    ///   - Alt+Shift-комбинации → дефолт: Alt+Shift это системный шорткат смены
-    ///     раскладки Windows, он перехватывается до нас и хоткей не срабатывает.
+    ///   - Alt+Shift → дефолт: это системный шорткат смены раскладки Windows,
+    ///     он перехватывается системой и до нашего хука в рабочем виде не доходит.
     /// </summary>
     private void Sanitize()
     {
         ConvertHotkey = Fix(ConvertHotkey, HotkeyConfig.Default);
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);
+        if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
+        if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;
 
         static HotkeyConfig Fix(HotkeyConfig? h, HotkeyConfig fallback)
         {
             if (h == null) return fallback;
             bool isAltShift = h.Alt && h.Shift && !h.Ctrl && !h.Win;
-            if (isAltShift) return fallback;
-            return h;
+            return isAltShift ? fallback : h;
         }
     }
 
