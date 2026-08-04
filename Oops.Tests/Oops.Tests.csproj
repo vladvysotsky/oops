@@ -3,6 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
+    <!-- Как в основном проекте: без этого в тестах не резолвятся System-типы
+         (DateTime, TimeSpan) без явного using System. -->
+    <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <UseWindowsForms>true</UseWindowsForms>
