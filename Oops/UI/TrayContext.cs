@@ -65,12 +65,20 @@ public sealed class TrayContext : ApplicationContext
         _ = ScheduleStartupUpdateCheckAsync();
     }
 
+    /// <summary>
+    /// Берёт иконку из ресурсов сборки. Именно из сборки, а не из файла рядом с
+    /// exe: при single-file публикации и установке отдельного файла на месте нет,
+    /// и в трее оставалась системная заглушка.
+    /// Размер запрашиваем под текущий DPI, иначе Windows масштабирует не ту грань.
+    /// </summary>
     private static System.Drawing.Icon LoadIcon()
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "Resources", "icon.ico");
-            if (File.Exists(path)) return new System.Drawing.Icon(path);
+            using var stream = typeof(TrayContext).Assembly
+                .GetManifestResourceStream("Oops.Resources.icon.ico");
+            if (stream != null)
+                return new System.Drawing.Icon(stream, SystemInformation.SmallIconSize);
         }
         catch { }
         return System.Drawing.SystemIcons.Application;
@@ -78,12 +86,22 @@ public sealed class TrayContext : ApplicationContext
 
     private void ShowSettings()
     {
-        using var form = new SettingsForm(_app.Settings);
-        if (form.ShowDialog() == DialogResult.OK)
+        // Хоткеи на время настроек выключаем: иначе диалог записи невозможно
+        // использовать — нажатие текущего хоткея перехватил бы хук.
+        _app.HotkeysSuspended = true;
+        try
         {
-            _app.Settings.Save();
-            _app.ApplySettings();
-            Autostart.Set(_app.Settings.Autostart);
+            using var form = new SettingsForm(_app.Settings);
+            if (form.ShowDialog() == DialogResult.OK)
+            {
+                _app.Settings.Save();
+                _app.ApplySettings();
+                Autostart.Set(_app.Settings.Autostart);
+            }
+        }
+        finally
+        {
+            _app.HotkeysSuspended = false;
         }
     }
 
@@ -110,19 +128,28 @@ public sealed class TrayContext : ApplicationContext
         if (!silent) _miUpdate.Enabled = false;
         try
         {
-            var release = await UpdateService.FetchLatestAsync();
+            var check = await UpdateService.FetchLatestAsync();
 
             _app.Settings.LastUpdateCheckUtc = DateTime.UtcNow;
             _app.Settings.Save();
 
-            if (release == null)
+            if (check.Failed)
             {
                 if (!silent)
-                    MessageBox.Show("Не удалось получить сведения о релизах.\nПроверьте подключение к интернету.",
+                    MessageBox.Show("Не удалось связаться с GitHub.\nПроверьте подключение к интернету.",
                         "Обновление", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
+            if (check.NoReleases)
+            {
+                if (!silent)
+                    MessageBox.Show("В репозитории пока нет опубликованных релизов.",
+                        "Обновление", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var release = check.Release!;
             if (!UpdateService.IsNewer(release))
             {
                 if (!silent)

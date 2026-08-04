@@ -16,9 +16,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Update="Resources\icon.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <!-- Иконка вшивается в сборку, а не кладётся файлом рядом: при single-file
+         публикации и установке отдельный файл до места не доезжает, и в трее
+         оставалась системная заглушка. ApplicationIcon выше — это иконка самого
+         exe в проводнике, она берётся из того же файла на этапе сборки. -->
+    <EmbeddedResource Include="Resources\icon.ico" />
   </ItemGroup>
 
 </Project>
