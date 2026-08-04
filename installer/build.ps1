@@ -4,7 +4,7 @@
 #
 # Делает:
 #   1) dotnet publish (Release, win-x64, single-file, self-contained)
-#   2) Запускает Inno Setup 6 для упаковки в KeyLangSwitcher-Setup-<ver>.exe
+#   2) Запускает Inno Setup 6 для упаковки в oops-Setup-<ver>.exe
 #
 # Требует:
 #   - .NET 8 SDK    https://dotnet.microsoft.com/download
@@ -15,8 +15,8 @@ Set-StrictMode -Version Latest
 
 # Корень репозитория = родитель папки installer
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$Project  = Join-Path $RepoRoot "KeyLangSwitcher\KeyLangSwitcher.csproj"
-$IssFile  = Join-Path $PSScriptRoot "KeyLangSwitcher.iss"
+$Project  = Join-Path $RepoRoot "Oops\Oops.csproj"
+$IssFile  = Join-Path $PSScriptRoot "Oops.iss"
 $DistDir  = Join-Path $RepoRoot "dist"
 
 Write-Host "[1/2] dotnet publish..." -ForegroundColor Cyan
@@ -51,5 +51,5 @@ Write-Host "[2/2] Inno Setup compile (iscc.exe)..." -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed" }
 
 Write-Host ""
-Write-Host "OK. Installer: $DistDir\KeyLangSwitcher-Setup-*.exe" -ForegroundColor Green
-Get-ChildItem $DistDir -Filter "KeyLangSwitcher-Setup-*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Write-Host "OK. Installer: $DistDir\oops-Setup-*.exe" -ForegroundColor Green
+Get-ChildItem $DistDir -Filter "oops-Setup-*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1

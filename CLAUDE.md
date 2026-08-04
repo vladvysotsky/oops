@@ -1,4 +1,4 @@
-# CLAUDE.md — KeyLangSwitcher
+# CLAUDE.md — oops
 
 Утилита для Windows: правит раскладку (RU↔EN) и регистр только что набранного
 текста по горячей клавише. Работает глобально во всех приложениях.
@@ -11,12 +11,12 @@
 - Сборка и запуск (PowerShell 7 / cmd):
   ```
   dotnet build -c Release
-  dotnet run --project KeyLangSwitcher
+  dotnet run --project Oops
   dotnet test
   ```
 - Single-file exe:
   ```
-  dotnet publish KeyLangSwitcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+  dotnet publish Oops -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
   ```
 - Инсталлятор: `installer\build.ps1` (нужен Inno Setup 6). Скрипт использует `?.`
   — требует **PowerShell 7**, не 5.1.
@@ -103,7 +103,7 @@
   `TableLayoutPanel` (контент + футер), НЕ Dock.Fill+Dock.Bottom: порядок докинга
   в WinForms зависит от z-order и ломается при правках.
 - `UI/TrayContext.cs` — NotifyIcon и меню.
-- `Settings/AppSettings.cs` — JSON в `%AppData%\KeyLangSwitcher\settings.json`.
+- `Settings/AppSettings.cs` — JSON в `%AppData%\Oops\settings.json`.
   `Sanitize()` чинит настройки из старых файлов (null → дефолт, Alt+Shift → дефолт).
 - `Settings/Autostart.cs` — реестр `HKCU\...\Run`.
 

@@ -1,7 +1,11 @@
-# KeyLangSwitcher
+# oops
+
+> `ghbdtn` → **oops** → `привет`
 
 Утилита для Windows: правит раскладку (RU ↔ EN) и регистр только что набранного
 текста по горячей клавише. Работает глобально во всех приложениях.
+
+Названа по тому самому моменту, когда замечаешь, что писал не в той раскладке.
 
 ## Как это работает
 
@@ -38,7 +42,21 @@
 - Глобальный low-level keyboard hook — Visual Studio, браузер, мессенджеры, терминал.
 - Сброс набранного на Enter / Tab / Esc / навигации / клике мыши / смене окна /
   ручной смене раскладки / по таймауту.
-- Иконка в трее, автозапуск, JSON-настройки в `%AppData%\KeyLangSwitcher\settings.json`.
+- Иконка в трее, автозапуск, JSON-настройки в `%AppData%\Oops\settings.json`.
+
+## Обновления
+
+Приложение раз в сутки проверяет [релизы на GitHub](https://github.com/vladvysotsky/oops/releases)
+и предлагает поставить новую версию — скачивает инсталлятор и запускает его.
+Проверку можно отключить в настройках или запустить вручную из меню в трее.
+
+Релизы собираются автоматически: пуш тега `vX.Y.Z` запускает CI, который
+прогоняет тесты, собирает single-file exe и инсталлятор и публикует их.
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ## Сборка
 
@@ -46,13 +64,13 @@
 
 ```powershell
 dotnet build -c Release
-dotnet run --project KeyLangSwitcher
+dotnet run --project Oops
 
 # Готовый exe одним файлом:
-dotnet publish KeyLangSwitcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish Oops -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
-Бинарь: `KeyLangSwitcher\bin\Release\net8.0-windows\win-x64\publish\KeyLangSwitcher.exe`
+Бинарь: `Oops\bin\Release\net8.0-windows\win-x64\publish\oops.exe`
 
 ## Тесты
 
@@ -72,7 +90,7 @@ dotnet test
 pwsh -ExecutionPolicy Bypass -File installer\build.ps1
 ```
 
-Готовый `KeyLangSwitcher-Setup-0.1.0.exe` появится в `dist\`.
+Готовый `oops-Setup-0.1.0.exe` появится в `dist\`.
 
 ## Ограничения
 
