@@ -14,6 +14,12 @@ public sealed class AppSettings
     /// <summary>Сколько секунд следующее нажатие продолжает расширять ту же область.</summary>
     public int ExpandWindowSeconds { get; set; } = 2;
 
+    /// <summary>Проверять обновления на GitHub при запуске (не чаще раза в сутки).</summary>
+    public bool AutoCheckUpdates { get; set; } = true;
+
+    /// <summary>Когда последний раз проверяли обновления.</summary>
+    public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
+
     public HotkeyConfig ConvertHotkey { get; set; } = HotkeyConfig.Default;
     public HotkeyConfig ChangeCaseHotkey { get; set; } = HotkeyConfig.ChangeCaseDefault;
 

@@ -19,6 +19,7 @@ public sealed class SettingsForm : Form
 
     private readonly CheckBox _cbEnabled = new();
     private readonly CheckBox _cbAutostart = new();
+    private readonly CheckBox _cbAutoUpdate = new();
     private readonly HotkeyDisplay _convertKeys = new();
     private readonly HotkeyDisplay _caseKeys = new();
     private readonly NumericUpDown _nudIdle = new();
@@ -143,6 +144,9 @@ public sealed class SettingsForm : Form
         AddAutoRow(rows, Divider());
         AddAutoRow(rows, CheckRow(_cbAutostart, "Запускать при старте Windows",
             "Запись в реестр HKCU\\…\\Run"));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, CheckRow(_cbAutoUpdate, "Проверять обновления",
+            "Раз в сутки, через релизы на GitHub"));
         return card;
     }
 
@@ -361,6 +365,7 @@ public sealed class SettingsForm : Form
     {
         _cbEnabled.Checked = _settings.Enabled;
         _cbAutostart.Checked = _settings.Autostart;
+        _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _nudIdle.Value = Math.Clamp(_settings.BufferIdleTimeoutSeconds, (int)_nudIdle.Minimum, (int)_nudIdle.Maximum);
         _nudExpand.Value = Math.Clamp(_settings.ExpandWindowSeconds, (int)_nudExpand.Minimum, (int)_nudExpand.Maximum);
         _convertKeys.SetCombo(_convertHotkey.ToString());
@@ -386,6 +391,7 @@ public sealed class SettingsForm : Form
     {
         _settings.Enabled = _cbEnabled.Checked;
         _settings.Autostart = _cbAutostart.Checked;
+        _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
         _settings.ExpandWindowSeconds = (int)_nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
