@@ -9,7 +9,10 @@
 ; Alternatively run installer\build.ps1 which does both steps automatically.
 
 #define MyAppName       "KeyLangSwitcher"
-#define MyAppVersion    "0.1.0"
+; Версию можно передать снаружи: ISCC /DMyAppVersion=1.2.3 (так делает CI).
+#ifndef MyAppVersion
+  #define MyAppVersion  "0.1.0"
+#endif
 #define MyAppPublisher  "KeyLangSwitcher"
 #define MyAppURL        "https://github.com/vladvysotsky/KeyLangSwitcher"
 #define MyAppExeName    "KeyLangSwitcher.exe"
