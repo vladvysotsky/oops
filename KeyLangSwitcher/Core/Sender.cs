@@ -60,6 +60,47 @@ public static class Sender
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int nVirtKey);
+
+    /// <summary>
+    /// Нейтрализует «тап» Alt. Если Windows видит Alt-down → Alt-up без клавиш
+    /// между ними, она активирует строку меню окна — фокус уходит из поля ввода,
+    /// и последующий SendUnicode печатает в никуда. Безобидный Ctrl-тап, вставленный
+    /// пока Alt ещё зажат, ломает этот шаблон: Alt-down → Ctrl → Alt-up меню не активирует.
+    /// Ctrl без последующей буквы не делает ничего ни в одном приложении.
+    /// </summary>
+    public static void CancelAltMenuActivation()
+    {
+        if ((GetAsyncKeyState(VK_MENU) & 0x8000) == 0) return;
+        var inputs = new[]
+        {
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } },
+            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
+        };
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    /// <summary>
+    /// Ждёт, пока пользователь физически отпустит все модификаторы хоткея.
+    /// Без этого зажатый Ctrl превратит наши Backspace в Ctrl+Backspace (удаление
+    /// слова целиком), а зажатый Alt/Win исказит ввод.
+    /// </summary>
+    public static void WaitForModifiersReleased(int maxMs = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(maxMs);
+        while (DateTime.UtcNow < deadline && AnyModifierDown())
+            System.Threading.Thread.Sleep(15);
+        System.Threading.Thread.Sleep(40); // даём системе доставить key-up'ы
+    }
+
+    private static bool AnyModifierDown() =>
+        (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0 ||
+        (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 ||
+        (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 ||
+        (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+        (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+
     /// <summary>
     /// Снимает потенциально зажатые пользователем модификаторы хоткея (Ctrl/Shift/Alt/Win).
     /// Должно вызываться перед последовательностью бэкспейсов / Unicode-ввода,
@@ -125,26 +166,6 @@ public static class Sender
             SendInput(2, pair, sz);
             System.Threading.Thread.Sleep(25);
         }
-    }
-
-    /// <summary>
-    /// Нейтрализует «тап» модификатора. Если хоткей содержит Alt, то Windows видит
-    /// последовательность Alt-down → Alt-up без промежуточных клавиш и трактует её как
-    /// активацию строки меню: фокус уходит из поля ввода, и последующий SendUnicode
-    /// печатает в никуда. Вставка безобидного Ctrl-тапа между ними ломает этот шаблон —
-    /// Windows видит Alt-down → Ctrl → Alt-up и меню не активирует.
-    ///
-    /// Вызывать СРАЗУ при срабатывании хоткея, пока пользователь ещё держит Alt.
-    /// Ctrl без последующей буквы ничего не делает ни в одном приложении.
-    /// </summary>
-    public static void CancelAltMenuActivation()
-    {
-        var inputs = new[]
-        {
-            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } },
-            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
-        };
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
     /// <summary>

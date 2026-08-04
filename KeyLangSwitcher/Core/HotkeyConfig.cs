@@ -29,9 +29,9 @@ public sealed class HotkeyConfig
     };
 
     /// <summary>
-    /// Смена регистра выделенного текста — Alt+Win по умолчанию (modifier-only).
-    /// НЕ использовать Alt+Shift: это системный шорткат переключения раскладки
-    /// Windows, он перехватывается до нас и хоткей не срабатывает.
+    /// Смена регистра — Alt+Win по умолчанию (modifier-only).
+    /// НЕ использовать Alt+Shift: это системный шорткат смены раскладки Windows,
+    /// он перехватывается до нас и хоткей никогда не срабатывает.
     /// </summary>
     public static HotkeyConfig ChangeCaseDefault => new()
     {

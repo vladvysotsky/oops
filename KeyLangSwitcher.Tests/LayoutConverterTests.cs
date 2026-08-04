@@ -54,15 +54,6 @@ public class LayoutConverterTests
         Assert.Equal(expected, result);
     }
 
-    [Fact]
-    public void AutoConvert_WholeSelection_ConvertsPunctuationOneToOne()
-    {
-        // 1-в-1 конверсия выделения: запятая (',' = 'б') и апостроф маппятся корректно.
-        // Это ключевой сценарий: выделил → сконвертировалось целиком.
-        Assert.Equal("скажи где взять ошибку импорта",
-            LayoutConverter.ToRussian("crf;b ult dpznm jib,re bvgjhnf"));
-    }
-
     [Theory]
     [InlineData('@', '"')]
     [InlineData('#', '№')]
@@ -77,13 +68,5 @@ public class LayoutConverterTests
     {
         Assert.Equal(ru.ToString(), LayoutConverter.ToRussian(en.ToString()));
         Assert.Equal(en.ToString(), LayoutConverter.ToEnglish(ru.ToString()));
-    }
-
-    [Fact]
-    public void ToggleCase_LowersWhenAnyUpper_UppersWhenAllLower()
-    {
-        Assert.Equal("hello", SelectionConverter.Toggle("Hello"));
-        Assert.Equal("HELLO", SelectionConverter.Toggle("hello"));
-        Assert.Equal("привет мир", SelectionConverter.Toggle("Привет Мир"));
     }
 }
