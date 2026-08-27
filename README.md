@@ -1,11 +1,19 @@
 # oops
 
+[![CI](https://github.com/vladvysotsky/oops/actions/workflows/ci.yml/badge.svg)](https://github.com/vladvysotsky/oops/actions/workflows/ci.yml)
+[![Релиз](https://img.shields.io/github/v/release/vladvysotsky/oops?label=релиз)](https://github.com/vladvysotsky/oops/releases/latest)
+[![Лицензия](https://img.shields.io/badge/лицензия-MIT-blue)](LICENSE)
+
 > `ghjdthrf njuj rfr 'nj hf,jnftn` → **oops** → `проверка того как это работает`
 
 Набрали абзац и только потом заметили, что раскладка была не та? Нажмите хоткей —
 и текст встанет на место. Названо по тому самому моменту.
 
 Работает во всех приложениях Windows: браузер, мессенджеры, IDE, терминал.
+
+<sub>Fixes text typed in the wrong keyboard layout (RU ↔ EN) and toggles case,
+anywhere in Windows. You define the boundary: first press fixes the last word,
+second fixes everything you typed. Interface and docs are in Russian.</sub>
 
 ## 🧼 Что делает
 
@@ -119,6 +127,23 @@ pwsh -ExecutionPolicy Bypass -File installer\build.ps1
   игнорирует записи elevated-приложений в `HKCU\...\Run`.
 - При отладке из-под отладчика Windows отключает клавиатурный хук по таймауту —
   проверяйте через **Ctrl+F5** или собранный exe.
+
+## 🤝 Как помочь
+
+Нашли ошибку — [заведите issue](https://github.com/vladvysotsky/oops/issues/new/choose).
+Программа умеет это сама: в окне ошибки есть кнопка «Сообщить об ошибке», она
+открывает форму с уже заполненной версией и подробностями.
+
+Если хоткей молчит, посмотрите сначала карточку **ПРОВЕРКА** в настройках: она
+показывает, что реально дошло до программы и совпало ли с назначенным. Это сразу
+отделяет «Windows забрала сочетание себе» от «программа его не узнала».
+
+Перед правками загляните в [CLAUDE.md](CLAUDE.md) — там разобрана модель
+«расширяющейся области» и собраны грабли Win32, на которые мы уже наступили:
+почему `GetAsyncKeyState` врёт про собственные модификаторы, почему `SendUnicode`
+обязан снимать Alt перед каждым символом, почему клавишу Win нельзя записать
+через события WinForms. Большая часть этого списка — исправленные баги, а не
+предположения.
 
 ## Автор
 

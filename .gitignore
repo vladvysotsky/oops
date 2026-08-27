@@ -6,6 +6,7 @@ obj/
 publish/
 dist/
 
-# Симлинки на скиллы из .agents — git на Windows их не восстановит.
-# Сами скиллы лежат в .agents/skills и версионируются.
+# Скиллы emilkowalski/skills — чужой код, ставится одной командой
+# (npx skills add emilkowalski/skills), в репозитории ему не место.
+.agents/
 .claude/
