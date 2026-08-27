@@ -1,0 +1,33 @@
+name: CI
+
+# Сборка и тесты на каждый пуш и pull request.
+# Отдельно от release.yml намеренно: тот запускается только по тегу, и до
+# первого релиза никто бы не узнал, что main сломан.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    # Только Windows: проект использует Microsoft.NET.Sdk.WindowsDesktop,
+    # на Linux он не собирается в принципе.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
