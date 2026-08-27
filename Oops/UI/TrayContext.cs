@@ -151,6 +151,17 @@ public sealed class TrayContext : ApplicationContext
                 return;
             }
 
+            if (check.Unavailable)
+            {
+                if (!silent)
+                    Notice.Warn(null, "Репозиторий недоступен",
+                        "GitHub отвечает, что такого репозитория нет. Обычно это значит, "
+                        + "что он закрыт (private) или переименован.",
+                        "Пока это так, обновления проверяться не будут ни у кого — "
+                        + $"как и скачивание по ссылке {UpdateService.ReleasesPageUrl}");
+                return;
+            }
+
             if (check.NoReleases)
             {
                 if (!silent)
