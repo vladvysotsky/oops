@@ -19,10 +19,15 @@ namespace Oops.UI;
 /// </summary>
 public sealed class WelcomeForm : ThemedForm
 {
-    private const int ContentWidth = 520;
+    private const int ContentWidth = 580;
     private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
-    /// <summary>Ширина поля с клавишами. Хватает на три: «Ctrl+Alt+Shift».</summary>
-    private const int HotkeyWidth = 190;
+    /// <summary>
+    /// Ширина поля с клавишами. С запасом на три клавиши с длинными именами
+    /// («Ctrl+Shift+Win»): раньше 190px не хватало, и третья обрезалась.
+    /// Расширено вместе с ContentWidth на одну и ту же величину, чтобы ширина
+    /// подписей слева не изменилась.
+    /// </summary>
+    private const int HotkeyWidth = 250;
     private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
 
     private readonly TableLayoutPanel _root;
