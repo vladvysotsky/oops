@@ -94,9 +94,11 @@ public sealed class TrayContext : ApplicationContext
             using var form = new SettingsForm(_app.Settings);
             if (form.ShowDialog() == DialogResult.OK)
             {
+                // Автозапуск форма записывает в реестр сама: держать его копию в
+                // settings.json нельзя — она затирала галочку, поставленную в
+                // инсталляторе, при первом же сохранении настроек.
                 _app.Settings.Save();
                 _app.ApplySettings();
-                Autostart.Set(_app.Settings.Autostart);
             }
         }
         finally

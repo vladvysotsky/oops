@@ -83,25 +83,31 @@ public sealed class ScopeEditor
             _step = 0;
             _kind = kind;
         }
-        _lastPressUtc = nowUtc;
 
         if (string.IsNullOrEmpty(_original)) { ResetSession(); return Edit.None; }
         if (TypingBuffer.CountWords(_original) == 0) { ResetSession(); return Edit.None; }
 
         int nextStep = _step + 1;
-        if (nextStep > 2) return Edit.None;   // дальше расширять некуда
 
         // Шаг 1 — последнее слово, шаг 2 — весь набранный текст.
         int scopeStart = nextStep == 1
             ? TypingBuffer.StartOfLastWords(_original, 1)
             : 0;
 
-        // Однословный буфер: второй шаг захватил бы ровно то же самое.
-        if (nextStep == 2 && scopeStart == TypingBuffer.StartOfLastWords(_original, 1))
+        // Расширять больше некуда: шагов всего два, а на однословном буфере второй
+        // шаг захватил бы ровно тот же кусок.
+        bool exhausted = nextStep > 2
+            || (nextStep == 2 && scopeStart == TypingBuffer.StartOfLastWords(_original, 1));
+        if (exhausted)
         {
+            // Время последнего шага НЕ обновляем. Иначе частые повторные нажатия
+            // бесконечно продлевают окно расширения, и вместо начала новой сессии
+            // пользователь получает полную тишину — «хоткей не работает».
             _step = 2;
             return Edit.None;
         }
+
+        _lastPressUtc = nowUtc;
         _step = nextStep;
 
         var scope = _original.Substring(scopeStart);
