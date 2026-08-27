@@ -77,6 +77,15 @@ public sealed class KeyboardHook : IDisposable
 
     public event EventHandler<KeyEvent>? KeyDown;
 
+    /// <summary>
+    /// Отпускание клавиши. Нужно тем, кто глотает нажатия: проглоченное хуком
+    /// событие НЕ обновляет состояние клавиш в системе, и спрашивать
+    /// GetAsyncKeyState «всё ли отпущено» после этого бессмысленно — система
+    /// ответит «да», потому что нажатия она не видела. Единственный способ вести
+    /// список зажатых клавиш в таком режиме — считать нажатия и отпускания самим.
+    /// </summary>
+    public event EventHandler<KeyEvent>? KeyUp;
+
     public sealed class KeyEvent
     {
         public Keys VirtualKey { get; init; }
@@ -94,6 +103,10 @@ public sealed class KeyboardHook : IDisposable
     public void Install()
     {
         if (_hook != IntPtr.Zero) return;
+        // Что было зажато до установки хука, мы не видели, а отпускание увидим и
+        // вычтем из пустого множества. Начинаем с чистого листа, иначе застрявшая
+        // клавиша заставила бы модификатор считаться зажатым навсегда.
+        _physicallyDown.Clear();
         _proc = HookCallback;
         using var proc = Process.GetCurrentProcess();
         using var mod = proc.MainModule!;
@@ -118,12 +131,28 @@ public sealed class KeyboardHook : IDisposable
         const uint LLKHF_INJECTED = 0x10;
         int msg = wParam.ToInt32();
 
-        // Отпускания нужны только чтобы вести список зажатых клавиш.
         if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
         {
             var up = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            if ((up.flags & LLKHF_INJECTED) == 0)
-                _physicallyDown.Remove(up.vkCode);
+            if ((up.flags & LLKHF_INJECTED) != 0)
+                return CallNextHookEx(_hook, nCode, wParam, lParam);
+
+            _physicallyDown.Remove(up.vkCode);
+
+            var upHandler = KeyUp;
+            if (upHandler != null)
+            {
+                var upEvt = new KeyEvent
+                {
+                    VirtualKey = (Keys)up.vkCode,
+                    ScanCode = up.scanCode,
+                };
+                try { upHandler(this, upEvt); }
+                catch { /* hook не должен падать */ }
+
+                if (upEvt.Handled) return (IntPtr)1;
+            }
+
             return CallNextHookEx(_hook, nCode, wParam, lParam);
         }
 
@@ -141,18 +170,34 @@ public sealed class KeyboardHook : IDisposable
 
             var vk = (Keys)data.vkCode;
 
-            // GetAsyncKeyState даёт системно-актуальное состояние, в отличие от GetKeyState
-            // (которое читает состояние нашего потока и в LL-хуке может отставать).
-            // Дополнительно: если САМА текущая клавиша — модификатор, считаем флаг true сразу,
-            // т.к. GetAsyncKeyState в момент WM_KEYDOWN может ещё не отражать только что нажатый VK.
-            bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0
+            // Состояние модификаторов берём из ТРЁХ источников, объединяя по «или».
+            //
+            // Спрашивать только GetAsyncKeyState нельзя, и это не теория:
+            // сочетание «Alt, потом Win» не собиралось в аккорд — на нажатии Win
+            // система отвечала, что Alt отпущен, хотя его держали. Причин у неё
+            // как минимум две, и обе наши:
+            //   - проглоченное хуком нажатие (Handled = true) вообще не обновляет
+            //     состояние клавиш в системе;
+            //   - ReleaseHotkeyModifiers и CancelMenuActivation ИНЖЕКТИРУЮТ
+            //     отпускание Alt/Win, и после этого система считает клавишу
+            //     отпущенной до конца удержания, хотя палец на ней.
+            //
+            // Поэтому основной источник — _physicallyDown: он собран из самого
+            // потока событий, до всякой обработки, и врать не может. Хук отдаёт
+            // конкретные L/R-варианты (0xA4/0xA5 для Alt), общий VK_MENU в него
+            // не приходит.
+            //
+            // GetAsyncKeyState оставлен подстраховкой на случай клавиш, зажатых
+            // ещё до установки хука: их в _physicallyDown нет.
+            // Третий источник — сама текущая клавиша: в момент её WM_KEYDOWN
+            // система может ещё не успеть обновить состояние.
+            bool shift = Held(0xA0, 0xA1, 0x10)
                 || vk is Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey;
-            bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0
+            bool ctrl = Held(0xA2, 0xA3, 0x11)
                 || vk is Keys.ControlKey or Keys.LControlKey or Keys.RControlKey;
-            bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0
+            bool alt = Held(0xA4, 0xA5, 0x12)
                 || vk is Keys.Menu or Keys.LMenu or Keys.RMenu;
-            bool win = (GetAsyncKeyState(0x5B) & 0x8000) != 0
-                || (GetAsyncKeyState(0x5C) & 0x8000) != 0
+            bool win = Held(0x5B, 0x5C)
                 || vk is Keys.LWin or Keys.RWin;
 
             char? typed = null;
@@ -176,6 +221,20 @@ public sealed class KeyboardHook : IDisposable
         }
 
         return CallNextHookEx(_hook, nCode, wParam, lParam);
+    }
+
+    /// <summary>
+    /// Зажата ли хоть одна из перечисленных клавиш — по нашему списку нажатых
+    /// или, как подстраховка, по мнению системы.
+    /// </summary>
+    private bool Held(params uint[] vks)
+    {
+        foreach (var v in vks)
+        {
+            if (_physicallyDown.Contains(v)) return true;
+            if ((GetAsyncKeyState((int)v) & 0x8000) != 0) return true;
+        }
+        return false;
     }
 
     private static char? TryResolveChar(uint vk, uint scan, bool shift)

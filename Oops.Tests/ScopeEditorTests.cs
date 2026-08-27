@@ -128,6 +128,30 @@ public class ScopeEditorTests
         Assert.Equal(4, b.EraseCount);   // снова одно слово, не два
     }
 
+    [Fact]
+    public void HammeringExhaustedScope_DoesNotFreezeTheExpandWindow()
+    {
+        // Регрессия: пустой шаг не должен продлевать окно расширения. Иначе
+        // человек, который в сердцах жмёт хоткей раз в секунду, бесконечно
+        // попадает в «расширять некуда» и не видит вообще никакой реакции.
+        var s = new ScopeEditor { ExpandWindow = TimeSpan.FromSeconds(2) };
+
+        var a = s.NextCaseStep("привет мир", T0);
+        Assert.Equal("МИР", a.Text);
+
+        var b = s.NextCaseStep(a.NewBufferContent, T0.AddMilliseconds(300));
+        Assert.Equal("ПРИВЕТ МИР", b.Text);
+
+        // Область развёрнута до конца — эти нажатия молчат…
+        Assert.True(s.NextCaseStep(b.NewBufferContent, T0.AddMilliseconds(900)).IsEmpty);
+        Assert.True(s.NextCaseStep(b.NewBufferContent, T0.AddMilliseconds(1600)).IsEmpty);
+
+        // …но отсчёт идёт от последнего РЕЗУЛЬТАТИВНОГО шага (300 мс), поэтому
+        // через две секунды после него начинается новая сессия.
+        var again = s.NextCaseStep(b.NewBufferContent, T0.AddMilliseconds(2400));
+        Assert.Equal("мир", again.Text);   // "МИР" обратно в нижний регистр
+    }
+
     [Theory]
     [InlineData("Hello", "hello")]
     [InlineData("hello", "HELLO")]

@@ -54,35 +54,52 @@ public static class UpdateService
     }
 
     /// <summary>
-    /// Возвращает сведения о последнем релизе, либо null, если запрос не удался
-    /// или релизов нет. Сетевые ошибки не пробрасываются: проверка обновлений
-    /// не должна мешать работе приложения.
+    /// Итог проверки. «Релизов ещё нет» и «не удалось спросить» — разные вещи:
+    /// в первом случае сообщать о проблемах с интернетом попросту неверно.
     /// </summary>
-    public static async Task<ReleaseInfo?> FetchLatestAsync(CancellationToken ct = default)
+    /// <param name="Release">Последний релиз, если он есть.</param>
+    /// <param name="Failed">Запрос не удался: нет сети, лимит, ошибка сервера.</param>
+    public readonly record struct CheckResult(ReleaseInfo? Release, bool Failed)
+    {
+        /// <summary>Запрос прошёл, но опубликованных релизов в репозитории нет.</summary>
+        public bool NoReleases => !Failed && Release is null;
+    }
+
+    /// <summary>
+    /// Спрашивает GitHub о последнем релизе. Исключения наружу не выпускает:
+    /// проверка обновлений не должна мешать работе приложения.
+    /// </summary>
+    public static async Task<CheckResult> FetchLatestAsync(CancellationToken ct = default)
     {
         try
         {
             using var client = CreateClient();
             using var response = await client.GetAsync(LatestReleaseApi, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) return null;
+
+            // 404 — репозиторий доступен, но релизов ещё не публиковали.
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return new CheckResult(null, Failed: false);
+
+            if (!response.IsSuccessStatusCode) return new CheckResult(null, Failed: true);
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
             var root = doc.RootElement;
 
             var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-            if (string.IsNullOrWhiteSpace(tag)) return null;
-            if (!TryParseVersion(tag, out var version)) return null;
+            if (string.IsNullOrWhiteSpace(tag)) return new CheckResult(null, Failed: true);
+            if (!TryParseVersion(tag, out var version)) return new CheckResult(null, Failed: true);
 
             var title = root.TryGetProperty("name", out var n) ? n.GetString() ?? tag : tag;
             var notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? string.Empty : string.Empty;
             var page = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? ReleasesPageUrl : ReleasesPageUrl;
 
-            return new ReleaseInfo(version, tag, title, notes, FindInstallerAsset(root), page);
+            var release = new ReleaseInfo(version, tag, title, notes, FindInstallerAsset(root), page);
+            return new CheckResult(release, Failed: false);
         }
         catch
         {
-            return null;
+            return new CheckResult(null, Failed: true);
         }
     }
 
