@@ -182,7 +182,9 @@ public sealed class SettingsForm : Form
     {
         var save = new FlatButton { Text = "Сохранить", Primary = true, Size = new Size(124, 34), DialogResult = DialogResult.OK };
         var cancel = new FlatButton { Text = "Отмена", Size = new Size(104, 34), DialogResult = DialogResult.Cancel };
-        save.Click += (_, _) => ApplyToSettings();
+        // Button.OnClick выставляет DialogResult формы ДО вызова наших обработчиков,
+        // поэтому вернуть None — штатный способ отменить закрытие окна.
+        save.Click += (_, _) => { if (!ApplyToSettings()) DialogResult = DialogResult.None; };
 
         var flow = new FlowLayoutPanel
         {
@@ -364,7 +366,9 @@ public sealed class SettingsForm : Form
     private void Populate()
     {
         _cbEnabled.Checked = _settings.Enabled;
-        _cbAutostart.Checked = _settings.Autostart;
+        // Автозапуск живёт в реестре, а не в settings.json: галочку могли поставить
+        // в инсталляторе, и окно настроек обязано показывать её фактическое состояние.
+        _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _nudIdle.Value = Math.Clamp(_settings.BufferIdleTimeoutSeconds, (int)_nudIdle.Minimum, (int)_nudIdle.Maximum);
         _nudExpand.Value = Math.Clamp(_settings.ExpandWindowSeconds, (int)_nudExpand.Minimum, (int)_nudExpand.Maximum);
@@ -387,15 +391,30 @@ public sealed class SettingsForm : Form
         Ctrl = h.Ctrl, Shift = h.Shift, Alt = h.Alt, Win = h.Win, Key = h.Key,
     };
 
-    private void ApplyToSettings()
+    /// <summary>Переносит значения в настройки. false — сохранять нельзя, окно не закрываем.</summary>
+    private bool ApplyToSettings()
     {
+        // Одинаковые сочетания недопустимы: App проверяет раскладку первой, и
+        // второй хоткей просто перестал бы отвечать — без единого признака.
+        if (_convertHotkey.SameCombo(_caseHotkey))
+        {
+            MessageBox.Show(this,
+                "Раскладка и регистр не могут висеть на одном сочетании — "
+                + "сработает только первое. Назначьте разные.",
+                "oops", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
         _settings.Enabled = _cbEnabled.Checked;
-        _settings.Autostart = _cbAutostart.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
         _settings.ExpandWindowSeconds = (int)_nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
         _settings.ChangeCaseHotkey = _caseHotkey;
+
+        // Реестр — единственный источник правды для автозапуска.
+        Autostart.Set(_cbAutostart.Checked);
+        return true;
     }
 }
 

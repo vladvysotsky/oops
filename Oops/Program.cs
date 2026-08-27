@@ -28,6 +28,13 @@ internal static class Program
         System.Diagnostics.Debug.WriteLine($"[startup] settings loaded. hotkey={settings.ConvertHotkey} enabled={settings.Enabled}");
         var app = new App(settings);
         System.Diagnostics.Debug.WriteLine("[startup] hooks installed");
+
+        // Мастер первого запуска — до трея: программа с виду ничего не делает,
+        // и без объяснения модели «расширяющейся области» её принимают за сломанную.
+        // Показываем модально; ShowDialog крутит свой цикл сообщений, поэтому
+        // Application.Run ещё не нужен.
+        WelcomeForm.ShowIfFirstRun(app);
+
         var ctx = new TrayContext(app);
         System.Diagnostics.Debug.WriteLine("[startup] tray ready, entering message loop");
 

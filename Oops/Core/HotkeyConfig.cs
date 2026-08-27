@@ -40,6 +40,12 @@ public sealed class HotkeyConfig
         Key = 0,
     };
 
+    /// <summary>Одно и то же сочетание (без учёта ссылочного равенства).</summary>
+    public bool SameCombo(HotkeyConfig other) =>
+        other != null &&
+        Ctrl == other.Ctrl && Shift == other.Shift &&
+        Alt == other.Alt && Win == other.Win && Key == other.Key;
+
     public bool Matches(Keys vk, bool ctrl, bool shift, bool alt, bool win)
     {
         if (Ctrl != ctrl) return false;
