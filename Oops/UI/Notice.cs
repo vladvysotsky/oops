@@ -26,14 +26,9 @@ internal sealed class Notice : ThemedForm
 {
     private const int ContentWidth = 420;
 
-    private readonly string? _details;
-    private Control? _detailsBox;
-
     private Notice(NoticeKind kind, string title, string message, string? hint,
                    string? details, string? reportContext)
     {
-        _details = details;
-
         Text = "oops";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -53,13 +48,13 @@ internal sealed class Notice : ThemedForm
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
 
         Add(root, HeaderRow(kind, title));
-        Add(root, Text(message, Theme.Body, Theme.Text, new Padding(0, Theme.S2, 0, 0)));
+        Add(root, Paragraph(message, Theme.Body, Theme.Text, new Padding(0, Theme.S2, 0, 0)));
 
         // «Что делать» отделено от «что случилось» намеренно: человеку нужно
         // действие, а не диагноз. Без этой строки любое сообщение об ошибке
         // оставляет в тупике.
         if (!string.IsNullOrWhiteSpace(hint))
-            Add(root, Text(hint, Theme.Caption, Theme.TextMuted, new Padding(0, Theme.S2, 0, 0)));
+            Add(root, Paragraph(hint, Theme.Caption, Theme.TextMuted, new Padding(0, Theme.S2, 0, 0)));
 
         if (!string.IsNullOrWhiteSpace(details))
         {
@@ -75,16 +70,16 @@ internal sealed class Notice : ThemedForm
                 BackColor = Color.Transparent,
             };
 
-            _detailsBox = DetailsBox(details!);
-            _detailsBox.Visible = false;
+            var detailsBox = DetailsBox(details!);
+            detailsBox.Visible = false;
             toggle.LinkClicked += (_, _) =>
             {
-                _detailsBox.Visible = !_detailsBox.Visible;
-                toggle.Text = _detailsBox.Visible ? "Скрыть подробности" : "Подробности";
+                detailsBox.Visible = !detailsBox.Visible;
+                toggle.Text = detailsBox.Visible ? "Скрыть подробности" : "Подробности";
             };
 
             Add(root, toggle);
-            Add(root, _detailsBox);
+            Add(root, detailsBox);
         }
 
         Add(root, Buttons(reportContext, details));
@@ -170,7 +165,8 @@ internal sealed class Notice : ThemedForm
         return row;
     }
 
-    private static Control Text(string text, Font font, Color color, Padding margin) => new Label
+    /// <summary>Абзац. Имя намеренно не Text — оно перекрыло бы Form.Text.</summary>
+    private static Control Paragraph(string text, Font font, Color color, Padding margin) => new Label
     {
         Text = text,
         Font = font,
@@ -236,6 +232,9 @@ internal sealed class Notice : ThemedForm
 
         if (details != null)
         {
+            // Локальная копия, а не поле-параметр: анализ null не переносится
+            // внутрь лямбды, и Clipboard.SetText(details) ругался бы на возможный null.
+            var text = details;
             var copy = new FlatButton
             {
                 Text = "Скопировать",
@@ -246,7 +245,7 @@ internal sealed class Notice : ThemedForm
             {
                 // Единственное место, кроме чтения выделения, где мы пишем в буфер
                 // обмена — и только по явному нажатию кнопки самим пользователем.
-                try { Clipboard.SetText(details); copy.Text = "Скопировано"; }
+                try { Clipboard.SetText(text); copy.Text = "Скопировано"; }
                 catch { copy.Text = "Не вышло"; }
             };
             flow.Controls.Add(copy);
