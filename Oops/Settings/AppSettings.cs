@@ -24,6 +24,14 @@ public sealed class AppSettings
     /// <summary>Сколько секунд следующее нажатие продолжает расширять ту же область.</summary>
     public int ExpandWindowSeconds { get; set; } = 2;
 
+    /// <summary>
+    /// Печатать результат строго по одному символу. Медленно (фраза в тридцать
+    /// символов переписывается около секунды вместо десятков миллисекунд), зато
+    /// переживает приёмники, которые теряют события из batched SendInput —
+    /// такое встречается в Electron и браузерных полях ввода.
+    /// </summary>
+    public bool CharByCharTyping { get; set; } = false;
+
     /// <summary>Проверять обновления на GitHub при запуске (не чаще раза в сутки).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 

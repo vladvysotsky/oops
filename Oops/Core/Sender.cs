@@ -66,6 +66,36 @@ public static class Sender
     private static extern short GetAsyncKeyState(int nVirtKey);
 
     /// <summary>
+    /// Сколько символов (или Backspace) уходит в одной посылке SendInput.
+    ///
+    /// Раньше слали строго по одному с задержкой 15–25 мс, и фраза в тридцать
+    /// символов переписывалась больше секунды: тридцать посылок на стирание плюс
+    /// тридцать на печать. Причина осторожности настоящая — Electron и браузерные
+    /// поля ввода теряют события из больших посылок, — но теряются именно БОЛЬШИЕ
+    /// пачки, когда вся строка уходит одним вызовом. Десяток символов за раз
+    /// такие приёмники переваривают, а время падает на порядок.
+    ///
+    /// Снятие модификаторов повторяется в КАЖДОЙ посылке, а не один раз перед
+    /// циклом: пользователь может всё ещё держать хоткей, и автоповтор вернёт
+    /// зажатый Alt обратно. Поэтому посылка должна оставаться короткой — между
+    /// двумя очистками не должно проходить больше интервала автоповтора (~30 мс).
+    ///
+    /// Значение 1 возвращает прежнее поведение — на случай приложения, которое
+    /// всё-таки давится пачками (настройка «Печатать посимвольно»).
+    /// </summary>
+    public static int ChunkSize { get; set; } = 8;
+
+    /// <summary>Пауза между посылками.</summary>
+    public static int ChunkDelayMs { get; set; } = 4;
+
+    /// <summary>Прежний медленный режим: по одному символу с большой паузой.</summary>
+    public static void UseCharByChar(bool on)
+    {
+        ChunkSize = on ? 1 : 8;
+        ChunkDelayMs = on ? 20 : 4;
+    }
+
+    /// <summary>
     /// Нейтрализует «тап» модификатора. Если Windows видит Alt-down → Alt-up без
     /// клавиш между ними, она активирует строку меню окна; ровно так же Win-down →
     /// Win-up открывает «Пуск». В обоих случаях фокус уходит из поля ввода, и
@@ -177,24 +207,34 @@ public static class Sender
     {
         if (count <= 0) return;
 
-        // Шлём по одному, с микро-задержкой: Electron и браузерные текстарии
-        // теряют события из больших batched SendInput-ов.
-        var batch = new INPUT[]
-        {
-            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
-            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_SHIFT,   dwFlags = KEYEVENTF_KEYUP } } },
-            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU,    dwFlags = KEYEVENTF_KEYUP } } },
-            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN,    dwFlags = KEYEVENTF_KEYUP } } },
-            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN,    dwFlags = KEYEVENTF_KEYUP } } },
-            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK } } },
-            new() { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } } },
-        };
+        int chunk = Math.Max(1, ChunkSize);
         int sz = Marshal.SizeOf<INPUT>();
-        for (int i = 0; i < count; i++)
+
+        for (int sent = 0; sent < count; sent += chunk)
         {
+            int len = Math.Min(chunk, count - sent);
+            var batch = new INPUT[ModifierClears + len * 2];
+            FillModifierClears(batch);
+            for (int i = 0; i < len; i++)
+            {
+                batch[ModifierClears + i * 2] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK } } };
+                batch[ModifierClears + i * 2 + 1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } } };
+            }
             SendInput((uint)batch.Length, batch, sz);
-            System.Threading.Thread.Sleep(15);
+            System.Threading.Thread.Sleep(ChunkDelayMs);
         }
+    }
+
+    /// <summary>Сколько INPUT-ов в начале посылки занимает снятие модификаторов.</summary>
+    private const int ModifierClears = 5;
+
+    private static void FillModifierClears(INPUT[] batch)
+    {
+        batch[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } };
+        batch[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_SHIFT,   dwFlags = KEYEVENTF_KEYUP } } };
+        batch[2] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU,    dwFlags = KEYEVENTF_KEYUP } } };
+        batch[3] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN,    dwFlags = KEYEVENTF_KEYUP } } };
+        batch[4] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN,    dwFlags = KEYEVENTF_KEYUP } } };
     }
 
     /// <summary>
@@ -224,20 +264,35 @@ public static class Sender
         text = text.Replace("\r\n", "\r").Replace('\n', '\r');
 
         int sz = Marshal.SizeOf<INPUT>();
-        var batch = new INPUT[5];
-        // Гасим Alt (он решает WM_CHAR/WM_SYSCHAR) и обе Win — под зажатым Win
-        // символ может уйти в системный шорткат. Ctrl и Shift не трогаем:
-        // на KEYEVENTF_UNICODE они не влияют, а лишние события ввода — риск.
-        batch[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU, dwFlags = KEYEVENTF_KEYUP } } };
-        batch[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN, dwFlags = KEYEVENTF_KEYUP } } };
-        batch[2] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN, dwFlags = KEYEVENTF_KEYUP } } };
+        int chunk = Math.Max(1, ChunkSize);
 
-        foreach (var ch in text)
+        for (int start = 0; start < text.Length; )
         {
-            batch[3] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } } };
-            batch[4] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } } };
-            SendInput(5, batch, sz);
-            System.Threading.Thread.Sleep(25);
+            int len = Math.Min(chunk, text.Length - start);
+
+            // Суррогатную пару нельзя разрывать между посылками: два её кода
+            // должны уйти подряд, иначе приёмник получит два битых символа.
+            if (len < text.Length - start && char.IsHighSurrogate(text[start + len - 1]))
+                len++;
+
+            // Гасим Alt (он решает WM_CHAR/WM_SYSCHAR) и обе Win — под зажатым Win
+            // символ может уйти в системный шорткат. Ctrl и Shift не трогаем:
+            // на KEYEVENTF_UNICODE они не влияют, а лишние события ввода — риск.
+            var batch = new INPUT[3 + len * 2];
+            batch[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU, dwFlags = KEYEVENTF_KEYUP } } };
+            batch[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN, dwFlags = KEYEVENTF_KEYUP } } };
+            batch[2] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN, dwFlags = KEYEVENTF_KEYUP } } };
+
+            for (int i = 0; i < len; i++)
+            {
+                ushort ch = text[start + i];
+                batch[3 + i * 2] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } } };
+                batch[3 + i * 2 + 1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } } };
+            }
+
+            SendInput((uint)batch.Length, batch, sz);
+            start += len;
+            if (start < text.Length) System.Threading.Thread.Sleep(ChunkDelayMs);
         }
     }
 
