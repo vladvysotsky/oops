@@ -13,7 +13,8 @@ public sealed record ReleaseInfo(
     string Title,
     string Notes,
     string? InstallerUrl,
-    string PageUrl);
+    string PageUrl,
+    string? ChecksumsUrl = null);
 
 /// <summary>
 /// Проверка и установка обновлений через GitHub Releases.
@@ -52,7 +53,14 @@ public static class UpdateService
 
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(20),
+            // Ответ API читается в память целиком; без потолка подменённый или
+            // сломанный сервер мог бы отдавать бесконечный поток. На скачивание
+            // инсталлятора не влияет — там ResponseHeadersRead и своя копия в файл.
+            MaxResponseContentBufferSize = 4 * 1024 * 1024,
+        };
         // GitHub отклоняет запросы без User-Agent.
         client.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue(Repo, CurrentVersion.ToString()));
@@ -117,7 +125,8 @@ public static class UpdateService
             var notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? string.Empty : string.Empty;
             var page = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? ReleasesPageUrl : ReleasesPageUrl;
 
-            var release = new ReleaseInfo(version, tag, title, notes, FindInstallerAsset(root), page);
+            var release = new ReleaseInfo(version, tag, title, notes,
+                FindInstallerAsset(root), page, FindChecksumsAsset(root));
             return new CheckResult(release, Failed: false);
         }
         catch
@@ -144,7 +153,16 @@ public static class UpdateService
         return Version.TryParse(s, out version!) && version != null;
     }
 
-    /// <summary>Ищет среди файлов релиза инсталлятор (.exe, в имени "setup").</summary>
+    /// <summary>
+    /// Ищет среди файлов релиза инсталлятор (.exe, в имени "setup").
+    ///
+    /// URL принимается ТОЛЬКО с github.com: скачанный файл мы запускаем, и
+    /// это единственное место программы, где данные из сети превращаются в
+    /// исполняемый код. API отдаёт ссылки на github.com и без нас, так что
+    /// проверка ничего не ломает — она отсекает сценарий, в котором ответ
+    /// API подменён (прокси с подложенным корневым сертификатом, компромисс
+    /// аккаунта с релизом, указывающим на чужой хост).
+    /// </summary>
     private static string? FindInstallerAsset(JsonElement root)
     {
         if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
@@ -157,6 +175,7 @@ public static class UpdateService
             var url = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
             if (name == null || url == null) continue;
             if (!name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!IsTrustedDownloadUrl(url)) continue;
 
             if (name.Contains("setup", StringComparison.OrdinalIgnoreCase)) return url;
             firstExe ??= url;
@@ -164,8 +183,44 @@ public static class UpdateService
         return firstExe;
     }
 
+    /// <summary>Ищет файл контрольных сумм SHA256SUMS.txt, который публикует CI.</summary>
+    private static string? FindChecksumsAsset(JsonElement root)
+    {
+        if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+            return null;
+
+        foreach (var asset in assets.EnumerateArray())
+        {
+            var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
+            var url = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+            if (name == null || url == null) continue;
+            if (name.Equals("SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase)
+                && IsTrustedDownloadUrl(url))
+                return url;
+        }
+        return null;
+    }
+
+    /// <summary>Только HTTPS и только github.com (файлы релизов живут именно там).</summary>
+    private static bool IsTrustedDownloadUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u)
+        && u.Scheme == Uri.UriSchemeHttps
+        && (u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+            || u.Host.Equals("objects.githubusercontent.com", StringComparison.OrdinalIgnoreCase)
+            || u.Host.Equals("release-assets.githubusercontent.com", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>
-    /// Скачивает инсталлятор во временную папку и возвращает путь к нему.
+    /// Скачивает инсталлятор во временную папку, сверяет SHA-256 с
+    /// опубликованным CI файлом SHA256SUMS.txt и возвращает путь.
+    ///
+    /// Сверка — не формальность: файл будет ЗАПУЩЕН. Битая докачка или
+    /// подменённый по дороге файл должны умереть здесь, а не исполниться.
+    /// Если файла сумм в релизе нет (старые релизы), скачиваем без сверки —
+    /// иначе обновление сломалось бы у всех существующих пользователей.
+    ///
+    /// Имя файла содержит случайный суффикс: путь во временной папке
+    /// предсказуем, и локальный вредонос мог бы подложить свой exe на
+    /// известное имя до того, как мы его запустим.
     /// </summary>
     public static async Task<string> DownloadInstallerAsync(
         ReleaseInfo release, IProgress<int>? progress = null, CancellationToken ct = default)
@@ -175,7 +230,8 @@ public static class UpdateService
 
         var dir = Path.Combine(Path.GetTempPath(), "OopsUpdate");
         Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, $"Oops-{release.TagName}-setup.exe");
+        var path = Path.Combine(dir,
+            $"Oops-{release.TagName}-setup-{Guid.NewGuid():N}.exe");
 
         using var client = CreateClient();
         using var response = await client
@@ -184,19 +240,68 @@ public static class UpdateService
         response.EnsureSuccessStatusCode();
 
         var total = response.Content.Headers.ContentLength ?? -1L;
-        await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        await using var target = File.Create(path);
-
-        var buffer = new byte[81920];
-        long read = 0;
-        int n;
-        while ((n = await source.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        await using (var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
+        await using (var target = File.Create(path))
         {
-            await target.WriteAsync(buffer.AsMemory(0, n), ct).ConfigureAwait(false);
-            read += n;
-            if (total > 0) progress?.Report((int)(read * 100 / total));
+            // Потолок размера: сверка суммы отбраковала бы бесконечный поток и
+            // так, но только после того, как он забьёт диск.
+            const long MaxInstallerBytes = 500L * 1024 * 1024;
+
+            var buffer = new byte[81920];
+            long read = 0;
+            int n;
+            while ((n = await source.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+            {
+                read += n;
+                if (read > MaxInstallerBytes)
+                    throw new InvalidOperationException("Файл установщика подозрительно велик.");
+                await target.WriteAsync(buffer.AsMemory(0, n), ct).ConfigureAwait(false);
+                if (total > 0) progress?.Report((int)(read * 100 / total));
+            }
         }
+
+        await VerifyChecksumAsync(release, path, ct).ConfigureAwait(false);
         return path;
+    }
+
+    /// <summary>
+    /// Сверяет SHA-256 скачанного файла с SHA256SUMS.txt из того же релиза.
+    /// Формат строк — как у sha256sum: «хеш  имя-файла».
+    /// </summary>
+    private static async Task VerifyChecksumAsync(ReleaseInfo release, string path, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(release.ChecksumsUrl)) return;
+
+        using var client = CreateClient();
+        string sums = await client.GetStringAsync(release.ChecksumsUrl, ct).ConfigureAwait(false);
+
+        // Оригинальное имя файла в релизе — без нашего случайного суффикса.
+        var expected = sums
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Where(parts => parts.Length == 2 && parts[1].EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            .Select(parts => parts[0])
+            .FirstOrDefault();
+
+        // Сам список сумм пришёл по тому же каналу, что и файл, поэтому от
+        // компрометации GitHub он не защищает — только от битой загрузки и
+        // подмены в пути. Но отсутствие суммы .exe в файле, который CI всегда
+        // пишет, — уже признак манипуляции с релизом.
+        if (expected == null)
+            throw new InvalidOperationException(
+                "В SHA256SUMS.txt релиза нет суммы для установщика.");
+
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        await using var file = File.OpenRead(path);
+        var actual = Convert.ToHexString(await sha.ComputeHashAsync(file, ct).ConfigureAwait(false));
+
+        if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+        {
+            try { File.Delete(path); } catch { }
+            throw new InvalidOperationException(
+                "Контрольная сумма установщика не совпала с опубликованной. "
+                + "Файл повреждён при загрузке или подменён — запускать его нельзя.");
+        }
     }
 
     /// <summary>
@@ -212,9 +317,18 @@ public static class UpdateService
         });
     }
 
-    /// <summary>Открывает страницу релизов в браузере — запасной путь, если файла нет.</summary>
+    /// <summary>
+    /// Открывает страницу релизов в браузере — запасной путь, если файла нет.
+    ///
+    /// URL приходит из ответа API (html_url), а Process.Start с UseShellExecute
+    /// запускает ЧТО УГОДНО, не только браузер: file://, UNC-путь, локальный
+    /// exe. Поэтому открываем только https — всё остальное заменяем нашей
+    /// собственной страницей релизов.
+    /// </summary>
     public static void OpenReleasesPage(string url)
     {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Scheme != Uri.UriSchemeHttps)
+            url = ReleasesPageUrl;
         try
         {
             Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });

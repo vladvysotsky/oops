@@ -21,9 +21,13 @@ internal static class Program
             if (e.ExceptionObject is Exception ex) Notice.Crash(ex);
         };
 
-        // Single-instance guard
+        // Single-instance guard.
+        // Local\, а не Global\: глобальное имя видно всем сессиям машины, и
+        // любой другой пользователь (или процесс с низкими правами) мог бы
+        // создать mutex заранее — программа навсегда считала бы себя «уже
+        // запущенной». Приложение per-user, и границы сессии ему достаточно.
         using var mutex = new System.Threading.Mutex(initiallyOwned: true,
-            name: "Global\\Oops_SingleInstance", out var createdNew);
+            name: "Local\\Oops_SingleInstance", out var createdNew);
         if (!createdNew)
         {
             Notice.Info(null, "oops уже запущен",
