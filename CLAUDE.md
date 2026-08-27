@@ -106,9 +106,10 @@
   (`AppsUseLightTheme`) и `SystemInformation.HighContrast`, значения фиксируются
   один раз при старте. Все окна наследуют `ThemedForm` (фон, шрифт, DPI и тёмный
   заголовок через `DwmSetWindowAttribute(20)`), меню трея — `ApplyMenuChrome`.
-- Скиллы `emilkowalski/skills` лежат в `.agents/skills` (симлинки `.claude/skills`
-  в gitignore — git на Windows их не восстановит). Интерфейс прогнан по
-  `emil-design-eng` и `apple-design`.
+- Интерфейс прогнан по `emil-design-eng` и `apple-design` из `emilkowalski/skills`.
+  Сами скиллы в репозитории НЕ лежат (чужой код, `.agents/` и `.claude/` в
+  gitignore) — ставятся одной командой `npx skills add emilkowalski/skills`,
+  состав зафиксирован в `skills-lock.json`.
 - `UI/SettingsForm.cs` — окно настроек на этой системе. Разметка — явный
   `TableLayoutPanel` (контент + футер), НЕ Dock.Fill+Dock.Bottom: порядок докинга
   в WinForms зависит от z-order и ломается при правках.
