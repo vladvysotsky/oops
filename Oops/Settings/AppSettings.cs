@@ -6,7 +6,17 @@ namespace Oops.Settings;
 public sealed class AppSettings
 {
     public bool Enabled { get; set; } = true;
-    public bool Autostart { get; set; } = false;
+
+    /// <summary>
+    /// Мастер первого запуска уже показывали.
+    ///
+    /// Автозапуска здесь намеренно НЕТ: единственный источник правды —
+    /// запись в реестре (<see cref="Autostart"/>). Инсталлятор создаёт её сам,
+    /// по галочке в мастере установки, а настройки при первом сохранении
+    /// затирали её значением по умолчанию (false) — галочку приходилось
+    /// ставить заново руками.
+    /// </summary>
+    public bool FirstRunCompleted { get; set; } = false;
 
     /// <summary>Сколько секунд бездействия обнуляют набранный буфер.</summary>
     public int BufferIdleTimeoutSeconds { get; set; } = 30;
@@ -52,6 +62,17 @@ public sealed class AppSettings
     {
         ConvertHotkey = Fix(ConvertHotkey, HotkeyConfig.Default);
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);
+
+        // Два одинаковых сочетания = второй хоткей мёртв: App проверяет раскладку
+        // первой и до регистра дело не доходит вообще — «никакой реакции».
+        // Такое могли сохранить старые сборки, где диалог записи ошибался.
+        if (ConvertHotkey.SameCombo(ChangeCaseHotkey))
+        {
+            ChangeCaseHotkey = HotkeyConfig.ChangeCaseDefault;
+            if (ConvertHotkey.SameCombo(ChangeCaseHotkey))
+                ConvertHotkey = HotkeyConfig.Default;
+        }
+
         if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
         if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;
 
@@ -59,7 +80,10 @@ public sealed class AppSettings
         {
             if (h == null) return fallback;
             bool isAltShift = h.Alt && h.Shift && !h.Ctrl && !h.Win;
-            return isAltShift ? fallback : h;
+            if (isAltShift) return fallback;
+            // Сочетание без единой клавиши сработать не может — только молчать.
+            if (!h.Ctrl && !h.Shift && !h.Alt && !h.Win && h.Key == 0) return fallback;
+            return h;
         }
     }
 

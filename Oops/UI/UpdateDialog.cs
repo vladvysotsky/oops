@@ -8,7 +8,7 @@ namespace Oops.UI;
 /// Окно «доступно обновление»: версия, описание релиза и кнопка установки.
 /// Во время загрузки показывает прогресс вместо кнопок.
 /// </summary>
-public sealed class UpdateDialog : Form
+public sealed class UpdateDialog : ThemedForm
 {
     private const int ContentWidth = 460;
 
@@ -28,9 +28,7 @@ public sealed class UpdateDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        AutoScaleMode = AutoScaleMode.Dpi;
-        BackColor = Theme.Canvas;
-        Font = Theme.Body;
+        // Фон, шрифт, DPI и тёмный заголовок окна приходят из ThemedForm.
 
         _install = new FlatButton { Text = "Обновить", Primary = true, Size = new Size(124, 34) };
         _later = new FlatButton { Text = "Позже", Size = new Size(104, 34), DialogResult = DialogResult.Cancel };
@@ -176,7 +174,7 @@ public sealed class UpdateDialog : Form
         {
             _progress.Visible = false;
             _status.Text = $"Не удалось обновить: {ex.Message}";
-            _status.ForeColor = Theme.AccentPressed;
+            _status.ForeColor = Theme.Danger;   // ошибка обязана отличаться от подсказки цветом
             _install.Enabled = true;
             _later.Enabled = true;
         }

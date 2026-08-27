@@ -16,6 +16,8 @@ public static class Sender
     private const ushort VK_MENU = 0x12;
     private const ushort VK_LWIN = 0x5B;
     private const ushort VK_RWIN = 0x5C;
+    /// <summary>Зарезервированный «ничей» код: нажатие есть, действия нет.</summary>
+    private const ushort VK_NONAME = 0xFC;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
@@ -64,21 +66,45 @@ public static class Sender
     private static extern short GetAsyncKeyState(int nVirtKey);
 
     /// <summary>
-    /// Нейтрализует «тап» Alt. Если Windows видит Alt-down → Alt-up без клавиш
-    /// между ними, она активирует строку меню окна — фокус уходит из поля ввода,
-    /// и последующий SendUnicode печатает в никуда. Безобидный Ctrl-тап, вставленный
-    /// пока Alt ещё зажат, ломает этот шаблон: Alt-down → Ctrl → Alt-up меню не активирует.
-    /// Ctrl без последующей буквы не делает ничего ни в одном приложении.
+    /// Нейтрализует «тап» модификатора. Если Windows видит Alt-down → Alt-up без
+    /// клавиш между ними, она активирует строку меню окна; ровно так же Win-down →
+    /// Win-up открывает «Пуск». В обоих случаях фокус уходит из поля ввода, и
+    /// последующий SendUnicode печатает в никуда.
+    ///
+    /// Безобидный Ctrl-тап, вставленный пока модификатор ещё зажат, ломает этот
+    /// шаблон: Alt-down → Ctrl → Alt-up меню не активирует. Ctrl без последующей
+    /// буквы не делает ничего ни в одном приложении.
+    ///
+    /// Win проверяем не из перестраховки. Хоткей матчится на клавише, которая
+    /// замкнула сочетание, и глотаем мы только её. Если Win нажали ПЕРВОЙ, её
+    /// нажатие ушло в систему целым — сочетание тогда замыкает Alt, глотается он,
+    /// а Windows видит одинокую Win и открывает «Пуск».
     /// </summary>
-    public static void CancelAltMenuActivation()
+    public static void CancelMenuActivation()
     {
-        if ((GetAsyncKeyState(VK_MENU) & 0x8000) == 0) return;
-        var inputs = new[]
+        bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+        bool winDown = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
+                    || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+        if (!altDown && !winDown) return;
+
+        // Для Alt тапаем Ctrl — этот вариант здесь уже проверен и работает.
+        // Для Win тапаем VK_NONAME: это зарезервированный «ничей» код, который
+        // не делает ровно ничего, но считается нажатием клавиши и потому ломает
+        // шаблон «Win нажали и отпустили, ничего между». Ctrl тут не годится —
+        // Win+Ctrl уже часть системных сочетаний.
+        var inputs = new List<INPUT>(4);
+        if (altDown)
         {
-            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } },
-            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
-        };
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } });
+        }
+        if (winDown)
+        {
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_NONAME } } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_NONAME, dwFlags = KEYEVENTF_KEYUP } } });
+        }
+        var arr = inputs.ToArray();
+        SendInput((uint)arr.Length, arr, Marshal.SizeOf<INPUT>());
     }
 
     /// <summary>
@@ -177,6 +203,20 @@ public static class Sender
     /// Переводы строк нормализуются к одиночному CR: KEYEVENTF_UNICODE порождает
     /// WM_CHAR, а стандартные поля ввода трактуют как перенос именно 0x0D. Пара
     /// "\r\n" дала бы два переноса вместо одного.
+    ///
+    /// ЗАЖАТЫЙ ALT СНИМАЕТСЯ ПЕРЕД КАЖДЫМ СИМВОЛОМ — это не перестраховка.
+    /// Windows решает, что послать окну, по состоянию именно Alt: при зажатом
+    /// Alt вместо WM_CHAR уходит WM_SYSCHAR, а его поля ввода игнорируют (ещё и
+    /// пищат). Символ просто пропадает. Ctrl на это не влияет — под Ctrl
+    /// KEYEVENTF_UNICODE доходит как обычный WM_CHAR.
+    ///
+    /// Отсюда и разница, из-за которой хоткей раскладки (Ctrl+Win) работал, а
+    /// регистра (Alt+Win) — нет: WaitForModifiersReleased ждёт отпускания не
+    /// дольше секунды, и если человек держит аккорд дольше, ReleaseHotkeyModifiers
+    /// не помогает — автоповтор удерживаемой клавиши возвращает Alt обратно.
+    /// Бэкспейсы при этом проходили (там модификаторы снимаются в каждой посылке),
+    /// поэтому со стороны это выглядело как «стёрло и ничего не написало» или,
+    /// на пустом буфере, как полное отсутствие реакции.
     /// </summary>
     public static void SendUnicode(string text)
     {
@@ -184,12 +224,19 @@ public static class Sender
         text = text.Replace("\r\n", "\r").Replace('\n', '\r');
 
         int sz = Marshal.SizeOf<INPUT>();
-        var pair = new INPUT[2];
+        var batch = new INPUT[5];
+        // Гасим Alt (он решает WM_CHAR/WM_SYSCHAR) и обе Win — под зажатым Win
+        // символ может уйти в системный шорткат. Ctrl и Shift не трогаем:
+        // на KEYEVENTF_UNICODE они не влияют, а лишние события ввода — риск.
+        batch[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_MENU, dwFlags = KEYEVENTF_KEYUP } } };
+        batch[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_LWIN, dwFlags = KEYEVENTF_KEYUP } } };
+        batch[2] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_RWIN, dwFlags = KEYEVENTF_KEYUP } } };
+
         foreach (var ch in text)
         {
-            pair[0] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } } };
-            pair[1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } } };
-            SendInput(2, pair, sz);
+            batch[3] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } } };
+            batch[4] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } } };
+            SendInput(5, batch, sz);
             System.Threading.Thread.Sleep(25);
         }
     }
