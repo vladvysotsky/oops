@@ -93,7 +93,7 @@ public sealed class App : IDisposable
             // одно удержание Ctrl+Win даёт десятки шагов подряд.
             if (e.IsRepeat) return;
             // Пока Alt ещё зажат — гасим активацию строки меню, иначе уедет фокус.
-            Sender.CancelAltMenuActivation();
+            Sender.CancelMenuActivation();
             _uiContext.Post(_ => RunStep(layout: true, pressedAtUtc), null);
             return;
         }
@@ -102,7 +102,7 @@ public sealed class App : IDisposable
         {
             e.Handled = true;
             if (e.IsRepeat) return;
-            Sender.CancelAltMenuActivation();
+            Sender.CancelMenuActivation();
             _uiContext.Post(_ => RunStep(layout: false, pressedAtUtc), null);
             return;
         }

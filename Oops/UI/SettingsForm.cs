@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Oops.Core;
 using Oops.Hooks;
@@ -70,7 +69,9 @@ public sealed class SettingsForm : ThemedForm
     // ширину подписей: без ограничения AutoSize-лейбл требует свою полную ширину
     // и выдавливает правую колонку за границу карточки.
     private const int ReservedCheck = 24;
-    private const int ReservedHotkey = 250;   // клавиши 150 + отступ 8 + кнопка 92
+    /// <summary>Ширина поля с клавишами. Хватает на три: «Ctrl+Alt+Shift».</summary>
+    private const int HotkeyWidth = 190;
+    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
     private const int ReservedNumber = 104;   // поле 64 + отступ 8 + подпись
 
     private void BuildLayout()
@@ -163,11 +164,11 @@ public sealed class SettingsForm : ThemedForm
     {
         var card = NewCard(out var rows);
         AddAutoRow(rows, HotkeyRow(
-            "Раскладка", "Меняет RU ↔ EN у последнего слова",
+            "Раскладка", "Меняет RU ↔ EN",
             _convertKeys, () => RecordInto(ref _convertHotkey, _convertKeys)));
         AddAutoRow(rows, Divider());
         AddAutoRow(rows, HotkeyRow(
-            "Регистр", "ВЕРХНИЙ ↔ нижний по той же логике",
+            "Регистр", "ВЕРХНИЙ ↔ нижний",
             _caseKeys, () => RecordInto(ref _caseHotkey, _caseKeys)));
         return card;
     }
@@ -421,7 +422,7 @@ public sealed class SettingsForm : ThemedForm
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
     {
-        display.Size = new Size(150, 30);
+        display.Size = new Size(HotkeyWidth, 30);
         display.Margin = new Padding(0, 0, Theme.S2, 0);
         display.Click += (_, _) => record();   // сами клавиши и есть кнопка «изменить»
 
@@ -560,15 +561,20 @@ public sealed class SettingsForm : ThemedForm
 /// </summary>
 public sealed class HotkeyRecordDialog : ThemedForm
 {
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
-    private const int VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_CONTROL = 0x11, VK_SHIFT = 0x10, VK_MENU = 0x12;
-
     public HotkeyConfig? Result { get; private set; }
 
     private readonly HotkeyDisplay _preview = new();
     private readonly Label _hint = new();
     private readonly KeyboardHook _hook = new();
-    private readonly System.Windows.Forms.Timer _release = new() { Interval = 30 };
+
+    /// <summary>
+    /// Зажатые сейчас клавиши, посчитанные нами по нажатиям и отпусканиям.
+    /// Спрашивать GetAsyncKeyState здесь нельзя: мы глотаем нажатия, а
+    /// проглоченное хуком событие не обновляет состояние клавиш в системе —
+    /// она отвечает «всё отпущено» сразу после первой же клавиши, и диалог
+    /// закрывался, запомнив только её.
+    /// </summary>
+    private readonly HashSet<int> _down = new();
 
     private bool _ctrl, _shift, _alt, _win;
     private int _key;
@@ -593,7 +599,9 @@ public sealed class HotkeyRecordDialog : ThemedForm
         _preview.SetCombo(string.Empty);
         card.Controls.Add(_preview);
 
-        _hint.Text = "Нажмите сочетание и отпустите клавиши. Esc — отмена.";
+        _hint.Text = "Нажмите сочетание и отпустите клавиши. Можно из одних "
+                   + "модификаторов (Ctrl + Alt + Win) или с обычной клавишей "
+                   + "(Ctrl + Alt + X). Esc — отмена.";
         _hint.Font = Theme.Caption;
         _hint.ForeColor = Theme.TextMuted;
         _hint.AutoSize = true;
@@ -620,11 +628,8 @@ public sealed class HotkeyRecordDialog : ThemedForm
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
-        _hook.KeyDown += OnHookKey;
-        // Хук отдаёт только нажатия, а фиксировать сочетание надо на отпускании.
-        // Опрашиваем состояние клавиш таймером — это проще и надёжнее, чем
-        // тянуть события отпускания через ещё один канал.
-        _release.Tick += (_, _) => TryCommit();
+        _hook.KeyDown += OnHookKeyDown;
+        _hook.KeyUp += OnHookKeyUp;
     }
 
     protected override void OnLoad(EventArgs e)
@@ -635,16 +640,13 @@ public sealed class HotkeyRecordDialog : ThemedForm
         {
             _hint.Text = "Не удалось перехватить клавиатуру. Закройте окно и попробуйте снова.";
             _hint.ForeColor = Theme.Danger;
-            return;
         }
-        _release.Start();
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
-        _release.Stop();
-        _release.Dispose();
-        _hook.KeyDown -= OnHookKey;
+        _hook.KeyDown -= OnHookKeyDown;
+        _hook.KeyUp -= OnHookKeyUp;
         _hook.Dispose();
         base.OnFormClosed(e);
     }
@@ -655,7 +657,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
           or Keys.Menu or Keys.LMenu or Keys.RMenu
           or Keys.LWin or Keys.RWin;
 
-    private void OnHookKey(object? sender, KeyboardHook.KeyEvent e)
+    private void OnHookKeyDown(object? sender, KeyboardHook.KeyEvent e)
     {
         // Пока окно записи открыто, наружу не уходит ничего: иначе тап Win
         // откроет меню «Пуск», а Alt уведёт фокус в строку меню.
@@ -670,6 +672,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
             return;
         }
 
+        _down.Add((int)e.VirtualKey);
         _anyPressed = true;
         if (e.Ctrl) _ctrl = true;
         if (e.Shift) _shift = true;
@@ -680,19 +683,19 @@ public sealed class HotkeyRecordDialog : ThemedForm
         _preview.SetCombo(Current().ToString());
     }
 
+    private void OnHookKeyUp(object? sender, KeyboardHook.KeyEvent e)
+    {
+        // Отпускания тоже глотаем: нажатие мы уже съели, и «висячее» отпускание
+        // приложение всё равно поймёт неправильно.
+        e.Handled = true;
+        _down.Remove((int)e.VirtualKey);
+        TryCommit();
+    }
+
     /// <summary>Фиксирует сочетание, когда пользователь отпустил все клавиши.</summary>
     private void TryCommit()
     {
-        if (!_anyPressed) return;
-
-        bool stillDown =
-            (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 ||
-            (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0 ||
-            (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 ||
-            (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
-            (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0 ||
-            (_key != 0 && (GetAsyncKeyState(_key) & 0x8000) != 0);
-        if (stillDown) return;
+        if (!_anyPressed || _down.Count > 0) return;
         if (!_ctrl && !_shift && !_alt && !_win && _key == 0) { Reset(); return; }
 
         // Alt+Shift — системный шорткат смены раскладки Windows: до нас он не дойдёт.
@@ -719,6 +722,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
         _ctrl = _shift = _alt = _win = false;
         _key = 0;
         _anyPressed = false;
+        _down.Clear();
         _preview.SetCombo(string.Empty);
     }
 

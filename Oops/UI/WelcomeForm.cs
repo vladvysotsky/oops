@@ -21,6 +21,9 @@ public sealed class WelcomeForm : ThemedForm
 {
     private const int ContentWidth = 520;
     private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
+    /// <summary>Ширина поля с клавишами. Хватает на три: «Ctrl+Alt+Shift».</summary>
+    private const int HotkeyWidth = 190;
+    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
 
     private readonly TableLayoutPanel _root;
     private readonly CheckBox _cbAutostart = new();
@@ -154,8 +157,9 @@ public sealed class WelcomeForm : ThemedForm
     private void BuildHotkeys()
     {
         AddRow(_root, Heading("Горячие клавиши",
-            "Сочетания срабатывают по нажатию модификаторов — отдельная буква не нужна. "
-            + "Их всегда можно поменять в настройках."));
+            "Сочетание может быть из одних модификаторов (Ctrl + Win), а может "
+            + "включать обычную клавишу — например Ctrl + Alt + X. Всё меняется "
+            + "потом в настройках."));
 
         var keys = NewCard(out var keyRows);
         AddRow(keyRows, HotkeyRow("Раскладка", "Меняет RU ↔ EN",
@@ -173,8 +177,8 @@ public sealed class WelcomeForm : ThemedForm
 
         AddRow(_root, SectionLabel("ЗАПУСК"));
         var start = NewCard(out var startRows);
-        AddRow(startRows, CheckRow(_cbAutostart, "Запускать при старте Windows",
-            "Запись в реестр HKCU\\…\\Run"));
+        AddRow(startRows, CheckRow(_cbAutostart, "Запускать при входе в Windows",
+            "Иначе после перезагрузки придётся открывать вручную"));
         AddRow(_root, start);
 
         AddRow(_root, Note(
@@ -401,7 +405,7 @@ public sealed class WelcomeForm : ThemedForm
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
     {
-        display.Size = new Size(150, 30);
+        display.Size = new Size(HotkeyWidth, 30);
         display.Margin = new Padding(0, 0, Theme.S2, 0);
         // Click у display подписан один раз в конструкторе: страница пересобирается
         // при каждом «Назад/Далее», и подписка здесь копилась бы с каждым разом.
@@ -421,7 +425,7 @@ public sealed class WelcomeForm : ThemedForm
         group.Controls.Add(display);
         group.Controls.Add(btn);
 
-        return Row(title, hint, group, 250);   // клавиши 150 + отступ 8 + кнопка 92
+        return Row(title, hint, group, ReservedHotkey);
     }
 
     private Control Footer(string primaryText, Action primaryAction, bool showBack)

@@ -64,15 +64,26 @@ public static class Sender
     private static extern short GetAsyncKeyState(int nVirtKey);
 
     /// <summary>
-    /// Нейтрализует «тап» Alt. Если Windows видит Alt-down → Alt-up без клавиш
-    /// между ними, она активирует строку меню окна — фокус уходит из поля ввода,
-    /// и последующий SendUnicode печатает в никуда. Безобидный Ctrl-тап, вставленный
-    /// пока Alt ещё зажат, ломает этот шаблон: Alt-down → Ctrl → Alt-up меню не активирует.
-    /// Ctrl без последующей буквы не делает ничего ни в одном приложении.
+    /// Нейтрализует «тап» модификатора. Если Windows видит Alt-down → Alt-up без
+    /// клавиш между ними, она активирует строку меню окна; ровно так же Win-down →
+    /// Win-up открывает «Пуск». В обоих случаях фокус уходит из поля ввода, и
+    /// последующий SendUnicode печатает в никуда.
+    ///
+    /// Безобидный Ctrl-тап, вставленный пока модификатор ещё зажат, ломает этот
+    /// шаблон: Alt-down → Ctrl → Alt-up меню не активирует. Ctrl без последующей
+    /// буквы не делает ничего ни в одном приложении.
+    ///
+    /// Win проверяем не из перестраховки. Хоткей матчится на клавише, которая
+    /// замкнула сочетание, и глотаем мы только её. Если Win нажали ПЕРВОЙ, её
+    /// нажатие ушло в систему целым — сочетание тогда замыкает Alt, глотается он,
+    /// а Windows видит одинокую Win и открывает «Пуск».
     /// </summary>
-    public static void CancelAltMenuActivation()
+    public static void CancelMenuActivation()
     {
-        if ((GetAsyncKeyState(VK_MENU) & 0x8000) == 0) return;
+        bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+        bool winDown = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
+                    || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+        if (!altDown && !winDown) return;
         var inputs = new[]
         {
             new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } },
