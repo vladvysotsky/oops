@@ -17,15 +17,15 @@ namespace Oops.UI;
 /// Разметка — та же дизайн-система, что и в SettingsForm: вложенные AutoSize
 /// TableLayoutPanel, без фиксированных высот (ломаются при DPI 125/150%).
 /// </summary>
-public sealed class WelcomeForm : Form
+public sealed class WelcomeForm : ThemedForm
 {
     private const int ContentWidth = 520;
     private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
 
     private readonly TableLayoutPanel _root;
     private readonly CheckBox _cbAutostart = new();
-    private readonly HotkeyDisplay _convertKeys = new();
-    private readonly HotkeyDisplay _caseKeys = new();
+    private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
+    private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
 
     private HotkeyConfig _convertHotkey;
     private HotkeyConfig _caseHotkey;
@@ -44,10 +44,8 @@ public sealed class WelcomeForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        AutoScaleMode = AutoScaleMode.Dpi;
-        BackColor = Theme.Canvas;
-        Font = Theme.Body;
         ShowInTaskbar = true;
+        // Фон, шрифт, DPI и тёмный заголовок окна приходят из ThemedForm.
 
         _root = new TableLayoutPanel
         {
@@ -66,6 +64,10 @@ public sealed class WelcomeForm : Form
 
         // Галочка автозапуска отражает реестр: инсталлятор мог уже её поставить.
         _cbAutostart.Checked = Autostart.IsEnabled();
+
+        // Клик по самим клавишам открывает запись — подписка одна на всё окно.
+        _convertKeys.Click += (_, _) => Record(ref _convertHotkey, _convertKeys);
+        _caseKeys.Click += (_, _) => Record(ref _caseHotkey, _caseKeys);
 
         ShowPage(0);
     }
@@ -302,7 +304,7 @@ public sealed class WelcomeForm : Form
     private static Control Example(params string[] lines) => new Label
     {
         Text = string.Join(Environment.NewLine, lines),
-        Font = new Font("Consolas", 9f),
+        Font = Theme.Mono,          // шрифт из дизайн-системы, а не свой на месте
         ForeColor = Theme.Text,
         BackColor = Theme.KeyCapFill,
         AutoSize = true,
@@ -319,8 +321,13 @@ public sealed class WelcomeForm : Form
         Margin = new Padding(0, Theme.S2, 0, Theme.S2),
     };
 
-    /// <summary>Строка «заголовок + пояснение» слева, контрол справа.</summary>
-    private static TableLayoutPanel Row(string title, string hint, Control right, int reservedRight)
+    /// <summary>
+    /// Строка «заголовок + пояснение» слева, контрол справа.
+    /// <paramref name="onActivate"/> — клик по подписи делает то же, что и контрол:
+    /// галочка 20×20 меньше, чем человек целится мышью.
+    /// </summary>
+    private static TableLayoutPanel Row(string title, string hint, Control right, int reservedRight,
+        Action? onActivate = null)
     {
         int textWidth = CardInnerWidth - reservedRight - Theme.S3;
 
@@ -330,6 +337,7 @@ public sealed class WelcomeForm : Form
             RowCount = 1,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, Theme.MinHitHeight),
             BackColor = Color.Transparent,
             Margin = new Padding(0),
             Width = CardInnerWidth,
@@ -340,7 +348,7 @@ public sealed class WelcomeForm : Form
 
         var text = Stack();
         text.Anchor = AnchorStyles.Left;
-        AddRow(text, new Label
+        var titleLabel = new Label
         {
             Text = title,
             Font = Theme.BodyStrong,
@@ -349,8 +357,8 @@ public sealed class WelcomeForm : Form
             MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0, 0, 0, 2),
             BackColor = Color.Transparent,
-        });
-        AddRow(text, new Label
+        };
+        var hintLabel = new Label
         {
             Text = hint,
             Font = Theme.Caption,
@@ -359,7 +367,18 @@ public sealed class WelcomeForm : Form
             MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0),
             BackColor = Color.Transparent,
-        });
+        };
+        AddRow(text, titleLabel);
+        AddRow(text, hintLabel);
+
+        if (onActivate != null)
+        {
+            foreach (var c in new Control[] { titleLabel, hintLabel })
+            {
+                c.Cursor = Cursors.Hand;
+                c.Click += (_, _) => onActivate();
+            }
+        }
 
         right.Anchor = AnchorStyles.Right;
         right.Margin = new Padding(0);
@@ -375,14 +394,17 @@ public sealed class WelcomeForm : Form
         box.AutoSize = false;
         box.Size = new Size(20, 20);
         box.BackColor = Color.Transparent;
+        box.ForeColor = Theme.Text;
         box.Cursor = Cursors.Hand;
-        return Row(title, hint, box, 24);
+        return Row(title, hint, box, 24, () => box.Checked = !box.Checked);
     }
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
     {
         display.Size = new Size(150, 30);
         display.Margin = new Padding(0, 0, Theme.S2, 0);
+        // Click у display подписан один раз в конструкторе: страница пересобирается
+        // при каждом «Назад/Далее», и подписка здесь копилась бы с каждым разом.
 
         var btn = new FlatButton { Text = "Изменить", Size = new Size(92, 30), Margin = new Padding(0) };
         btn.Click += (_, _) => record();

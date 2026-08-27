@@ -52,6 +52,7 @@ public sealed class TrayContext : ApplicationContext
             new ToolStripSeparator(),
             miExit,
         });
+        Theme.ApplyMenuChrome(menu);
 
         _icon = new NotifyIcon
         {
