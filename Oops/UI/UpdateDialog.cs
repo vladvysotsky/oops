@@ -39,6 +39,8 @@ public sealed class UpdateDialog : ThemedForm
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         CancelButton = _later;
+        // Стартовый фокус — на главной кнопке, а не на первом попавшемся контроле.
+        ActiveControl = _install;
     }
 
     private void BuildLayout()
@@ -95,7 +97,15 @@ public sealed class UpdateDialog : ThemedForm
                 ForeColor = Theme.TextMuted,
                 Font = Theme.Caption,
                 Dock = DockStyle.Fill,
+                // Не отдавать полю фокус при открытии: это первый контрол формы,
+                // WinForms фокусирует его автоматически, а TextBox под фокусом
+                // выделяет весь текст — окно открывалось с «синей простынёй».
+                // Выделять и копировать мышью по-прежнему можно.
+                TabStop = false,
             };
+            // TabStop страхует не от всего: у единственного TabStop-контрола
+            // WinForms всё равно может оказаться выделение. Снимаем его явно.
+            notes.GotFocus += (_, _) => notes.SelectionLength = 0;
             card.Controls.Add(notes);
             AddRow(root, card);
         }
