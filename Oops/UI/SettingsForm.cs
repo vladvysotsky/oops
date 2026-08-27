@@ -61,7 +61,7 @@ public sealed class SettingsForm : ThemedForm
     // ---------------------------------------------------------------- layout
 
     /// <summary>Ширина колонки контента (карточки, заголовки). Масштабируется системой по DPI.</summary>
-    private const int ContentWidth = 520;
+    private const int ContentWidth = 580;
 
     /// <summary>Ширина внутренностей карточки (за вычетом её padding).</summary>
     private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
@@ -70,8 +70,13 @@ public sealed class SettingsForm : ThemedForm
     // ширину подписей: без ограничения AutoSize-лейбл требует свою полную ширину
     // и выдавливает правую колонку за границу карточки.
     private const int ReservedCheck = 24;
-    /// <summary>Ширина поля с клавишами. Хватает на три: «Ctrl+Alt+Shift».</summary>
-    private const int HotkeyWidth = 190;
+    /// <summary>
+    /// Ширина поля с клавишами. С запасом на три клавиши с длинными именами
+    /// («Ctrl+Shift+Win»): раньше 190px не хватало, и третья обрезалась.
+    /// Расширено вместе с ContentWidth на одну и ту же величину, чтобы ширина
+    /// подписей слева не изменилась.
+    /// </summary>
+    private const int HotkeyWidth = 250;
     private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
     private const int ReservedNumber = 104;   // поле 64 + отступ 8 + подпись
 
