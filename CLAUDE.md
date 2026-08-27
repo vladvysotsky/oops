@@ -100,8 +100,15 @@
   флаг ставится сразу (иначе Ctrl+Win не матчился из-за тайминга).
 - `Hooks/MouseHook.cs`, `Hooks/ForegroundWatcher.cs` — сброс буфера на клике и
   смене окна.
-- `UI/Theme.cs` — дизайн-система: палитра, типографика, 8px-сетка, `Card`,
-  `FlatButton`, `HotkeyDisplay` (рисует сочетание «клавишами»).
+- `UI/Theme.cs` — дизайн-система: палитра, типографика, 8px-сетка, `ThemedForm`,
+  `Card`, `FlatButton`, `HotkeyDisplay` (рисует сочетание «клавишами»).
+  Палитра — **свойства, а не константы**: читает тёмную тему Windows
+  (`AppsUseLightTheme`) и `SystemInformation.HighContrast`, значения фиксируются
+  один раз при старте. Все окна наследуют `ThemedForm` (фон, шрифт, DPI и тёмный
+  заголовок через `DwmSetWindowAttribute(20)`), меню трея — `ApplyMenuChrome`.
+- Скиллы `emilkowalski/skills` лежат в `.agents/skills` (симлинки `.claude/skills`
+  в gitignore — git на Windows их не восстановит). Интерфейс прогнан по
+  `emil-design-eng` и `apple-design`.
 - `UI/SettingsForm.cs` — окно настроек на этой системе. Разметка — явный
   `TableLayoutPanel` (контент + футер), НЕ Dock.Fill+Dock.Bottom: порядок докинга
   в WinForms зависит от z-order и ломается при правках.
