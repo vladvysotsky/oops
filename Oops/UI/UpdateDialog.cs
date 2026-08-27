@@ -75,7 +75,8 @@ public sealed class UpdateDialog : ThemedForm
             BackColor = Color.Transparent,
         });
 
-        if (!string.IsNullOrWhiteSpace(_release.Notes))
+        var pretty = PrettifyNotes(_release.Notes);
+        if (pretty.Length > 0)
         {
             var card = new Card
             {
@@ -85,7 +86,7 @@ public sealed class UpdateDialog : ThemedForm
             };
             var notes = new TextBox
             {
-                Text = _release.Notes.Replace("\n", Environment.NewLine),
+                Text = pretty.Replace("\n", Environment.NewLine),
                 Multiline = true,
                 ReadOnly = true,
                 BorderStyle = BorderStyle.None,
@@ -139,6 +140,49 @@ public sealed class UpdateDialog : ThemedForm
         host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         host.Controls.Add(child, 0, host.RowCount);
         host.RowCount++;
+    }
+
+    /// <summary>
+    /// Превращает markdown автосгенерированных заметок GitHub в читаемый текст.
+    /// TextBox разметку не понимает, и человек видел «## What's Changed»,
+    /// «* … by @user in https://…» как есть. Полноценный markdown здесь не
+    /// нужен — достаточно убрать синтаксис и служебный шум генератора.
+    /// </summary>
+    public static string PrettifyNotes(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes)) return string.Empty;
+
+        var result = new List<string>();
+        foreach (var raw in notes.Replace("\r\n", "\n").Split('\n'))
+        {
+            var line = raw.TrimEnd();
+
+            // Ссылка «полный список изменений» — служебная строка генератора;
+            // в маленьком окне длинный URL только мешает.
+            if (line.Contains("Full Changelog", StringComparison.OrdinalIgnoreCase)) continue;
+
+            // Заголовки: «## What's Changed» → «What's Changed».
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"^#{1,6}\s+", "");
+
+            // Пункты списка: «* …» / «- …» → «• …».
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"^(\s*)[*-]\s+", "$1• ");
+
+            // «by @user in https://…/pull/123» → «(#123)»: авторство в личном
+            // репозитории очевидно, а ссылку человек всё равно не кликнет.
+            line = System.Text.RegularExpressions.Regex.Replace(line,
+                @"\s+by @[\w-]+ in \S+/pull/(\d+)", " (#$1)");
+
+            // [текст](url) → текст, затем жирный/курсив/код — просто убираем.
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"\[([^\]]+)\]\([^)]*\)", "$1");
+            line = line.Replace("**", "").Replace("`", "");
+
+            result.Add(line);
+        }
+
+        // Схлопываем пустые строки, оставшиеся от выброшенных.
+        var text = string.Join('\n', result);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\n{3,}", "\n\n");
+        return text.Trim();
     }
 
     private async void OnInstallClick(object? sender, EventArgs e)
