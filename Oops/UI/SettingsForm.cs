@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Oops.Core;
+using Oops.Hooks;
 using Oops.Settings;
 
 namespace Oops.UI;
@@ -24,6 +25,14 @@ public sealed class SettingsForm : ThemedForm
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly NumericUpDown _nudIdle = new();
     private readonly NumericUpDown _nudExpand = new();
+
+    // Живая проверка: показывает, что из нажатого реально доходит до программы.
+    // Молчащий хоткей ничем не отличается от неработающей программы, и без
+    // такого окошка отличить «Windows забрал сочетание себе» от «мы его не
+    // узнали» можно было только гаданием.
+    private readonly KeyboardHook _probe = new();
+    private readonly HotkeyDisplay _probeKeys = new();
+    private readonly Label _probeStatus = new();
 
     private HotkeyConfig _convertHotkey;
     private HotkeyConfig _caseHotkey;
@@ -84,6 +93,8 @@ public sealed class SettingsForm : ThemedForm
         AddAutoRow(content, HotkeysCard());
         AddAutoRow(content, SectionLabel("ПОВЕДЕНИЕ"));
         AddAutoRow(content, BehaviourCard());
+        AddAutoRow(content, SectionLabel("ПРОВЕРКА"));
+        AddAutoRow(content, ProbeCard());
         AddAutoRow(content, Footer());
 
         Controls.Add(content);
@@ -175,6 +186,91 @@ public sealed class SettingsForm : ThemedForm
             "После паузы в наборе хоткей будет работать с новым текстом, а не с прежним"));
         return card;
     }
+
+    /// <summary>
+    /// Карточка живой проверки: сюда попадает то, что видит клавиатурный хук.
+    /// Если сочетание нажали, а здесь пусто — его забрала себе Windows и до
+    /// программы оно не доходит; если показано, но написано «не назначено» —
+    /// значит настройки хранят другое сочетание.
+    /// </summary>
+    private Control ProbeCard()
+    {
+        var card = NewCard(out var rows);
+
+        _probeKeys.Size = new Size(ReservedHotkey, 30);
+        _probeKeys.SetCombo(string.Empty);
+        AddAutoRow(rows, Row(
+            "Нажмите сочетание",
+            "Здесь появится то, что дошло до oops",
+            _probeKeys, ReservedHotkey));
+
+        _probeStatus.Text = "Ждём нажатия…";
+        _probeStatus.Font = Theme.Caption;
+        _probeStatus.ForeColor = Theme.TextMuted;
+        _probeStatus.AutoSize = true;
+        _probeStatus.MaximumSize = new Size(CardInnerWidth, 0);
+        _probeStatus.Margin = new Padding(0, Theme.S2, 0, 0);
+        _probeStatus.BackColor = Color.Transparent;
+        AddAutoRow(rows, _probeStatus);
+
+        return card;
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        _probe.KeyDown += OnProbeKey;
+        try { _probe.Install(); }
+        catch { _probeStatus.Text = "Не удалось перехватить клавиатуру."; }
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        _probe.KeyDown -= OnProbeKey;
+        _probe.Dispose();
+        base.OnFormClosed(e);
+    }
+
+    private void OnProbeKey(object? sender, KeyboardHook.KeyEvent e)
+    {
+        if (e.IsRepeat) return;
+
+        bool isConvert = _convertHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
+        bool isCase = !isConvert && _caseHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
+
+        // Совпавшее сочетание глотаем: иначе Win откроет «Пуск» прямо из окна
+        // настроек. Всё остальное пропускаем — окном надо пользоваться.
+        if (isConvert || isCase) e.Handled = true;
+
+        var seen = new HotkeyConfig
+        {
+            Ctrl = e.Ctrl, Shift = e.Shift, Alt = e.Alt, Win = e.Win,
+            Key = IsModifierKey(e.VirtualKey) ? 0 : (int)e.VirtualKey,
+        };
+        _probeKeys.SetCombo(seen.ToString());
+
+        if (isConvert)
+        {
+            _probeStatus.Text = "Совпадает с хоткеем раскладки — сработает.";
+            _probeStatus.ForeColor = Theme.Accent;
+        }
+        else if (isCase)
+        {
+            _probeStatus.Text = "Совпадает с хоткеем регистра — сработает.";
+            _probeStatus.ForeColor = Theme.Accent;
+        }
+        else
+        {
+            _probeStatus.Text = "Не совпадает ни с одним из назначенных сочетаний.";
+            _probeStatus.ForeColor = Theme.TextMuted;
+        }
+    }
+
+    private static bool IsModifierKey(Keys k) =>
+        k is Keys.ControlKey or Keys.LControlKey or Keys.RControlKey
+          or Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey
+          or Keys.Menu or Keys.LMenu or Keys.RMenu
+          or Keys.LWin or Keys.RWin;
 
     private Control Footer()
     {
@@ -399,11 +495,22 @@ public sealed class SettingsForm : ThemedForm
 
     private void RecordInto(ref HotkeyConfig target, HotkeyDisplay display)
     {
-        using var dlg = new HotkeyRecordDialog();
-        if (dlg.ShowDialog(this) == DialogResult.OK && dlg.Result != null)
+        // Проверочный хук на время записи снимаем: два хука на одну клавиатуру
+        // мешали бы друг другу — проверка глотала бы совпавшее сочетание раньше,
+        // чем диалог успел бы его записать.
+        _probe.Uninstall();
+        try
         {
-            target = dlg.Result;
-            display.SetCombo(target.ToString());
+            using var dlg = new HotkeyRecordDialog();
+            if (dlg.ShowDialog(this) == DialogResult.OK && dlg.Result != null)
+            {
+                target = dlg.Result;
+                display.SetCombo(target.ToString());
+            }
+        }
+        finally
+        {
+            try { _probe.Install(); } catch { }
         }
     }
 
@@ -440,9 +547,16 @@ public sealed class SettingsForm : ThemedForm
 }
 
 /// <summary>
-/// Диалог записи хоткея: копит нажатые клавиши и фиксирует комбинацию,
-/// когда пользователь отпустил всё. Win-клавишу WinForms не отдаёт через
-/// Modifiers, поэтому читаем её через GetAsyncKeyState.
+/// Диалог записи хоткея.
+///
+/// Слушает НАШ ЖЕ низкоуровневый хук, а не события WinForms. Это не
+/// оптимизация, а единственный рабочий вариант: клавишу Win Windows форме не
+/// отдаёт вовсе (её забирает оболочка), поэтому сочетание, заканчивающееся на
+/// Win, через KeyDown записать нельзя — в лучшем случае получался огрызок без
+/// Win, который потом молча не совпадал ни с одним нажатием.
+///
+/// Побочная выгода: записывается ровно то, что увидит HotkeyConfig.Matches —
+/// тот же vk и те же флаги модификаторов из одного источника.
 /// </summary>
 public sealed class HotkeyRecordDialog : ThemedForm
 {
@@ -453,6 +567,9 @@ public sealed class HotkeyRecordDialog : ThemedForm
 
     private readonly HotkeyDisplay _preview = new();
     private readonly Label _hint = new();
+    private readonly KeyboardHook _hook = new();
+    private readonly System.Windows.Forms.Timer _release = new() { Interval = 30 };
+
     private bool _ctrl, _shift, _alt, _win;
     private int _key;
     private bool _anyPressed;
@@ -464,7 +581,6 @@ public sealed class HotkeyRecordDialog : ThemedForm
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        KeyPreview = true;
 
         var card = new Card
         {
@@ -477,7 +593,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
         _preview.SetCombo(string.Empty);
         card.Controls.Add(_preview);
 
-        _hint.Text = "Нажмите сочетание и отпустите клавиши.";
+        _hint.Text = "Нажмите сочетание и отпустите клавиши. Esc — отмена.";
         _hint.Font = Theme.Caption;
         _hint.ForeColor = Theme.TextMuted;
         _hint.AutoSize = true;
@@ -504,8 +620,33 @@ public sealed class HotkeyRecordDialog : ThemedForm
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
-        KeyDown += OnKeyDown;
-        KeyUp += OnKeyUp;
+        _hook.KeyDown += OnHookKey;
+        // Хук отдаёт только нажатия, а фиксировать сочетание надо на отпускании.
+        // Опрашиваем состояние клавиш таймером — это проще и надёжнее, чем
+        // тянуть события отпускания через ещё один канал.
+        _release.Tick += (_, _) => TryCommit();
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        try { _hook.Install(); }
+        catch
+        {
+            _hint.Text = "Не удалось перехватить клавиатуру. Закройте окно и попробуйте снова.";
+            _hint.ForeColor = Theme.Danger;
+            return;
+        }
+        _release.Start();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        _release.Stop();
+        _release.Dispose();
+        _hook.KeyDown -= OnHookKey;
+        _hook.Dispose();
+        base.OnFormClosed(e);
     }
 
     private static bool IsModifier(Keys k) =>
@@ -514,21 +655,33 @@ public sealed class HotkeyRecordDialog : ThemedForm
           or Keys.Menu or Keys.LMenu or Keys.RMenu
           or Keys.LWin or Keys.RWin;
 
-    private void OnKeyDown(object? sender, KeyEventArgs e)
+    private void OnHookKey(object? sender, KeyboardHook.KeyEvent e)
     {
+        // Пока окно записи открыто, наружу не уходит ничего: иначе тап Win
+        // откроет меню «Пуск», а Alt уведёт фокус в строку меню.
+        e.Handled = true;
+        if (e.IsRepeat) return;
+
+        // Esc без модификаторов — отмена, а не записываемое сочетание.
+        if (e.VirtualKey == Keys.Escape && !e.Ctrl && !e.Shift && !e.Alt && !e.Win)
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return;
+        }
+
         _anyPressed = true;
-        if ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0) _win = true;
-        if (e.Control) _ctrl = true;
+        if (e.Ctrl) _ctrl = true;
         if (e.Shift) _shift = true;
         if (e.Alt) _alt = true;
-        if (!IsModifier(e.KeyCode)) _key = (int)e.KeyCode;
+        if (e.Win) _win = true;
+        if (!IsModifier(e.VirtualKey)) _key = (int)e.VirtualKey;
 
         _preview.SetCombo(Current().ToString());
-        e.Handled = true;
-        e.SuppressKeyPress = true;
     }
 
-    private void OnKeyUp(object? sender, KeyEventArgs e)
+    /// <summary>Фиксирует сочетание, когда пользователь отпустил все клавиши.</summary>
+    private void TryCommit()
     {
         if (!_anyPressed) return;
 
@@ -537,25 +690,36 @@ public sealed class HotkeyRecordDialog : ThemedForm
             (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0 ||
             (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 ||
             (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
-            (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+            (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0 ||
+            (_key != 0 && (GetAsyncKeyState(_key) & 0x8000) != 0);
         if (stillDown) return;
-        if (!_ctrl && !_shift && !_alt && !_win && _key == 0) return;
+        if (!_ctrl && !_shift && !_alt && !_win && _key == 0) { Reset(); return; }
 
         // Alt+Shift — системный шорткат смены раскладки Windows: до нас он не дойдёт.
         if (_alt && _shift && !_ctrl && !_win)
         {
-            _hint.Text = "Alt+Shift занят Windows (смена раскладки). Выберите другое.";
-            _hint.ForeColor = Theme.Danger;   // ошибка обязана отличаться от подсказки цветом
-            _ctrl = _shift = _alt = _win = false;
-            _key = 0;
-            _anyPressed = false;
-            _preview.SetCombo(string.Empty);
+            Fail("Alt+Shift занят Windows (смена раскладки). Выберите другое.");
             return;
         }
 
         Result = Current();
         DialogResult = DialogResult.OK;
         Close();
+    }
+
+    private void Fail(string message)
+    {
+        _hint.Text = message;
+        _hint.ForeColor = Theme.Danger;   // ошибка обязана отличаться от подсказки цветом
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _ctrl = _shift = _alt = _win = false;
+        _key = 0;
+        _anyPressed = false;
+        _preview.SetCombo(string.Empty);
     }
 
     private HotkeyConfig Current() =>
