@@ -62,6 +62,7 @@ public sealed class App : IDisposable
     {
         _buffer.IdleTimeout = TimeSpan.FromSeconds(Settings.BufferIdleTimeoutSeconds);
         _scope.ExpandWindow = TimeSpan.FromSeconds(Settings.ExpandWindowSeconds);
+        Sender.UseCharByChar(Settings.CharByCharTyping);
     }
 
     private void ResetAll()

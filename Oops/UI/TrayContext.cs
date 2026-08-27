@@ -32,12 +32,10 @@ public sealed class TrayContext : ApplicationContext
         _miUpdate.Click += async (_, _) => await CheckForUpdatesAsync(silent: false);
 
         var miAbout = new ToolStripMenuItem("О программе");
-        miAbout.Click += (_, _) => MessageBox.Show(
-            $"oops {UpdateService.CurrentVersion}\n\n"
-            + "Правит раскладку и регистр набранного текста.\n"
-            + "Границу задаёте вы: каждое следующее нажатие хоткея\n"
-            + "захватывает ещё одно слово.",
-            "О программе", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        miAbout.Click += (_, _) => Notice.Info(null, $"oops {UpdateService.CurrentVersion}",
+            "Правит раскладку и регистр набранного текста. Границу задаёте вы: "
+            + "первое нажатие хоткея берёт последнее слово, второе — весь набранный текст.",
+            "Настройки — двойной клик по иконке в трее.");
 
         var miExit = new ToolStripMenuItem("Выход");
         miExit.Click += (_, _) => ExitThread();
@@ -98,8 +96,15 @@ public sealed class TrayContext : ApplicationContext
                 // Автозапуск форма записывает в реестр сама: держать его копию в
                 // settings.json нельзя — она затирала галочку, поставленную в
                 // инсталляторе, при первом же сохранении настроек.
-                _app.Settings.Save();
+                var error = _app.Settings.Save();
                 _app.ApplySettings();
+
+                if (error != null)
+                    Notice.Error(null, "Настройки не сохранились",
+                        "Изменения действуют прямо сейчас, но после перезапуска "
+                        + "программа вернётся к прежним.",
+                        $"Проверьте, доступна ли для записи папка:\n{AppSettings.Location}",
+                        error, reportContext: "Не удалось сохранить настройки");
             }
         }
         finally
@@ -139,16 +144,29 @@ public sealed class TrayContext : ApplicationContext
             if (check.Failed)
             {
                 if (!silent)
-                    MessageBox.Show("Не удалось связаться с GitHub.\nПроверьте подключение к интернету.",
-                        "Обновление", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Notice.Warn(null, "Не удалось проверить обновления",
+                        "GitHub не ответил. Обычно это интернет или временный сбой на их стороне.",
+                        "Программа продолжает работать; можно скачать новую версию вручную "
+                        + $"со страницы релизов: {UpdateService.ReleasesPageUrl}");
+                return;
+            }
+
+            if (check.Unavailable)
+            {
+                if (!silent)
+                    Notice.Warn(null, "Репозиторий недоступен",
+                        "GitHub отвечает, что такого репозитория нет. Обычно это значит, "
+                        + "что он закрыт (private) или переименован.",
+                        "Пока это так, обновления проверяться не будут ни у кого — "
+                        + $"как и скачивание по ссылке {UpdateService.ReleasesPageUrl}");
                 return;
             }
 
             if (check.NoReleases)
             {
                 if (!silent)
-                    MessageBox.Show("В репозитории пока нет опубликованных релизов.",
-                        "Обновление", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Notice.Info(null, "Обновлений нет",
+                        "В репозитории пока не опубликовано ни одного релиза.");
                 return;
             }
 
@@ -156,20 +174,22 @@ public sealed class TrayContext : ApplicationContext
             if (!UpdateService.IsNewer(release))
             {
                 if (!silent)
-                    MessageBox.Show($"Установлена последняя версия ({UpdateService.CurrentVersion}).",
-                        "Обновление", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Notice.Info(null, "Установлена последняя версия",
+                        $"У вас {UpdateService.CurrentVersion} — новее пока нет.");
                 return;
             }
 
             using var dlg = new UpdateDialog(release);
             dlg.ShowDialog();
         }
-        catch
+        catch (Exception ex)
         {
             // Проверка обновлений не должна мешать работе приложения.
             if (!silent)
-                MessageBox.Show("Не удалось проверить обновления.",
-                    "Обновление", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Notice.Error(null, "Не удалось проверить обновления",
+                    "Что-то пошло не так при обращении к GitHub.",
+                    $"Скачать новую версию вручную можно здесь: {UpdateService.ReleasesPageUrl}",
+                    ex.ToString(), reportContext: "Ошибка проверки обновлений");
         }
         finally
         {

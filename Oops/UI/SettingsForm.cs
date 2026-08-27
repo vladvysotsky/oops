@@ -20,6 +20,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbEnabled = new();
     private readonly CheckBox _cbAutostart = new();
     private readonly CheckBox _cbAutoUpdate = new();
+    private readonly CheckBox _cbCharByChar = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly NumericUpDown _nudIdle = new();
@@ -185,6 +186,10 @@ public sealed class SettingsForm : ThemedForm
         _nudIdle.Minimum = 5; _nudIdle.Maximum = 600;
         AddAutoRow(rows, NumberRow(_nudIdle, "Забывать набранное через", "сек",
             "После паузы в наборе хоткей будет работать с новым текстом, а не с прежним"));
+        AddAutoRow(rows, Divider());
+
+        AddAutoRow(rows, CheckRow(_cbCharByChar, "Печатать медленно, по одному символу",
+            "Включайте, если в каком-то приложении текст вставляется с потерями"));
         return card;
     }
 
@@ -488,6 +493,7 @@ public sealed class SettingsForm : ThemedForm
         // в инсталляторе, и окно настроек обязано показывать её фактическое состояние.
         _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
+        _cbCharByChar.Checked = _settings.CharByCharTyping;
         _nudIdle.Value = Math.Clamp(_settings.BufferIdleTimeoutSeconds, (int)_nudIdle.Minimum, (int)_nudIdle.Maximum);
         _nudExpand.Value = Math.Clamp(_settings.ExpandWindowSeconds, (int)_nudExpand.Minimum, (int)_nudExpand.Maximum);
         _convertKeys.SetCombo(_convertHotkey.ToString());
@@ -527,15 +533,16 @@ public sealed class SettingsForm : ThemedForm
         // второй хоткей просто перестал бы отвечать — без единого признака.
         if (_convertHotkey.SameCombo(_caseHotkey))
         {
-            MessageBox.Show(this,
-                "Раскладка и регистр не могут висеть на одном сочетании — "
-                + "сработает только первое. Назначьте разные.",
-                "oops", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Notice.Warn(this, "Сочетания совпадают",
+                "Раскладка и регистр не могут висеть на одном сочетании: сработает "
+                + "только первое, второе будет молчать без единого признака.",
+                "Назначьте разные — например, раскладке Ctrl + Win, регистру Alt + Win.");
             return false;
         }
 
         _settings.Enabled = _cbEnabled.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
+        _settings.CharByCharTyping = _cbCharByChar.Checked;
         _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
         _settings.ExpandWindowSeconds = (int)_nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;

@@ -1,0 +1,59 @@
+name: Сообщить об ошибке
+description: Что-то работает не так
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Если вы пришли сюда по кнопке «Сообщить об ошибке» из самой программы,
+        версия и подробности уже подставлены — просто допишите, что вы делали.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Что произошло
+      description: Что вы делали и что получилось вместо ожидаемого.
+      placeholder: |
+        Набрал «ghbdtn», нажал Ctrl+Win — текст стёрся, но ничего не напечаталось.
+    validations:
+      required: true
+
+  - type: input
+    id: app
+    attributes:
+      label: В каком приложении
+      description: Раскладка правится через эмуляцию клавиатуры, и приёмники ведут себя по-разному.
+      placeholder: Slack / Chrome / Блокнот / VS Code
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия oops
+      description: Меню в трее → «О программе».
+      placeholder: 1.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hotkey-check
+    attributes:
+      label: Что показывает карточка «ПРОВЕРКА» в настройках
+      description: |
+        Настройки → раздел ПРОВЕРКА → нажмите своё сочетание.
+        Это сразу отделяет «Windows забрала сочетание себе» от «программа его не узнала».
+      options:
+        - Сочетание показано, написано «сработает»
+        - Сочетание показано, но «не совпадает ни с одним»
+        - Ничего не появляется
+        - Ошибка не про горячие клавиши
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Подробности
+      description: Текст из «Подробности» в окне ошибки, если оно было.
+      render: text
