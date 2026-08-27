@@ -75,6 +75,9 @@ internal static class Theme
     /// </summary>
     public static Color Danger => Pick(
         Color.FromArgb(0xC0, 0x32, 0x26), Color.FromArgb(0xFF, 0x7B, 0x6E), SystemColors.WindowText);
+    /// <summary>Предупреждение — не отказ, но требует внимания.</summary>
+    public static Color Warning => Pick(
+        Color.FromArgb(0xB5, 0x6B, 0x00), Color.FromArgb(0xF0, 0xA8, 0x3C), SystemColors.WindowText);
     /// <summary>Заливка «клавиши» в поле хоткея.</summary>
     public static Color KeyCapFill => Pick(
         Color.FromArgb(0xF1, 0xF3, 0xF7), Color.FromArgb(0x26, 0x2A, 0x32), SystemColors.Control);

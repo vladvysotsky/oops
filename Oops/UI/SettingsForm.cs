@@ -533,10 +533,10 @@ public sealed class SettingsForm : ThemedForm
         // второй хоткей просто перестал бы отвечать — без единого признака.
         if (_convertHotkey.SameCombo(_caseHotkey))
         {
-            MessageBox.Show(this,
-                "Раскладка и регистр не могут висеть на одном сочетании — "
-                + "сработает только первое. Назначьте разные.",
-                "oops", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Notice.Warn(this, "Сочетания совпадают",
+                "Раскладка и регистр не могут висеть на одном сочетании: сработает "
+                + "только первое, второе будет молчать без единого признака.",
+                "Назначьте разные — например, раскладке Ctrl + Win, регистру Alt + Win.");
             return false;
         }
 
