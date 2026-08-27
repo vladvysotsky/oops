@@ -11,7 +11,7 @@
 #define MyAppName       "oops"
 ; Версию можно передать снаружи: ISCC /DMyAppVersion=1.2.3 (так делает CI).
 #ifndef MyAppVersion
-  #define MyAppVersion  "1.2.2"
+  #define MyAppVersion  "1.2.3"
 #endif
 #define MyAppPublisher  "oops"
 #define MyAppURL        "https://github.com/vladvysotsky/oops"
