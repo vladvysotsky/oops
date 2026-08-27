@@ -38,6 +38,14 @@ public static class UpdateService
 
     public static string ReleasesPageUrl => $"https://github.com/{Owner}/{Repo}/releases";
 
+    /// <summary>
+    /// Ссылка на новый issue с уже заполненными заголовком и телом. Пересказывать
+    /// ошибку своими словами человек не должен — он её и не понял.
+    /// </summary>
+    public static string NewIssueUrl(string title, string body) =>
+        $"https://github.com/{Owner}/{Repo}/issues/new"
+        + $"?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+
     /// <summary>Версия текущей сборки.</summary>
     public static Version CurrentVersion =>
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);

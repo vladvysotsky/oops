@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Oops.Core;
 
 namespace Oops.Settings;
@@ -45,6 +46,15 @@ public sealed class AppSettings
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");
 
+    /// <summary>
+    /// Почему настройки не прочитались, если файл был. Заполняется при загрузке
+    /// и показывается один раз при старте: молча вернуть дефолты — значит отобрать
+    /// у человека настроенные хоткеи без единого слова, и он решит, что программа
+    /// сломалась сама.
+    /// </summary>
+    [JsonIgnore]
+    public string? LoadError { get; private set; }
+
     public static AppSettings Load()
     {
         try
@@ -54,9 +64,13 @@ public sealed class AppSettings
                 var json = File.ReadAllText(FilePath);
                 var s = JsonSerializer.Deserialize<AppSettings>(json);
                 if (s != null) { s.Sanitize(); return s; }
+                return new AppSettings { LoadError = "Файл настроек пуст." };
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            return new AppSettings { LoadError = ex.Message };
+        }
         return new AppSettings();
     }
 
@@ -95,7 +109,12 @@ public sealed class AppSettings
         }
     }
 
-    public void Save()
+    /// <summary>
+    /// Сохраняет настройки. Возвращает текст ошибки, если не удалось, — раньше
+    /// отказ проглатывался, и человек закрывал окно в уверенности, что хоткеи
+    /// переназначены, а после перезапуска получал прежние.
+    /// </summary>
+    public string? Save()
     {
         try
         {
@@ -103,7 +122,14 @@ public sealed class AppSettings
             Directory.CreateDirectory(dir);
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(FilePath, json);
+            return null;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
     }
+
+    /// <summary>Куда пишутся настройки — чтобы показать путь в сообщении об ошибке.</summary>
+    public static string Location => FilePath;
 }
