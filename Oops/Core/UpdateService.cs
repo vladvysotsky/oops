@@ -67,10 +67,17 @@ public static class UpdateService
     /// </summary>
     /// <param name="Release">Последний релиз, если он есть.</param>
     /// <param name="Failed">Запрос не удался: нет сети, лимит, ошибка сервера.</param>
-    public readonly record struct CheckResult(ReleaseInfo? Release, bool Failed)
+    /// <param name="Unavailable">
+    /// Репозитория для нас не существует: он закрытый (private), переименован
+    /// или удалён. Отличать обязательно — на анонимный запрос к приватному
+    /// репозиторию GitHub отвечает 404, а не 403: он скрывает сам факт
+    /// существования. Без этой проверки закрытый репозиторий выглядел как
+    /// «релизов пока нет», и причину было не угадать.
+    /// </param>
+    public readonly record struct CheckResult(ReleaseInfo? Release, bool Failed, bool Unavailable = false)
     {
         /// <summary>Запрос прошёл, но опубликованных релизов в репозитории нет.</summary>
-        public bool NoReleases => !Failed && Release is null;
+        public bool NoReleases => !Failed && !Unavailable && Release is null;
     }
 
     /// <summary>
@@ -84,9 +91,17 @@ public static class UpdateService
             using var client = CreateClient();
             using var response = await client.GetAsync(LatestReleaseApi, ct).ConfigureAwait(false);
 
-            // 404 — репозиторий доступен, но релизов ещё не публиковали.
+            // 404 значит одно из двух: релизов ещё нет ИЛИ репозиторий нам не
+            // виден. Различаем вторым запросом — иначе закрытый репозиторий
+            // сообщает «релизов нет», и человек ищет причину не там.
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                return new CheckResult(null, Failed: false);
+            {
+                using var probe = await client
+                    .GetAsync(new Uri($"https://api.github.com/repos/{Owner}/{Repo}"), ct)
+                    .ConfigureAwait(false);
+                bool unavailable = probe.StatusCode == System.Net.HttpStatusCode.NotFound;
+                return new CheckResult(null, Failed: false, Unavailable: unavailable);
+            }
 
             if (!response.IsSuccessStatusCode) return new CheckResult(null, Failed: true);
 
