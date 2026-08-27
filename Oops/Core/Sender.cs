@@ -16,6 +16,8 @@ public static class Sender
     private const ushort VK_MENU = 0x12;
     private const ushort VK_LWIN = 0x5B;
     private const ushort VK_RWIN = 0x5C;
+    /// <summary>Зарезервированный «ничей» код: нажатие есть, действия нет.</summary>
+    private const ushort VK_NONAME = 0xFC;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
@@ -84,12 +86,25 @@ public static class Sender
         bool winDown = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0
                     || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
         if (!altDown && !winDown) return;
-        var inputs = new[]
+
+        // Для Alt тапаем Ctrl — этот вариант здесь уже проверен и работает.
+        // Для Win тапаем VK_NONAME: это зарезервированный «ничей» код, который
+        // не делает ровно ничего, но считается нажатием клавиши и потому ломает
+        // шаблон «Win нажали и отпустили, ничего между». Ctrl тут не годится —
+        // Win+Ctrl уже часть системных сочетаний.
+        var inputs = new List<INPUT>(4);
+        if (altDown)
         {
-            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } },
-            new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } },
-        };
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL } } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP } } });
+        }
+        if (winDown)
+        {
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_NONAME } } });
+            inputs.Add(new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_NONAME, dwFlags = KEYEVENTF_KEYUP } } });
+        }
+        var arr = inputs.ToArray();
+        SendInput((uint)arr.Length, arr, Marshal.SizeOf<INPUT>());
     }
 
     /// <summary>
