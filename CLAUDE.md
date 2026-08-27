@@ -91,7 +91,7 @@
   1-в-1; `AutoConvertWithDirection` выбирает сторону по большинству символов.
 - `Core/Sender.cs` — SendInput: `SendBackspaces`, `SendUnicode` (по одному символу
   с задержкой — Electron/React теряют batched-события), `WaitForModifiersReleased`,
-  `ReleaseHotkeyModifiers`, `CancelAltMenuActivation`.
+  `ReleaseHotkeyModifiers`, `CancelMenuActivation`.
 - `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` активному окну.
 - `Core/LayoutTracker.cs` — детект ручной смены раскладки → сброс буфера.
 - `Hooks/KeyboardHook.cs` — `WH_KEYBOARD_LL`. Символ через `ToUnicodeEx` (флаг 0x4
@@ -152,8 +152,16 @@
 - В `SettingsForm` подписи строк обязаны иметь `MaximumSize` по ширине: AutoSize-
   лейбл без лимита требует полную ширину и выталкивает правый контрол за границу
   карточки.
-- Одиночный тап Alt активирует строку меню и уводит фокус → перед работой
-  вызывается `Sender.CancelAltMenuActivation()` (Ctrl-тап, пока Alt зажат).
+- Одиночный тап Alt активирует строку меню, одиночный тап Win открывает «Пуск» —
+  и то и другое уводит фокус → перед работой вызывается
+  `Sender.CancelMenuActivation()` (Ctrl-тап, пока модификатор зажат). Win проверять
+  обязательно: глотаем мы только клавишу, замкнувшую сочетание, и если Win нажали
+  первой, её нажатие ушло в систему целым.
+- **Проглоченное хуком событие НЕ обновляет состояние клавиш в системе.**
+  `GetAsyncKeyState` после `Handled = true` отвечает «клавиша отпущена», хотя её
+  держат. Поэтому `HotkeyRecordDialog` ведёт список зажатых клавиш сам, по
+  событиям `KeyDown`/`KeyUp` хука: с опросом состояния диалог закрывался после
+  первой же клавиши, запомнив только её.
 - Перед Backspace обязательно `WaitForModifiersReleased()`: зажатый Ctrl превратит
   Backspace в Ctrl+Backspace (удаление слова целиком).
 - SendInput большими пачками теряется в Electron/React — слать по одному символу

@@ -77,6 +77,15 @@ public sealed class KeyboardHook : IDisposable
 
     public event EventHandler<KeyEvent>? KeyDown;
 
+    /// <summary>
+    /// Отпускание клавиши. Нужно тем, кто глотает нажатия: проглоченное хуком
+    /// событие НЕ обновляет состояние клавиш в системе, и спрашивать
+    /// GetAsyncKeyState «всё ли отпущено» после этого бессмысленно — система
+    /// ответит «да», потому что нажатия она не видела. Единственный способ вести
+    /// список зажатых клавиш в таком режиме — считать нажатия и отпускания самим.
+    /// </summary>
+    public event EventHandler<KeyEvent>? KeyUp;
+
     public sealed class KeyEvent
     {
         public Keys VirtualKey { get; init; }
@@ -118,12 +127,28 @@ public sealed class KeyboardHook : IDisposable
         const uint LLKHF_INJECTED = 0x10;
         int msg = wParam.ToInt32();
 
-        // Отпускания нужны только чтобы вести список зажатых клавиш.
         if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
         {
             var up = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            if ((up.flags & LLKHF_INJECTED) == 0)
-                _physicallyDown.Remove(up.vkCode);
+            if ((up.flags & LLKHF_INJECTED) != 0)
+                return CallNextHookEx(_hook, nCode, wParam, lParam);
+
+            _physicallyDown.Remove(up.vkCode);
+
+            var upHandler = KeyUp;
+            if (upHandler != null)
+            {
+                var upEvt = new KeyEvent
+                {
+                    VirtualKey = (Keys)up.vkCode,
+                    ScanCode = up.scanCode,
+                };
+                try { upHandler(this, upEvt); }
+                catch { /* hook не должен падать */ }
+
+                if (upEvt.Handled) return (IntPtr)1;
+            }
+
             return CallNextHookEx(_hook, nCode, wParam, lParam);
         }
 

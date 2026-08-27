@@ -64,13 +64,19 @@ public sealed class HotkeyConfig
         return (int)vk == Key;
     }
 
+    /// <summary>
+    /// Порядок Ctrl → Alt → Shift → Win: как в документации и как принято в
+    /// Windows. Раньше Win шла второй, и окно настроек показывало «Win+Alt»
+    /// там, где везде написано «Alt+Win» — при разборе, почему хоткей молчит,
+    /// такое расхождение стоит дороже, чем выглядит.
+    /// </summary>
     public override string ToString()
     {
         var sb = new StringBuilder();
         if (Ctrl) sb.Append("Ctrl+");
-        if (Win) sb.Append("Win+");
         if (Alt) sb.Append("Alt+");
         if (Shift) sb.Append("Shift+");
+        if (Win) sb.Append("Win+");
         if (Key != 0) sb.Append(((Keys)Key).ToString());
         else if (sb.Length > 0) sb.Length--; // убрать висящий '+'
         return sb.ToString();
