@@ -9,7 +9,7 @@
     <AssemblyName>oops</AssemblyName>
     <RootNamespace>Oops</RootNamespace>
     <!-- Значение для локальных сборок. В релизах CI подставляет версию из тега. -->
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
