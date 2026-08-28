@@ -70,8 +70,12 @@ public sealed class SettingsForm : ThemedForm
     // их расхождение (DPI, чуть более длинный текст) резало кнопки и рвало
     // правый край. AutoSize-колонка не может обрезать свой контрол по построению.
 
-    /// <summary>Ширина поля с клавишами: три клавиши с длинными именами.</summary>
-    private const int HotkeyWidth = 250;
+    /// <summary>
+    /// Ширина поля с клавишами: «Ctrl+Shift+Win» помещается с запасом. Шире не
+    /// надо — лишняя ширина отбирает место у подписи слева и заставляет её
+    /// переноситься.
+    /// </summary>
+    private const int HotkeyWidth = 220;
 
     private void BuildLayout()
     {
@@ -339,18 +343,20 @@ public sealed class SettingsForm : ThemedForm
 
     private static Card NewCard(out TableLayoutPanel rows)
     {
-        var card = new Card
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(0),
-            // Ширины у карточки нет: её растягивает колонка контента (якоря
-            // ставит AddAutoRow). Dock ряда уважает Padding карточки — паддинги
-            // одинаковые с обеих сторон по построению, а не по расчёту.
-        };
-        rows = Stack();
-        rows.Dock = DockStyle.Top;
-        card.Controls.Add(rows);
+        // Ширины у карточки нет: её растягивает колонка контента (якоря ставит
+        // AddAutoRow). Dock ряда уважает Padding карточки — паддинги одинаковые
+        // с обеих сторон по построению, а не по расчёту.
+        //
+        // Высота — НЕ AutoSize: он измеряет содержимое неограниченной шириной,
+        // то есть до переноса строк, и карточка выходила ниже фактического
+        // контента — подписи обрезало нижним краем. Берём фактическую высоту
+        // рядов после раскладки.
+        var card = new Card { Margin = new Padding(0) };
+        var r = Stack();
+        r.Dock = DockStyle.Top;
+        card.Controls.Add(r);
+        r.SizeChanged += (_, _) => card.Height = r.Height + card.Padding.Vertical;
+        rows = r;
         return card;
     }
 
