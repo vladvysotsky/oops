@@ -23,8 +23,12 @@ public sealed class WelcomeForm : ThemedForm
     // якорями. Логика та же, что в SettingsForm — см. комментарий там.
     private const int ContentWidth = 580;
 
-    /// <summary>Ширина поля с клавишами: три клавиши с длинными именами.</summary>
-    private const int HotkeyWidth = 250;
+    /// <summary>
+    /// Ширина поля с клавишами: «Ctrl+Shift+Win» помещается с запасом. Шире не
+    /// надо — лишняя ширина отбирает место у подписи слева и заставляет её
+    /// переноситься.
+    /// </summary>
+    private const int HotkeyWidth = 220;
 
     private readonly TableLayoutPanel _root;
     private readonly CheckBox _cbAutostart = new ToggleBox();
@@ -243,15 +247,14 @@ public sealed class WelcomeForm : ThemedForm
 
     private static Card NewCard(out TableLayoutPanel rows)
     {
-        var card = new Card
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(0),
-        };
-        rows = Stack();
-        rows.Dock = DockStyle.Top;   // уважает Padding карточки с обеих сторон
-        card.Controls.Add(rows);
+        // Высота — не AutoSize: он меряет содержимое до переноса строк и резал
+        // низ карточки. Берём фактическую высоту рядов после раскладки.
+        var card = new Card { Margin = new Padding(0) };
+        var r = Stack();
+        r.Dock = DockStyle.Top;   // уважает Padding карточки с обеих сторон
+        card.Controls.Add(r);
+        r.SizeChanged += (_, _) => card.Height = r.Height + card.Padding.Vertical;
+        rows = r;
         return card;
     }
 
