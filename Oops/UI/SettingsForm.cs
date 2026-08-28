@@ -17,10 +17,10 @@ public sealed class SettingsForm : ThemedForm
 {
     private readonly AppSettings _settings;
 
-    private readonly CheckBox _cbEnabled = new();
-    private readonly CheckBox _cbAutostart = new();
-    private readonly CheckBox _cbAutoUpdate = new();
-    private readonly CheckBox _cbCharByChar = new();
+    private readonly CheckBox _cbEnabled = new ToggleBox();
+    private readonly CheckBox _cbAutostart = new ToggleBox();
+    private readonly CheckBox _cbAutoUpdate = new ToggleBox();
+    private readonly CheckBox _cbCharByChar = new ToggleBox();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly Stepper _nudIdle = new();
@@ -77,8 +77,10 @@ public sealed class SettingsForm : ThemedForm
     /// подписей слева не изменилась.
     /// </summary>
     private const int HotkeyWidth = 250;
-    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
-    private const int ReservedNumber = 150;   // степпер 108 + отступ 8 + подпись «сек»
+    // Запас под кнопку «Изменить» с автошириной: раньше стояло ровно 92, и на
+    // чуть более широком тексте кнопку срезало границей колонки.
+    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 104;
+    private const int ReservedNumber = 132;   // степпер с единицей внутри («30 сек»)
 
     private void BuildLayout()
     {
@@ -435,16 +437,11 @@ public sealed class SettingsForm : ThemedForm
 
     private static Control CheckRow(CheckBox box, string title, string hint)
     {
+        // ToggleBox рисует себя сам во весь свой прямоугольник — контрол 20×20,
+        // прижатый к правому краю колонки, и есть галочка, без системных полей.
         box.Text = string.Empty;
         box.AutoSize = false;
         box.Size = new Size(20, 20);
-        // Флажок — к правому краю контрола. По умолчанию CheckBox рисует его
-        // слева, оставляя справа пустой хвост: визуально отступ от края карточки
-        // получался больше, чем у текста слева, и правая колонка «гуляла».
-        box.CheckAlign = ContentAlignment.MiddleRight;
-        box.BackColor = Color.Transparent;
-        box.ForeColor = Theme.Text;
-        box.Cursor = Cursors.Hand;
         return Row(title, hint, box, ReservedCheck, () => box.Checked = !box.Checked);
     }
 
@@ -480,29 +477,13 @@ public sealed class SettingsForm : ThemedForm
 
     private static Control NumberRow(Stepper nud, string title, string unit, string hint)
     {
-        nud.Margin = new Padding(0, 0, Theme.S2, 0);
-
-        var group = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
-        group.Controls.Add(nud);
-        group.Controls.Add(new Label
-        {
-            Text = unit,
-            Font = Theme.Caption,
-            ForeColor = Theme.TextMuted,
-            AutoSize = true,
-            Margin = new Padding(0, 8, 0, 0),
-            BackColor = Color.Transparent,
-        });
-
-        return Row(title, hint, group, ReservedNumber);
+        // Единица измерения — внутри степпера («30 сек»), а не подписью рядом:
+        // внешняя подпись сдвигала контрол влево, и правый край рядов в карточке
+        // становился рваным — галочки прижаты, степперы нет.
+        nud.Suffix = unit;
+        nud.Size = new Size(ReservedNumber, 30);
+        nud.Margin = new Padding(0);
+        return Row(title, hint, nud, ReservedNumber);
     }
 
     // ------------------------------------------------------------------ data

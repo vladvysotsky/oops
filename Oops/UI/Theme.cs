@@ -140,6 +140,18 @@ internal static class Theme
     }
 
     /// <summary>
+    /// Реальный цвет фона под контролом: первый непрозрачный BackColor вверх по
+    /// дереву родителей. Заливать углы Parent.BackColor напрямую нельзя — панели
+    /// внутри карточек прозрачные, и скруглённые углы кнопок рисовались мусором.
+    /// </summary>
+    public static Color EffectiveBackColor(Control? c)
+    {
+        for (var p = c; p != null; p = p.Parent)
+            if (p.BackColor.A == 255) return p.BackColor;
+        return Canvas;
+    }
+
+    /// <summary>
     /// Рисует мягкую тень под скруглённым прямоугольником: несколько контуров
     /// с убывающей альфой. Сплошная рамка — самый частый способ «обозначить
     /// карточку», и самый плоский; полупрозрачная тень даёт слой, а не линию.
@@ -301,13 +313,13 @@ internal sealed class FlatButton : Button
     public override Size GetPreferredSize(Size proposedSize)
     {
         var text = TextRenderer.MeasureText(Text, Font);
-        return new Size(text.Width + Theme.S3 * 2, Math.Max(34, text.Height + Theme.S2 * 2));
+        return new Size(text.Width + Theme.S4, Math.Max(34, text.Height + Theme.S3));
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Theme.Canvas);
+        g.Clear(Theme.EffectiveBackColor(this));
         Theme.EnableSmoothing(g);
 
         // Нажатие сдвигает кнопку на пиксель вниз. Отклик обязан быть на
@@ -354,6 +366,78 @@ internal sealed class FlatButton : Button
 }
 
 /// <summary>
+/// Галочка, нарисованная дизайн-системой. Системный CheckBox рисует глиф по
+/// своим правилам (в старых рендерах его ещё и обрезало по краю контрола),
+/// цвета не перекрашиваются и в тёмной теме он остаётся системно-синим
+/// инородным пятном. Логика (Checked, клик, пробел) — от базового CheckBox,
+/// своя здесь только отрисовка.
+/// </summary>
+internal sealed class ToggleBox : CheckBox
+{
+    private bool _hover;
+
+    public ToggleBox()
+    {
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint
+               | ControlStyles.ResizeRedraw, true);
+        Cursor = Cursors.Hand;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Theme.EffectiveBackColor(this));
+        Theme.EnableSmoothing(g);
+
+        // Квадрат галочки — во весь контрол, минус пиксель на рамку.
+        var r = new Rectangle(0, 0, Width - 1, Height - 1);
+        using var path = Theme.RoundedRect(r, 5);
+
+        if (Checked)
+        {
+            using var fill = new SolidBrush(_hover ? Theme.AccentHover : Theme.Accent);
+            g.FillPath(fill, path);
+
+            // Галочка: две линии от нижней точки, пропорции от размера контрола.
+            using var pen = new Pen(Theme.OnAccent, Math.Max(1.6f, Width / 12f))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round,
+            };
+            float w = Width, h = Height;
+            g.DrawLines(pen, new[]
+            {
+                new PointF(w * 0.26f, h * 0.53f),
+                new PointF(w * 0.43f, h * 0.70f),
+                new PointF(w * 0.74f, h * 0.32f),
+            });
+        }
+        else
+        {
+            using var fill = new SolidBrush(Theme.Surface);
+            using var pen = new Pen(_hover ? Theme.Accent : Theme.KeyCapBorder, 1.2f);
+            g.FillPath(fill, path);
+            g.DrawPath(pen, path);
+        }
+
+        if (Focused && ShowFocusCues)
+        {
+            // Кольцо внутри контрола: снаружи места нет.
+            var ring = Rectangle.Inflate(r, -2, -2);
+            using var ringPath = Theme.RoundedRect(ring, 3);
+            using var ringPen = new Pen(Checked ? Theme.OnAccent : Theme.Accent, 1f);
+            g.DrawPath(ringPen, ringPath);
+        }
+    }
+}
+
+/// <summary>
 /// Числовое поле «− значение +» вместо системного NumericUpDown: тот рисует
 /// белое поле с крошечными системными стрелками и не перекрашивается — в
 /// тёмной теме выпадал из дизайна, а в стрелки 8×8 ещё и попасть трудно.
@@ -363,6 +447,14 @@ internal sealed class Stepper : Control
 {
     public int Minimum { get; set; }
     public int Maximum { get; set; } = 100;
+
+    /// <summary>
+    /// Единица измерения, рисуется после значения («2 сек»). Внутри контрола,
+    /// а не отдельной подписью справа: внешняя подпись сдвигала степпер влево,
+    /// и правый край контролов в карточке становился рваным — галочки прижаты
+    /// к краю, а степперы нет.
+    /// </summary>
+    public string Suffix { get; set; } = string.Empty;
 
     private int _value;
     public int Value
@@ -425,7 +517,7 @@ internal sealed class Stepper : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Theme.Surface);
+        g.Clear(Theme.EffectiveBackColor(this));
         Theme.EnableSmoothing(g);
 
         var r = new Rectangle(0, 0, Width - 1, Height - 1);
@@ -444,7 +536,8 @@ internal sealed class Stepper : Control
         DrawZone(g, plus, "+", _hoverZone == +1, Value < Maximum);
 
         var mid = new Rectangle(ZoneWidth, 0, Width - ZoneWidth * 2, Height);
-        TextRenderer.DrawText(g, Value.ToString(), Theme.BodyStrong, mid, Theme.Text,
+        var label = Suffix.Length == 0 ? Value.ToString() : $"{Value} {Suffix}";
+        TextRenderer.DrawText(g, label, Theme.BodyStrong, mid, Theme.Text,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
