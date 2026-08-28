@@ -140,6 +140,18 @@ internal static class Theme
     }
 
     /// <summary>
+    /// Реальный цвет фона под контролом: первый непрозрачный BackColor вверх по
+    /// дереву родителей. Заливать углы Parent.BackColor напрямую нельзя — панели
+    /// внутри карточек прозрачные, и скруглённые углы кнопок рисовались мусором.
+    /// </summary>
+    public static Color EffectiveBackColor(Control? c)
+    {
+        for (var p = c; p != null; p = p.Parent)
+            if (p.BackColor.A == 255) return p.BackColor;
+        return Canvas;
+    }
+
+    /// <summary>
     /// Рисует мягкую тень под скруглённым прямоугольником: несколько контуров
     /// с убывающей альфой. Сплошная рамка — самый частый способ «обозначить
     /// карточку», и самый плоский; полупрозрачная тень даёт слой, а не линию.
@@ -291,10 +303,23 @@ internal sealed class FlatButton : Button
     protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
     protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
 
+    /// <summary>
+    /// Кнопка сама знает свою ширину: текст + горизонтальные поля. Фиксированный
+    /// размер, заданный снаружи, при чуть более длинной надписи прижимал текст
+    /// к рамке фокуса — выглядело как «не помещается». Используется при
+    /// AutoSize = true; MinimumSize держит одинаковую высоту и минимальную
+    /// ширину коротких кнопок.
+    /// </summary>
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var text = TextRenderer.MeasureText(Text, Font);
+        return new Size(text.Width + Theme.S4, Math.Max(34, text.Height + Theme.S3));
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Theme.Canvas);
+        g.Clear(Theme.EffectiveBackColor(this));
         Theme.EnableSmoothing(g);
 
         // Нажатие сдвигает кнопку на пиксель вниз. Отклик обязан быть на
@@ -324,18 +349,209 @@ internal sealed class FlatButton : Button
 
         // Фокус с клавиатуры обязан быть виден: UserPaint отключает системную
         // рамку фокуса, и без своей окно нельзя пройти табом.
+        // Сплошное кольцо, не пунктир: системный пунктир прижимался к тексту
+        // и выглядел как грязная рамка «текст не помещается».
         if (Focused && ShowFocusCues)
         {
-            var ring = Rectangle.Inflate(r, -3, -3);
-            using var ringPath = Theme.RoundedRect(ring, 4);
-            using var ringPen = new Pen(Primary ? Theme.OnAccent : Theme.Accent, 1.5f)
-            {
-                DashStyle = DashStyle.Dot,
-            };
+            var ring = Rectangle.Inflate(r, -2, -2);
+            using var ringPath = Theme.RoundedRect(ring, 5);
+            using var ringPen = new Pen(
+                Primary ? Color.FromArgb(0xA0, Theme.OnAccent) : Theme.Accent, 1f);
             g.DrawPath(ringPen, ringPath);
         }
 
         TextRenderer.DrawText(g, Text, Font, r, fore,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+    }
+}
+
+/// <summary>
+/// Галочка, нарисованная дизайн-системой. Системный CheckBox рисует глиф по
+/// своим правилам (в старых рендерах его ещё и обрезало по краю контрола),
+/// цвета не перекрашиваются и в тёмной теме он остаётся системно-синим
+/// инородным пятном. Логика (Checked, клик, пробел) — от базового CheckBox,
+/// своя здесь только отрисовка.
+/// </summary>
+internal sealed class ToggleBox : CheckBox
+{
+    private bool _hover;
+
+    public ToggleBox()
+    {
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint
+               | ControlStyles.ResizeRedraw, true);
+        Cursor = Cursors.Hand;
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Theme.EffectiveBackColor(this));
+        Theme.EnableSmoothing(g);
+
+        // Квадрат галочки — во весь контрол, минус пиксель на рамку.
+        var r = new Rectangle(0, 0, Width - 1, Height - 1);
+        using var path = Theme.RoundedRect(r, 5);
+
+        if (Checked)
+        {
+            using var fill = new SolidBrush(_hover ? Theme.AccentHover : Theme.Accent);
+            g.FillPath(fill, path);
+
+            // Галочка: две линии от нижней точки, пропорции от размера контрола.
+            using var pen = new Pen(Theme.OnAccent, Math.Max(1.6f, Width / 12f))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round,
+            };
+            float w = Width, h = Height;
+            g.DrawLines(pen, new[]
+            {
+                new PointF(w * 0.26f, h * 0.53f),
+                new PointF(w * 0.43f, h * 0.70f),
+                new PointF(w * 0.74f, h * 0.32f),
+            });
+        }
+        else
+        {
+            using var fill = new SolidBrush(Theme.Surface);
+            using var pen = new Pen(_hover ? Theme.Accent : Theme.KeyCapBorder, 1.2f);
+            g.FillPath(fill, path);
+            g.DrawPath(pen, path);
+        }
+
+        if (Focused && ShowFocusCues)
+        {
+            // Кольцо внутри контрола: снаружи места нет.
+            var ring = Rectangle.Inflate(r, -2, -2);
+            using var ringPath = Theme.RoundedRect(ring, 3);
+            using var ringPen = new Pen(Checked ? Theme.OnAccent : Theme.Accent, 1f);
+            g.DrawPath(ringPen, ringPath);
+        }
+    }
+}
+
+/// <summary>
+/// Числовое поле «− значение +» вместо системного NumericUpDown: тот рисует
+/// белое поле с крошечными системными стрелками и не перекрашивается — в
+/// тёмной теме выпадал из дизайна, а в стрелки 8×8 ещё и попасть трудно.
+/// Кнопки-зоны здесь во всю высоту контрола.
+/// </summary>
+internal sealed class Stepper : Control
+{
+    public int Minimum { get; set; }
+    public int Maximum { get; set; } = 100;
+
+    /// <summary>
+    /// Единица измерения, рисуется после значения («2 сек»). Внутри контрола,
+    /// а не отдельной подписью справа: внешняя подпись сдвигала степпер влево,
+    /// и правый край контролов в карточке становился рваным — галочки прижаты
+    /// к краю, а степперы нет.
+    /// </summary>
+    public string Suffix { get; set; } = string.Empty;
+
+    private int _value;
+    public int Value
+    {
+        get => _value;
+        set { _value = Math.Clamp(value, Minimum, Maximum); Invalidate(); }
+    }
+
+    private int _hoverZone; // -1 минус, +1 плюс, 0 — никакая
+
+    public Stepper()
+    {
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint
+               | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        BackColor = Theme.Surface;
+        TabStop = true;
+        Size = new Size(108, 30);
+    }
+
+    private int ZoneWidth => Height;   // квадратные зоны по краям
+
+    private int ZoneAt(int x) => x < ZoneWidth ? -1 : (x >= Width - ZoneWidth ? +1 : 0);
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        var z = ZoneAt(e.X);
+        if (z != _hoverZone) { _hoverZone = z; Invalidate(); }
+        Cursor = z == 0 ? Cursors.Default : Cursors.Hand;
+        base.OnMouseMove(e);
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        if (_hoverZone != 0) { _hoverZone = 0; Invalidate(); }
+        base.OnMouseLeave(e);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        Focus();
+        var z = ZoneAt(e.X);
+        if (z != 0) Value += z;
+        base.OnMouseDown(e);
+    }
+
+    protected override bool IsInputKey(Keys keyData) =>
+        keyData is Keys.Up or Keys.Down or Keys.Left or Keys.Right || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Up or Keys.Right) { Value += 1; e.Handled = true; }
+        else if (e.KeyCode is Keys.Down or Keys.Left) { Value -= 1; e.Handled = true; }
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Theme.EffectiveBackColor(this));
+        Theme.EnableSmoothing(g);
+
+        var r = new Rectangle(0, 0, Width - 1, Height - 1);
+        using (var path = Theme.RoundedRect(r, 6))
+        using (var fill = new SolidBrush(Theme.Surface))
+        using (var pen = new Pen(Focused ? Theme.Accent : Theme.Border))
+        {
+            g.FillPath(fill, path);
+            g.DrawPath(pen, path);
+        }
+
+        var minus = new Rectangle(0, 0, ZoneWidth, Height);
+        var plus = new Rectangle(Width - ZoneWidth, 0, ZoneWidth, Height);
+
+        DrawZone(g, minus, "−", _hoverZone == -1, Value > Minimum);
+        DrawZone(g, plus, "+", _hoverZone == +1, Value < Maximum);
+
+        var mid = new Rectangle(ZoneWidth, 0, Width - ZoneWidth * 2, Height);
+        var label = Suffix.Length == 0 ? Value.ToString() : $"{Value} {Suffix}";
+        TextRenderer.DrawText(g, label, Theme.BodyStrong, mid, Theme.Text,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+    }
+
+    private static void DrawZone(Graphics g, Rectangle zone, string glyph, bool hover, bool enabled)
+    {
+        if (hover && enabled)
+        {
+            var pad = Rectangle.Inflate(zone, -3, -3);
+            using var path = Theme.RoundedRect(pad, 4);
+            using var fill = new SolidBrush(Theme.KeyCapFill);
+            g.FillPath(fill, path);
+        }
+        TextRenderer.DrawText(g, glyph, Theme.Body, zone,
+            enabled ? Theme.Text : Theme.TextMuted,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 }

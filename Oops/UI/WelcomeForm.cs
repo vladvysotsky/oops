@@ -19,19 +19,19 @@ namespace Oops.UI;
 /// </summary>
 public sealed class WelcomeForm : ThemedForm
 {
+    // Единственный источник ширины — колонка контента; всё внутри растягивается
+    // якорями. Логика та же, что в SettingsForm — см. комментарий там.
     private const int ContentWidth = 580;
-    private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
+
     /// <summary>
-    /// Ширина поля с клавишами. С запасом на три клавиши с длинными именами
-    /// («Ctrl+Shift+Win»): раньше 190px не хватало, и третья обрезалась.
-    /// Расширено вместе с ContentWidth на одну и ту же величину, чтобы ширина
-    /// подписей слева не изменилась.
+    /// Ширина поля с клавишами: «Ctrl+Shift+Win» помещается с запасом. Шире не
+    /// надо — лишняя ширина отбирает место у подписи слева и заставляет её
+    /// переноситься.
     /// </summary>
-    private const int HotkeyWidth = 250;
-    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
+    private const int HotkeyWidth = 220;
 
     private readonly TableLayoutPanel _root;
-    private readonly CheckBox _cbAutostart = new();
+    private readonly CheckBox _cbAutostart = new ToggleBox();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
 
@@ -61,7 +61,9 @@ public sealed class WelcomeForm : ThemedForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Theme.Canvas,
-            Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S2),
+            // Снизу S3, а не S2: вместе с отступом футера получается 24 —
+            // столько же, сколько сверху и по бокам. Раньше низ был тоньше.
+            Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S3),
             Margin = new Padding(0),
         };
         _root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
@@ -220,32 +222,39 @@ public sealed class WelcomeForm : ThemedForm
 
     private static void AddRow(TableLayoutPanel host, Control child)
     {
+        // Ребёнок с дефолтным якорем растягивается на ширину колонки —
+        // ширину диктует колонка, а не контрол. Явные якоря не трогаем.
+        if (child.Anchor == (AnchorStyles.Top | AnchorStyles.Left))
+            child.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         host.Controls.Add(child, 0, host.RowCount);
         host.RowCount++;
     }
 
-    private static TableLayoutPanel Stack() => new()
+    private static TableLayoutPanel Stack()
     {
-        ColumnCount = 1,
-        AutoSize = true,
-        AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        BackColor = Color.Transparent,
-        Margin = new Padding(0),
-    };
+        var stack = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
+        stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        return stack;
+    }
 
     private static Card NewCard(out TableLayoutPanel rows)
     {
-        var card = new Card
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(0),
-            Width = ContentWidth,
-        };
-        rows = Stack();
-        rows.Width = CardInnerWidth;
-        card.Controls.Add(rows);
+        // Высота — не AutoSize: он меряет содержимое до переноса строк и резал
+        // низ карточки. Берём фактическую высоту рядов после раскладки.
+        var card = new Card { Margin = new Padding(0) };
+        var r = Stack();
+        r.Dock = DockStyle.Top;   // уважает Padding карточки с обеих сторон
+        card.Controls.Add(r);
+        r.SizeChanged += (_, _) => card.Height = r.Height + card.Padding.Vertical;
+        rows = r;
         return card;
     }
 
@@ -268,7 +277,6 @@ public sealed class WelcomeForm : ThemedForm
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
-            MaximumSize = new Size(ContentWidth, 0),
             Margin = new Padding(0),
             BackColor = Color.Transparent,
         });
@@ -285,15 +293,13 @@ public sealed class WelcomeForm : ThemedForm
         BackColor = Color.Transparent,
     };
 
-    /// <summary>Абзац внутри карточки. MaximumSize обязателен — иначе AutoSize-лейбл
-    /// требует полную ширину строки и растягивает карточку за границу окна.</summary>
+    /// <summary>Абзац внутри карточки: переносится по ширине колонки.</summary>
     private static Control Paragraph(string text) => new Label
     {
         Text = text,
         Font = Theme.Body,
         ForeColor = Theme.Text,
         AutoSize = true,
-        MaximumSize = new Size(CardInnerWidth, 0),
         Margin = new Padding(0),
         BackColor = Color.Transparent,
     };
@@ -304,7 +310,6 @@ public sealed class WelcomeForm : ThemedForm
         Font = Theme.Caption,
         ForeColor = Theme.TextMuted,
         AutoSize = true,
-        MaximumSize = new Size(ContentWidth - Theme.S1 * 2, 0),
         Margin = new Padding(Theme.S1, Theme.S2, Theme.S1, 0),
         BackColor = Color.Transparent,
     };
@@ -317,7 +322,6 @@ public sealed class WelcomeForm : ThemedForm
         ForeColor = Theme.Text,
         BackColor = Theme.KeyCapFill,
         AutoSize = true,
-        MaximumSize = new Size(CardInnerWidth, 0),
         Padding = new Padding(Theme.S2),
         Margin = new Padding(0, Theme.S2, 0, Theme.S2),
     };
@@ -325,7 +329,6 @@ public sealed class WelcomeForm : ThemedForm
     private static Control Divider() => new Panel
     {
         Height = 1,
-        Width = CardInnerWidth,
         BackColor = Theme.Border,
         Margin = new Padding(0, Theme.S2, 0, Theme.S2),
     };
@@ -335,11 +338,9 @@ public sealed class WelcomeForm : ThemedForm
     /// <paramref name="onActivate"/> — клик по подписи делает то же, что и контрол:
     /// галочка 20×20 меньше, чем человек целится мышью.
     /// </summary>
-    private static TableLayoutPanel Row(string title, string hint, Control right, int reservedRight,
+    private static TableLayoutPanel Row(string title, string hint, Control right,
         Action? onActivate = null)
     {
-        int textWidth = CardInnerWidth - reservedRight - Theme.S3;
-
         var row = new TableLayoutPanel
         {
             ColumnCount = 2,
@@ -349,21 +350,18 @@ public sealed class WelcomeForm : ThemedForm
             MinimumSize = new Size(0, Theme.MinHitHeight),
             BackColor = Color.Transparent,
             Margin = new Padding(0),
-            Width = CardInnerWidth,
         };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, textWidth + Theme.S3));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, reservedRight));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var text = Stack();
-        text.Anchor = AnchorStyles.Left;
         var titleLabel = new Label
         {
             Text = title,
             Font = Theme.BodyStrong,
             ForeColor = Theme.Text,
             AutoSize = true,
-            MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0, 0, 0, 2),
             BackColor = Color.Transparent,
         };
@@ -373,12 +371,12 @@ public sealed class WelcomeForm : ThemedForm
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
-            MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0),
             BackColor = Color.Transparent,
         };
         AddRow(text, titleLabel);
         AddRow(text, hintLabel);
+        text.Anchor = AnchorStyles.Left | AnchorStyles.Right;
 
         if (onActivate != null)
         {
@@ -390,7 +388,7 @@ public sealed class WelcomeForm : ThemedForm
         }
 
         right.Anchor = AnchorStyles.Right;
-        right.Margin = new Padding(0);
+        right.Margin = new Padding(Theme.S3, 0, 0, 0);
 
         row.Controls.Add(text, 0, 0);
         row.Controls.Add(right, 1, 0);
@@ -399,13 +397,11 @@ public sealed class WelcomeForm : ThemedForm
 
     private static Control CheckRow(CheckBox box, string title, string hint)
     {
+        // ToggleBox рисует себя сам во весь свой прямоугольник.
         box.Text = string.Empty;
         box.AutoSize = false;
         box.Size = new Size(20, 20);
-        box.BackColor = Color.Transparent;
-        box.ForeColor = Theme.Text;
-        box.Cursor = Cursors.Hand;
-        return Row(title, hint, box, 24, () => box.Checked = !box.Checked);
+        return Row(title, hint, box, () => box.Checked = !box.Checked);
     }
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
@@ -415,7 +411,13 @@ public sealed class WelcomeForm : ThemedForm
         // Click у display подписан один раз в конструкторе: страница пересобирается
         // при каждом «Назад/Далее», и подписка здесь копилась бы с каждым разом.
 
-        var btn = new FlatButton { Text = "Изменить", Size = new Size(92, 30), Margin = new Padding(0) };
+        var btn = new FlatButton
+        {
+            Text = "Изменить",
+            AutoSize = true,
+            MinimumSize = new Size(92, 30),
+            Margin = new Padding(0),
+        };
         btn.Click += (_, _) => record();
 
         var group = new FlowLayoutPanel
@@ -430,7 +432,7 @@ public sealed class WelcomeForm : ThemedForm
         group.Controls.Add(display);
         group.Controls.Add(btn);
 
-        return Row(title, hint, group, ReservedHotkey);
+        return Row(title, hint, group);
     }
 
     private Control Footer(string primaryText, Action primaryAction, bool showBack)
@@ -439,7 +441,8 @@ public sealed class WelcomeForm : ThemedForm
         {
             Text = primaryText,
             Primary = true,
-            Size = new Size(124, 34),
+            AutoSize = true,
+            MinimumSize = new Size(124, 34),
             Margin = new Padding(Theme.S2, 0, 0, 0),
         };
         primary.Click += (_, _) => primaryAction();
@@ -461,7 +464,8 @@ public sealed class WelcomeForm : ThemedForm
             var back = new FlatButton
             {
                 Text = "Назад",
-                Size = new Size(104, 34),
+                AutoSize = true,
+                MinimumSize = new Size(104, 34),
                 Margin = new Padding(Theme.S2, 0, 0, 0),
             };
             back.Click += (_, _) => ShowPage(0);

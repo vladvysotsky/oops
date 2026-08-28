@@ -43,9 +43,10 @@ public static class UpdateService
     /// Ссылка на новый issue с уже заполненными заголовком и телом. Пересказывать
     /// ошибку своими словами человек не должен — он её и не понял.
     /// </summary>
-    public static string NewIssueUrl(string title, string body) =>
+    public static string NewIssueUrl(string title, string body, string? labels = null) =>
         $"https://github.com/{Owner}/{Repo}/issues/new"
-        + $"?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+        + $"?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}"
+        + (labels != null ? $"&labels={Uri.EscapeDataString(labels)}" : "");
 
     /// <summary>Версия текущей сборки.</summary>
     public static Version CurrentVersion =>
