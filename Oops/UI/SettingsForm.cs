@@ -88,7 +88,9 @@ public sealed class SettingsForm : ThemedForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Theme.Canvas,
-            Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S2),
+            // Снизу S3, а не S2: вместе с отступом футера получается 24 —
+            // столько же, сколько сверху и по бокам. Раньше низ был тоньше.
+            Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S3),
             Margin = new Padding(0),
         };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
@@ -436,6 +438,10 @@ public sealed class SettingsForm : ThemedForm
         box.Text = string.Empty;
         box.AutoSize = false;
         box.Size = new Size(20, 20);
+        // Флажок — к правому краю контрола. По умолчанию CheckBox рисует его
+        // слева, оставляя справа пустой хвост: визуально отступ от края карточки
+        // получался больше, чем у текста слева, и правая колонка «гуляла».
+        box.CheckAlign = ContentAlignment.MiddleRight;
         box.BackColor = Color.Transparent;
         box.ForeColor = Theme.Text;
         box.Cursor = Cursors.Hand;

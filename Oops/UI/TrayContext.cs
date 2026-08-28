@@ -31,6 +31,9 @@ public sealed class TrayContext : ApplicationContext
         _miUpdate = new ToolStripMenuItem("Проверить обновления");
         _miUpdate.Click += async (_, _) => await CheckForUpdatesAsync(silent: false);
 
+        var miFeedback = new ToolStripMenuItem("Сообщить о проблеме…");
+        miFeedback.Click += (_, _) => FeedbackForm.ShowDialogFor();
+
         var miAbout = new ToolStripMenuItem("О программе");
         miAbout.Click += (_, _) => Notice.Info(null, $"oops {UpdateService.CurrentVersion}",
             "Правит раскладку и регистр набранного текста. Границу задаёте вы: "
@@ -46,6 +49,7 @@ public sealed class TrayContext : ApplicationContext
             new ToolStripSeparator(),
             miSettings,
             _miUpdate,
+            miFeedback,
             miAbout,
             new ToolStripSeparator(),
             miExit,
