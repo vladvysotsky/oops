@@ -291,6 +291,19 @@ internal sealed class FlatButton : Button
     protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
     protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
 
+    /// <summary>
+    /// Кнопка сама знает свою ширину: текст + горизонтальные поля. Фиксированный
+    /// размер, заданный снаружи, при чуть более длинной надписи прижимал текст
+    /// к рамке фокуса — выглядело как «не помещается». Используется при
+    /// AutoSize = true; MinimumSize держит одинаковую высоту и минимальную
+    /// ширину коротких кнопок.
+    /// </summary>
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var text = TextRenderer.MeasureText(Text, Font);
+        return new Size(text.Width + Theme.S3 * 2, Math.Max(34, text.Height + Theme.S2 * 2));
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
@@ -324,18 +337,128 @@ internal sealed class FlatButton : Button
 
         // Фокус с клавиатуры обязан быть виден: UserPaint отключает системную
         // рамку фокуса, и без своей окно нельзя пройти табом.
+        // Сплошное кольцо, не пунктир: системный пунктир прижимался к тексту
+        // и выглядел как грязная рамка «текст не помещается».
         if (Focused && ShowFocusCues)
         {
-            var ring = Rectangle.Inflate(r, -3, -3);
-            using var ringPath = Theme.RoundedRect(ring, 4);
-            using var ringPen = new Pen(Primary ? Theme.OnAccent : Theme.Accent, 1.5f)
-            {
-                DashStyle = DashStyle.Dot,
-            };
+            var ring = Rectangle.Inflate(r, -2, -2);
+            using var ringPath = Theme.RoundedRect(ring, 5);
+            using var ringPen = new Pen(
+                Primary ? Color.FromArgb(0xA0, Theme.OnAccent) : Theme.Accent, 1f);
             g.DrawPath(ringPen, ringPath);
         }
 
         TextRenderer.DrawText(g, Text, Font, r, fore,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+    }
+}
+
+/// <summary>
+/// Числовое поле «− значение +» вместо системного NumericUpDown: тот рисует
+/// белое поле с крошечными системными стрелками и не перекрашивается — в
+/// тёмной теме выпадал из дизайна, а в стрелки 8×8 ещё и попасть трудно.
+/// Кнопки-зоны здесь во всю высоту контрола.
+/// </summary>
+internal sealed class Stepper : Control
+{
+    public int Minimum { get; set; }
+    public int Maximum { get; set; } = 100;
+
+    private int _value;
+    public int Value
+    {
+        get => _value;
+        set { _value = Math.Clamp(value, Minimum, Maximum); Invalidate(); }
+    }
+
+    private int _hoverZone; // -1 минус, +1 плюс, 0 — никакая
+
+    public Stepper()
+    {
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint
+               | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        BackColor = Theme.Surface;
+        TabStop = true;
+        Size = new Size(108, 30);
+    }
+
+    private int ZoneWidth => Height;   // квадратные зоны по краям
+
+    private int ZoneAt(int x) => x < ZoneWidth ? -1 : (x >= Width - ZoneWidth ? +1 : 0);
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        var z = ZoneAt(e.X);
+        if (z != _hoverZone) { _hoverZone = z; Invalidate(); }
+        Cursor = z == 0 ? Cursors.Default : Cursors.Hand;
+        base.OnMouseMove(e);
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        if (_hoverZone != 0) { _hoverZone = 0; Invalidate(); }
+        base.OnMouseLeave(e);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        Focus();
+        var z = ZoneAt(e.X);
+        if (z != 0) Value += z;
+        base.OnMouseDown(e);
+    }
+
+    protected override bool IsInputKey(Keys keyData) =>
+        keyData is Keys.Up or Keys.Down or Keys.Left or Keys.Right || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Up or Keys.Right) { Value += 1; e.Handled = true; }
+        else if (e.KeyCode is Keys.Down or Keys.Left) { Value -= 1; e.Handled = true; }
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? Theme.Surface);
+        Theme.EnableSmoothing(g);
+
+        var r = new Rectangle(0, 0, Width - 1, Height - 1);
+        using (var path = Theme.RoundedRect(r, 6))
+        using (var fill = new SolidBrush(Theme.Surface))
+        using (var pen = new Pen(Focused ? Theme.Accent : Theme.Border))
+        {
+            g.FillPath(fill, path);
+            g.DrawPath(pen, path);
+        }
+
+        var minus = new Rectangle(0, 0, ZoneWidth, Height);
+        var plus = new Rectangle(Width - ZoneWidth, 0, ZoneWidth, Height);
+
+        DrawZone(g, minus, "−", _hoverZone == -1, Value > Minimum);
+        DrawZone(g, plus, "+", _hoverZone == +1, Value < Maximum);
+
+        var mid = new Rectangle(ZoneWidth, 0, Width - ZoneWidth * 2, Height);
+        TextRenderer.DrawText(g, Value.ToString(), Theme.BodyStrong, mid, Theme.Text,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+    }
+
+    private static void DrawZone(Graphics g, Rectangle zone, string glyph, bool hover, bool enabled)
+    {
+        if (hover && enabled)
+        {
+            var pad = Rectangle.Inflate(zone, -3, -3);
+            using var path = Theme.RoundedRect(pad, 4);
+            using var fill = new SolidBrush(Theme.KeyCapFill);
+            g.FillPath(fill, path);
+        }
+        TextRenderer.DrawText(g, glyph, Theme.Body, zone,
+            enabled ? Theme.Text : Theme.TextMuted,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 }

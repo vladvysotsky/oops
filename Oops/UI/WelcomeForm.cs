@@ -415,7 +415,13 @@ public sealed class WelcomeForm : ThemedForm
         // Click у display подписан один раз в конструкторе: страница пересобирается
         // при каждом «Назад/Далее», и подписка здесь копилась бы с каждым разом.
 
-        var btn = new FlatButton { Text = "Изменить", Size = new Size(92, 30), Margin = new Padding(0) };
+        var btn = new FlatButton
+        {
+            Text = "Изменить",
+            AutoSize = true,
+            MinimumSize = new Size(92, 30),
+            Margin = new Padding(0),
+        };
         btn.Click += (_, _) => record();
 
         var group = new FlowLayoutPanel
@@ -439,7 +445,8 @@ public sealed class WelcomeForm : ThemedForm
         {
             Text = primaryText,
             Primary = true,
-            Size = new Size(124, 34),
+            AutoSize = true,
+            MinimumSize = new Size(124, 34),
             Margin = new Padding(Theme.S2, 0, 0, 0),
         };
         primary.Click += (_, _) => primaryAction();
@@ -461,7 +468,8 @@ public sealed class WelcomeForm : ThemedForm
             var back = new FlatButton
             {
                 Text = "Назад",
-                Size = new Size(104, 34),
+                AutoSize = true,
+                MinimumSize = new Size(104, 34),
                 Margin = new Padding(Theme.S2, 0, 0, 0),
             };
             back.Click += (_, _) => ShowPage(0);
