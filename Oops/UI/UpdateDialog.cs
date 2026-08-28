@@ -30,8 +30,8 @@ public sealed class UpdateDialog : ThemedForm
         StartPosition = FormStartPosition.CenterScreen;
         // Фон, шрифт, DPI и тёмный заголовок окна приходят из ThemedForm.
 
-        _install = new FlatButton { Text = "Обновить", Primary = true, Size = new Size(124, 34) };
-        _later = new FlatButton { Text = "Позже", Size = new Size(104, 34), DialogResult = DialogResult.Cancel };
+        _install = new FlatButton { Text = "Обновить", Primary = true, AutoSize = true, MinimumSize = new Size(124, 34) };
+        _later = new FlatButton { Text = "Позже", AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
         _install.Click += OnInstallClick;
 
         BuildLayout();

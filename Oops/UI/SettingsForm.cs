@@ -17,14 +17,14 @@ public sealed class SettingsForm : ThemedForm
 {
     private readonly AppSettings _settings;
 
-    private readonly CheckBox _cbEnabled = new();
-    private readonly CheckBox _cbAutostart = new();
-    private readonly CheckBox _cbAutoUpdate = new();
-    private readonly CheckBox _cbCharByChar = new();
+    private readonly CheckBox _cbEnabled = new ToggleBox();
+    private readonly CheckBox _cbAutostart = new ToggleBox();
+    private readonly CheckBox _cbAutoUpdate = new ToggleBox();
+    private readonly CheckBox _cbCharByChar = new ToggleBox();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
-    private readonly NumericUpDown _nudIdle = new();
-    private readonly NumericUpDown _nudExpand = new();
+    private readonly Stepper _nudIdle = new();
+    private readonly Stepper _nudExpand = new();
 
     // Живая проверка: показывает, что из нажатого реально доходит до программы.
     // Молчащий хоткей ничем не отличается от неработающей программы, и без
@@ -63,22 +63,19 @@ public sealed class SettingsForm : ThemedForm
     /// <summary>Ширина колонки контента (карточки, заголовки). Масштабируется системой по DPI.</summary>
     private const int ContentWidth = 580;
 
-    /// <summary>Ширина внутренностей карточки (за вычетом её padding).</summary>
-    private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
+    // ЕДИНСТВЕННЫЙ источник ширины — колонка контента. Всё внутри растягивается
+    // якорями (Left|Right) и доками, правые контролы сидят в AutoSize-колонках.
+    // Никаких больше «зарезервированных» ширин: у прежней разметки было два
+    // источника правды — абсолютные колонки таблиц и Size контролов, — и любое
+    // их расхождение (DPI, чуть более длинный текст) резало кнопки и рвало
+    // правый край. AutoSize-колонка не может обрезать свой контрол по построению.
 
-    // Сколько места резервирует правый контрол в строке. Нужно, чтобы ограничить
-    // ширину подписей: без ограничения AutoSize-лейбл требует свою полную ширину
-    // и выдавливает правую колонку за границу карточки.
-    private const int ReservedCheck = 24;
     /// <summary>
-    /// Ширина поля с клавишами. С запасом на три клавиши с длинными именами
-    /// («Ctrl+Shift+Win»): раньше 190px не хватало, и третья обрезалась.
-    /// Расширено вместе с ContentWidth на одну и ту же величину, чтобы ширина
-    /// подписей слева не изменилась.
+    /// Ширина поля с клавишами: «Ctrl+Shift+Win» помещается с запасом. Шире не
+    /// надо — лишняя ширина отбирает место у подписи слева и заставляет её
+    /// переноситься.
     /// </summary>
-    private const int HotkeyWidth = 250;
-    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
-    private const int ReservedNumber = 104;   // поле 64 + отступ 8 + подпись
+    private const int HotkeyWidth = 220;
 
     private void BuildLayout()
     {
@@ -88,7 +85,9 @@ public sealed class SettingsForm : ThemedForm
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Theme.Canvas,
-            Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S2),
+            // Снизу S3, а не S2: вместе с отступом футера получается 24 —
+            // столько же, сколько сверху и по бокам. Раньше низ был тоньше.
+            Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S3),
             Margin = new Padding(0),
         };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
@@ -109,6 +108,11 @@ public sealed class SettingsForm : ThemedForm
 
     private static void AddAutoRow(TableLayoutPanel host, Control child)
     {
+        // Ребёнок с дефолтным якорем растягивается на ширину колонки: ширину
+        // диктует колонка, а не контрол. Явно выставленный якорь (футер с
+        // Right) не трогаем.
+        if (child.Anchor == (AnchorStyles.Top | AnchorStyles.Left))
+            child.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         host.Controls.Add(child, 0, host.RowCount);
         host.RowCount++;
@@ -135,7 +139,6 @@ public sealed class SettingsForm : ThemedForm
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
-            MaximumSize = new Size(ContentWidth, 0),  // перенос по ширине колонки
             Margin = new Padding(0),
             BackColor = Color.Transparent,
         });
@@ -208,18 +211,28 @@ public sealed class SettingsForm : ThemedForm
     {
         var card = NewCard(out var rows);
 
-        _probeKeys.Size = new Size(ReservedHotkey, 30);
+        // Вертикально, а не «подпись слева — контрол справа»: длинному сочетанию
+        // из четырёх клавиш нужна вся ширина карточки, а двухколоночная вёрстка
+        // ломала заголовок переносом.
+        AddAutoRow(rows, new Label
+        {
+            Text = "Нажмите сочетание — здесь появится то, что реально дошло до oops.",
+            Font = Theme.Caption,
+            ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, Theme.S2),
+            BackColor = Color.Transparent,
+        });
+
+        _probeKeys.Height = 34;
+        _probeKeys.Margin = new Padding(0);
         _probeKeys.SetCombo(string.Empty);
-        AddAutoRow(rows, Row(
-            "Нажмите сочетание",
-            "Здесь появится то, что дошло до oops",
-            _probeKeys, ReservedHotkey));
+        AddAutoRow(rows, _probeKeys);
 
         _probeStatus.Text = "Ждём нажатия…";
         _probeStatus.Font = Theme.Caption;
         _probeStatus.ForeColor = Theme.TextMuted;
         _probeStatus.AutoSize = true;
-        _probeStatus.MaximumSize = new Size(CardInnerWidth, 0);
         _probeStatus.Margin = new Padding(0, Theme.S2, 0, 0);
         _probeStatus.BackColor = Color.Transparent;
         AddAutoRow(rows, _probeStatus);
@@ -285,8 +298,8 @@ public sealed class SettingsForm : ThemedForm
 
     private Control Footer()
     {
-        var save = new FlatButton { Text = "Сохранить", Primary = true, Size = new Size(124, 34), DialogResult = DialogResult.OK };
-        var cancel = new FlatButton { Text = "Отмена", Size = new Size(104, 34), DialogResult = DialogResult.Cancel };
+        var save = new FlatButton { Text = "Сохранить", Primary = true, AutoSize = true, MinimumSize = new Size(124, 34), DialogResult = DialogResult.OK };
+        var cancel = new FlatButton { Text = "Отмена", AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
         // Button.OnClick выставляет DialogResult формы ДО вызова наших обработчиков,
         // поэтому вернуть None — штатный способ отменить закрытие окна.
         save.Click += (_, _) => { if (!ApplyToSettings()) DialogResult = DialogResult.None; };
@@ -313,55 +326,63 @@ public sealed class SettingsForm : ThemedForm
 
     // ------------------------------------------------------------- building blocks
 
-    /// <summary>Вертикальный стек с авторазмером — базовый строительный блок разметки.</summary>
-    private static TableLayoutPanel Stack() => new()
+    /// <summary>Вертикальный стек: одна колонка на всю доступную ширину.</summary>
+    private static TableLayoutPanel Stack()
     {
-        ColumnCount = 1,
-        AutoSize = true,
-        AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        BackColor = Color.Transparent,
-        Margin = new Padding(0),
-    };
+        var stack = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
+        stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        return stack;
+    }
 
     private static Card NewCard(out TableLayoutPanel rows)
     {
-        var card = new Card
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(0),
-            Width = ContentWidth,
-        };
-        rows = Stack();
-        rows.Width = ContentWidth - Theme.S3 * 2;
-        card.Controls.Add(rows);
+        // Ширины у карточки нет: её растягивает колонка контента (якоря ставит
+        // AddAutoRow). Dock ряда уважает Padding карточки — паддинги одинаковые
+        // с обеих сторон по построению, а не по расчёту.
+        //
+        // Высота — НЕ AutoSize: он измеряет содержимое неограниченной шириной,
+        // то есть до переноса строк, и карточка выходила ниже фактического
+        // контента — подписи обрезало нижним краем. Берём фактическую высоту
+        // рядов после раскладки.
+        var card = new Card { Margin = new Padding(0) };
+        var r = Stack();
+        r.Dock = DockStyle.Top;
+        card.Controls.Add(r);
+        r.SizeChanged += (_, _) => card.Height = r.Height + card.Padding.Vertical;
+        rows = r;
         return card;
     }
 
     private static Control Divider() => new Panel
     {
         Height = 1,
-        Width = ContentWidth - Theme.S3 * 2,
         BackColor = Theme.Border,
         Margin = new Padding(0, Theme.S2, 0, Theme.S2),
+        // Ширина — от колонки, якоря поставит AddAutoRow.
     };
 
     /// <summary>
     /// Строка «заголовок + пояснение» слева, контрол справа.
-    /// <paramref name="reservedRight"/> — сколько места занимает правый контрол;
-    /// на эту величину сужается допустимая ширина подписей. Без такого лимита
-    /// AutoSize-лейбл требует свою полную ширину и выталкивает контрол за границу
-    /// карточки (текст не переносится, а строка становится шире карточки).
+    ///
+    /// Левая колонка — процентная: подписи переносятся по фактически доступной
+    /// ширине. Правая — AutoSize: колонка подстраивается под контрол, и обрезать
+    /// его не может по построению. Прежняя разметка резервировала правой колонке
+    /// абсолютную ширину, и чуть более широкий контрол срезало границей.
     ///
     /// <paramref name="onActivate"/> — что делает клик по самой строке. Галочка
     /// 20×20 — цель меньше, чем человек целится мышью; когда подпись объясняет
     /// контрол, она обязана и работать как этот контрол.
     /// </summary>
-    private static TableLayoutPanel Row(string title, string hint, Control right, int reservedRight,
+    private static TableLayoutPanel Row(string title, string hint, Control right,
         Action? onActivate = null)
     {
-        int textWidth = CardInnerWidth - reservedRight - Theme.S3;
-
         var row = new TableLayoutPanel
         {
             ColumnCount = 2,
@@ -371,21 +392,18 @@ public sealed class SettingsForm : ThemedForm
             MinimumSize = new Size(0, Theme.MinHitHeight),
             BackColor = Color.Transparent,
             Margin = new Padding(0),
-            Width = CardInnerWidth,
         };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, textWidth + Theme.S3));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, reservedRight));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var text = Stack();
-        text.Anchor = AnchorStyles.Left;
         var titleLabel = new Label
         {
             Text = title,
             Font = Theme.BodyStrong,
             ForeColor = Theme.Text,
             AutoSize = true,
-            MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0, 0, 0, 2),
             BackColor = Color.Transparent,
         };
@@ -395,12 +413,12 @@ public sealed class SettingsForm : ThemedForm
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
-            MaximumSize = new Size(textWidth, 0),
             Margin = new Padding(0),
             BackColor = Color.Transparent,
         };
         AddAutoRow(text, titleLabel);
         AddAutoRow(text, hintLabel);
+        text.Anchor = AnchorStyles.Left | AnchorStyles.Right;
 
         if (onActivate != null)
         {
@@ -411,8 +429,9 @@ public sealed class SettingsForm : ThemedForm
             }
         }
 
+        // Дистанция до подписи — отступом контрола, а не расчётом колонок.
         right.Anchor = AnchorStyles.Right;
-        right.Margin = new Padding(0);
+        right.Margin = new Padding(Theme.S3, 0, 0, 0);
 
         row.Controls.Add(text, 0, 0);
         row.Controls.Add(right, 1, 0);
@@ -421,13 +440,12 @@ public sealed class SettingsForm : ThemedForm
 
     private static Control CheckRow(CheckBox box, string title, string hint)
     {
+        // ToggleBox рисует себя сам во весь свой прямоугольник — контрол 20×20,
+        // прижатый к правому краю колонки, и есть галочка, без системных полей.
         box.Text = string.Empty;
         box.AutoSize = false;
         box.Size = new Size(20, 20);
-        box.BackColor = Color.Transparent;
-        box.ForeColor = Theme.Text;
-        box.Cursor = Cursors.Hand;
-        return Row(title, hint, box, ReservedCheck, () => box.Checked = !box.Checked);
+        return Row(title, hint, box, () => box.Checked = !box.Checked);
     }
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
@@ -436,7 +454,13 @@ public sealed class SettingsForm : ThemedForm
         display.Margin = new Padding(0, 0, Theme.S2, 0);
         display.Click += (_, _) => record();   // сами клавиши и есть кнопка «изменить»
 
-        var btn = new FlatButton { Text = "Изменить", Size = new Size(92, 30), Margin = new Padding(0) };
+        var btn = new FlatButton
+        {
+            Text = "Изменить",
+            AutoSize = true,                       // ширину диктует текст, не константа
+            MinimumSize = new Size(92, 30),
+            Margin = new Padding(0),
+        };
         btn.Click += (_, _) => record();
 
         var group = new FlowLayoutPanel
@@ -451,42 +475,17 @@ public sealed class SettingsForm : ThemedForm
         group.Controls.Add(display);
         group.Controls.Add(btn);
 
-        return Row(title, hint, group, ReservedHotkey);
+        return Row(title, hint, group);
     }
 
-    private static Control NumberRow(NumericUpDown nud, string title, string unit, string hint)
+    private static Control NumberRow(Stepper nud, string title, string unit, string hint)
     {
-        nud.Size = new Size(64, 26);
-        nud.Font = Theme.Body;
-        nud.BorderStyle = BorderStyle.FixedSingle;
-        nud.TextAlign = HorizontalAlignment.Center;
-        nud.Margin = new Padding(0, 2, Theme.S2, 0);
-        // NumericUpDown не наследует цвета формы — в тёмной теме остался бы
-        // белым прямоугольником с чёрным текстом посреди тёмной карточки.
-        nud.BackColor = Theme.Surface;
-        nud.ForeColor = Theme.Text;
-
-        var group = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
-        group.Controls.Add(nud);
-        group.Controls.Add(new Label
-        {
-            Text = unit,
-            Font = Theme.Caption,
-            ForeColor = Theme.TextMuted,
-            AutoSize = true,
-            Margin = new Padding(0, 8, 0, 0),
-            BackColor = Color.Transparent,
-        });
-
-        return Row(title, hint, group, ReservedNumber);
+        // Единица измерения — внутри степпера («30 сек»), а не подписью рядом:
+        // внешняя подпись сдвигала контрол влево, и правый край рядов в карточке
+        // становился рваным — галочки прижаты, степперы нет.
+        nud.Suffix = unit;
+        nud.Size = new Size(132, 30);
+        return Row(title, hint, nud);
     }
 
     // ------------------------------------------------------------------ data
@@ -499,8 +498,8 @@ public sealed class SettingsForm : ThemedForm
         _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
-        _nudIdle.Value = Math.Clamp(_settings.BufferIdleTimeoutSeconds, (int)_nudIdle.Minimum, (int)_nudIdle.Maximum);
-        _nudExpand.Value = Math.Clamp(_settings.ExpandWindowSeconds, (int)_nudExpand.Minimum, (int)_nudExpand.Maximum);
+        _nudIdle.Value = _settings.BufferIdleTimeoutSeconds;    // Stepper сам ограничит диапазоном
+        _nudExpand.Value = _settings.ExpandWindowSeconds;
         _convertKeys.SetCombo(_convertHotkey.ToString());
         _caseKeys.SetCombo(_caseHotkey.ToString());
     }
@@ -548,8 +547,8 @@ public sealed class SettingsForm : ThemedForm
         _settings.Enabled = _cbEnabled.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
-        _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
-        _settings.ExpandWindowSeconds = (int)_nudExpand.Value;
+        _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
+        _settings.ExpandWindowSeconds = _nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
         _settings.ChangeCaseHotkey = _caseHotkey;
 
