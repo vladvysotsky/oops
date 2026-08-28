@@ -210,7 +210,8 @@ internal sealed class Notice : ThemedForm
         {
             Text = "Понятно",
             Primary = true,
-            Size = new Size(112, 34),
+            AutoSize = true,
+            MinimumSize = new Size(112, 34),
             Margin = new Padding(Theme.S2, 0, 0, 0),
             DialogResult = DialogResult.OK,
         };
@@ -223,7 +224,8 @@ internal sealed class Notice : ThemedForm
             var report = new FlatButton
             {
                 Text = "Сообщить об ошибке",
-                Size = new Size(168, 34),
+                AutoSize = true,
+                MinimumSize = new Size(120, 34),
                 Margin = new Padding(Theme.S2, 0, 0, 0),
             };
             report.Click += (_, _) => OpenIssue(reportContext, details);
@@ -238,7 +240,8 @@ internal sealed class Notice : ThemedForm
             var copy = new FlatButton
             {
                 Text = "Скопировать",
-                Size = new Size(124, 34),
+                AutoSize = true,
+                MinimumSize = new Size(112, 34),
                 Margin = new Padding(Theme.S2, 0, 0, 0),
             };
             copy.Click += (_, _) =>

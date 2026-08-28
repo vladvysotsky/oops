@@ -23,8 +23,8 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbCharByChar = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
-    private readonly NumericUpDown _nudIdle = new();
-    private readonly NumericUpDown _nudExpand = new();
+    private readonly Stepper _nudIdle = new();
+    private readonly Stepper _nudExpand = new();
 
     // Живая проверка: показывает, что из нажатого реально доходит до программы.
     // Молчащий хоткей ничем не отличается от неработающей программы, и без
@@ -78,7 +78,7 @@ public sealed class SettingsForm : ThemedForm
     /// </summary>
     private const int HotkeyWidth = 250;
     private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
-    private const int ReservedNumber = 104;   // поле 64 + отступ 8 + подпись
+    private const int ReservedNumber = 150;   // степпер 108 + отступ 8 + подпись «сек»
 
     private void BuildLayout()
     {
@@ -208,12 +208,24 @@ public sealed class SettingsForm : ThemedForm
     {
         var card = NewCard(out var rows);
 
-        _probeKeys.Size = new Size(ReservedHotkey, 30);
+        // Вертикально, а не «подпись слева — контрол справа»: длинному сочетанию
+        // из четырёх клавиш нужна вся ширина карточки, а двухколоночная вёрстка
+        // ломала заголовок переносом.
+        AddAutoRow(rows, new Label
+        {
+            Text = "Нажмите сочетание — здесь появится то, что реально дошло до oops.",
+            Font = Theme.Caption,
+            ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            MaximumSize = new Size(CardInnerWidth, 0),
+            Margin = new Padding(0, 0, 0, Theme.S2),
+            BackColor = Color.Transparent,
+        });
+
+        _probeKeys.Size = new Size(CardInnerWidth, 34);
+        _probeKeys.Margin = new Padding(0);
         _probeKeys.SetCombo(string.Empty);
-        AddAutoRow(rows, Row(
-            "Нажмите сочетание",
-            "Здесь появится то, что дошло до oops",
-            _probeKeys, ReservedHotkey));
+        AddAutoRow(rows, _probeKeys);
 
         _probeStatus.Text = "Ждём нажатия…";
         _probeStatus.Font = Theme.Caption;
@@ -285,8 +297,8 @@ public sealed class SettingsForm : ThemedForm
 
     private Control Footer()
     {
-        var save = new FlatButton { Text = "Сохранить", Primary = true, Size = new Size(124, 34), DialogResult = DialogResult.OK };
-        var cancel = new FlatButton { Text = "Отмена", Size = new Size(104, 34), DialogResult = DialogResult.Cancel };
+        var save = new FlatButton { Text = "Сохранить", Primary = true, AutoSize = true, MinimumSize = new Size(124, 34), DialogResult = DialogResult.OK };
+        var cancel = new FlatButton { Text = "Отмена", AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
         // Button.OnClick выставляет DialogResult формы ДО вызова наших обработчиков,
         // поэтому вернуть None — штатный способ отменить закрытие окна.
         save.Click += (_, _) => { if (!ApplyToSettings()) DialogResult = DialogResult.None; };
@@ -436,7 +448,13 @@ public sealed class SettingsForm : ThemedForm
         display.Margin = new Padding(0, 0, Theme.S2, 0);
         display.Click += (_, _) => record();   // сами клавиши и есть кнопка «изменить»
 
-        var btn = new FlatButton { Text = "Изменить", Size = new Size(92, 30), Margin = new Padding(0) };
+        var btn = new FlatButton
+        {
+            Text = "Изменить",
+            AutoSize = true,                       // ширину диктует текст, не константа
+            MinimumSize = new Size(92, 30),
+            Margin = new Padding(0),
+        };
         btn.Click += (_, _) => record();
 
         var group = new FlowLayoutPanel
@@ -454,17 +472,9 @@ public sealed class SettingsForm : ThemedForm
         return Row(title, hint, group, ReservedHotkey);
     }
 
-    private static Control NumberRow(NumericUpDown nud, string title, string unit, string hint)
+    private static Control NumberRow(Stepper nud, string title, string unit, string hint)
     {
-        nud.Size = new Size(64, 26);
-        nud.Font = Theme.Body;
-        nud.BorderStyle = BorderStyle.FixedSingle;
-        nud.TextAlign = HorizontalAlignment.Center;
-        nud.Margin = new Padding(0, 2, Theme.S2, 0);
-        // NumericUpDown не наследует цвета формы — в тёмной теме остался бы
-        // белым прямоугольником с чёрным текстом посреди тёмной карточки.
-        nud.BackColor = Theme.Surface;
-        nud.ForeColor = Theme.Text;
+        nud.Margin = new Padding(0, 0, Theme.S2, 0);
 
         var group = new FlowLayoutPanel
         {
@@ -499,8 +509,8 @@ public sealed class SettingsForm : ThemedForm
         _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
-        _nudIdle.Value = Math.Clamp(_settings.BufferIdleTimeoutSeconds, (int)_nudIdle.Minimum, (int)_nudIdle.Maximum);
-        _nudExpand.Value = Math.Clamp(_settings.ExpandWindowSeconds, (int)_nudExpand.Minimum, (int)_nudExpand.Maximum);
+        _nudIdle.Value = _settings.BufferIdleTimeoutSeconds;    // Stepper сам ограничит диапазоном
+        _nudExpand.Value = _settings.ExpandWindowSeconds;
         _convertKeys.SetCombo(_convertHotkey.ToString());
         _caseKeys.SetCombo(_caseHotkey.ToString());
     }
@@ -548,8 +558,8 @@ public sealed class SettingsForm : ThemedForm
         _settings.Enabled = _cbEnabled.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
-        _settings.BufferIdleTimeoutSeconds = (int)_nudIdle.Value;
-        _settings.ExpandWindowSeconds = (int)_nudExpand.Value;
+        _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
+        _settings.ExpandWindowSeconds = _nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
         _settings.ChangeCaseHotkey = _caseHotkey;
 
