@@ -28,10 +28,10 @@ public sealed class WelcomeForm : ThemedForm
     /// подписей слева не изменилась.
     /// </summary>
     private const int HotkeyWidth = 250;
-    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 92;  // + отступ + кнопка
+    private const int ReservedHotkey = HotkeyWidth + Theme.S2 + 104;  // запас под автоширину кнопки
 
     private readonly TableLayoutPanel _root;
-    private readonly CheckBox _cbAutostart = new();
+    private readonly CheckBox _cbAutostart = new ToggleBox();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
 
@@ -401,16 +401,10 @@ public sealed class WelcomeForm : ThemedForm
 
     private static Control CheckRow(CheckBox box, string title, string hint)
     {
+        // ToggleBox рисует себя сам во весь свой прямоугольник.
         box.Text = string.Empty;
         box.AutoSize = false;
         box.Size = new Size(20, 20);
-        // Флажок — к правому краю контрола. По умолчанию CheckBox рисует его
-        // слева, оставляя справа пустой хвост: визуально отступ от края карточки
-        // получался больше, чем у текста слева, и правая колонка «гуляла».
-        box.CheckAlign = ContentAlignment.MiddleRight;
-        box.BackColor = Color.Transparent;
-        box.ForeColor = Theme.Text;
-        box.Cursor = Cursors.Hand;
         return Row(title, hint, box, 24, () => box.Checked = !box.Checked);
     }
 
