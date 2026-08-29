@@ -227,7 +227,7 @@ public static class UpdateService
         ReleaseInfo release, IProgress<int>? progress = null, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(release.InstallerUrl))
-            throw new InvalidOperationException("В релизе нет файла инсталлятора.");
+            throw new InvalidOperationException(L10n.T("update.err.noInstaller"));
 
         var dir = Path.Combine(Path.GetTempPath(), "OopsUpdate");
         Directory.CreateDirectory(dir);
@@ -255,7 +255,7 @@ public static class UpdateService
             {
                 read += n;
                 if (read > MaxInstallerBytes)
-                    throw new InvalidOperationException("Файл установщика подозрительно велик.");
+                    throw new InvalidOperationException(L10n.T("update.err.tooBig"));
                 await target.WriteAsync(buffer.AsMemory(0, n), ct).ConfigureAwait(false);
                 if (total > 0) progress?.Report((int)(read * 100 / total));
             }
@@ -290,7 +290,7 @@ public static class UpdateService
         // пишет, — уже признак манипуляции с релизом.
         if (expected == null)
             throw new InvalidOperationException(
-                "В SHA256SUMS.txt релиза нет суммы для установщика.");
+                L10n.T("update.err.noChecksum"));
 
         using var sha = System.Security.Cryptography.SHA256.Create();
         await using var file = File.OpenRead(path);
@@ -300,8 +300,7 @@ public static class UpdateService
         {
             try { File.Delete(path); } catch { }
             throw new InvalidOperationException(
-                "Контрольная сумма установщика не совпала с опубликованной. "
-                + "Файл повреждён при загрузке или подменён — запускать его нельзя.");
+                L10n.T("update.err.checksumMismatch"));
         }
     }
 
