@@ -614,7 +614,7 @@ internal sealed class HotkeyDisplay : Control
 
         if (_keys.Length == 0)
         {
-            TextRenderer.DrawText(g, "не задан", Theme.Body, ClientRectangle, Theme.TextMuted,
+            TextRenderer.DrawText(g, Oops.Core.L10n.T("hotkey.unset"), Theme.Body, ClientRectangle, Theme.TextMuted,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
             return;
         }

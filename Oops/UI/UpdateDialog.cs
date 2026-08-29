@@ -23,15 +23,15 @@ public sealed class UpdateDialog : ThemedForm
     {
         _release = release;
 
-        Text = "Обновление";
+        Text = L10n.T("update.window.title");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         // Фон, шрифт, DPI и тёмный заголовок окна приходят из ThemedForm.
 
-        _install = new FlatButton { Text = "Обновить", Primary = true, AutoSize = true, MinimumSize = new Size(124, 34) };
-        _later = new FlatButton { Text = "Позже", AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
+        _install = new FlatButton { Text = L10n.T("update.install"), Primary = true, AutoSize = true, MinimumSize = new Size(124, 34) };
+        _later = new FlatButton { Text = L10n.T("update.later"), AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
         _install.Click += OnInstallClick;
 
         BuildLayout();
@@ -58,7 +58,7 @@ public sealed class UpdateDialog : ThemedForm
 
         AddRow(root, new Label
         {
-            Text = $"Доступна версия {_release.Version}",
+            Text = L10n.T("update.availableVersion", _release.Version),
             Font = Theme.Title,
             ForeColor = Theme.Text,
             AutoSize = true,
@@ -69,7 +69,7 @@ public sealed class UpdateDialog : ThemedForm
 
         AddRow(root, new Label
         {
-            Text = $"Установлена {UpdateService.CurrentVersion}",
+            Text = L10n.T("update.installedVersion", UpdateService.CurrentVersion),
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
@@ -208,7 +208,7 @@ public sealed class UpdateDialog : ThemedForm
         _install.Enabled = false;
         _later.Enabled = false;
         _progress.Visible = true;
-        _status.Text = "Загрузка…";
+        _status.Text = L10n.T("update.downloading");
 
         _cts = new CancellationTokenSource();
         try
@@ -216,7 +216,7 @@ public sealed class UpdateDialog : ThemedForm
             var progress = new Progress<int>(p => _progress.Value = Math.Clamp(p, 0, 100));
             var path = await UpdateService.DownloadInstallerAsync(_release, progress, _cts.Token);
 
-            _status.Text = "Запуск установщика…";
+            _status.Text = L10n.T("update.launching");
             UpdateService.LaunchInstaller(path);
 
             // Инсталлятор закроет нашу копию сам, но выходим явно, чтобы он
@@ -227,7 +227,7 @@ public sealed class UpdateDialog : ThemedForm
         catch (Exception ex)
         {
             _progress.Visible = false;
-            _status.Text = $"Не удалось обновить: {ex.Message}";
+            _status.Text = L10n.T("update.installFailed", ex.Message);
             _status.ForeColor = Theme.Danger;   // ошибка обязана отличаться от подсказки цветом
             _install.Enabled = true;
             _later.Enabled = true;
