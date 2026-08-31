@@ -39,9 +39,13 @@ public sealed class SettingsForm : ThemedForm
     private HotkeyConfig _convertHotkey;
     private HotkeyConfig _caseHotkey;
 
-    public SettingsForm(AppSettings settings)
+    /// <summary>Вызывается, когда язык сменили: трей пересобирает своё меню.</summary>
+    private readonly Action? _onLanguageChanged;
+
+    public SettingsForm(AppSettings settings, Action? onLanguageChanged = null)
     {
         _settings = settings;
+        _onLanguageChanged = onLanguageChanged;
         _convertHotkey = Clone(settings.ConvertHotkey);
         _caseHotkey = Clone(settings.ChangeCaseHotkey);
 
@@ -52,12 +56,14 @@ public sealed class SettingsForm : ThemedForm
         StartPosition = FormStartPosition.CenterScreen;
         // Фон, шрифт, DPI и тёмный заголовок окна приходят из ThemedForm.
 
+        // Размер задаём явно, окно НЕ AutoSize. Пока высота определялась суммой
+        // всех секций, окно вырастало выше экрана, а подвал с кнопками уезжал
+        // за край: вся раскладка висела на одной цепочке AutoSize. С вкладками
+        // на экране одна секция за раз, и размер предсказуем.
+        ClientSize = new Size(ContentWidth + Theme.S4 * 2, 560);
+
         BuildLayout();
         Populate();
-
-        // Подгоняем окно под фактическую высоту содержимого, чтобы не появлялась прокрутка.
-        AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
     }
 
     // ---------------------------------------------------------------- layout
@@ -79,34 +85,90 @@ public sealed class SettingsForm : ThemedForm
     /// </summary>
     private const int HotkeyWidth = 220;
 
+    /// <summary>Вкладки: порядок совпадает с порядком страниц в BuildPage.</summary>
+    private readonly SegmentedControl _tabs = new();
+    private readonly Panel _page = new();
+
     private void BuildLayout()
     {
-        var content = new TableLayoutPanel
+        // Корень — таблица, а не Dock.Fill + Dock.Bottom: порядок докинга в
+        // WinForms зависит от z-order и ломается при правках (см. CLAUDE.md).
+        var root = new TableLayoutPanel
         {
             ColumnCount = 1,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            RowCount = 4,
+            Dock = DockStyle.Fill,
             BackColor = Theme.Canvas,
-            // Снизу S3, а не S2: вместе с отступом футера получается 24 —
-            // столько же, сколько сверху и по бокам. Раньше низ был тоньше.
             Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S3),
             Margin = new Padding(0),
         };
-        content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // шапка
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // вкладки
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // страница
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // кнопки
 
-        AddAutoRow(content, Header());
-        AddAutoRow(content, SectionLabel(L10n.T("settings.section.general")));
-        AddAutoRow(content, GeneralCard());
-        AddAutoRow(content, SectionLabel(L10n.T("settings.section.hotkeys")));
-        AddAutoRow(content, HotkeysCard());
-        AddAutoRow(content, SectionLabel(L10n.T("settings.section.behaviour")));
-        AddAutoRow(content, BehaviourCard());
-        AddAutoRow(content, SectionLabel(L10n.T("settings.section.probe")));
-        AddAutoRow(content, ProbeCard());
-        AddAutoRow(content, Footer());
+        var header = Header();
+        header.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        root.Controls.Add(header, 0, 0);
 
-        Controls.Add(content);
+        _tabs.SetItems(
+            L10n.T("settings.section.general"),
+            L10n.T("settings.section.hotkeys"),
+            L10n.T("settings.section.behaviour"),
+            L10n.T("settings.section.probe"));
+        _tabs.Margin = new Padding(0, Theme.S2, 0, Theme.S3);
+        _tabs.SelectedIndexChanged += (_, _) => ShowPage(_tabs.SelectedIndex);
+        root.Controls.Add(_tabs, 0, 1);
+
+        // Страница может оказаться выше окна на крупном шрифте — тогда лучше
+        // прокрутка внутри вкладки, чем окно выше экрана.
+        _page.Dock = DockStyle.Fill;
+        _page.AutoScroll = true;
+        _page.BackColor = Theme.Canvas;
+        _page.Margin = new Padding(0);
+        root.Controls.Add(_page, 0, 2);
+
+        root.Controls.Add(Footer(), 0, 3);
+
+        Controls.Add(root);
+        ShowPage(0);
     }
+
+    /// <summary>Пересобирает содержимое вкладки. Контролы переиспользуются.</summary>
+    private void ShowPage(int index)
+    {
+        _page.SuspendLayout();
+        _page.Controls.Clear();
+
+        var stack = Stack();
+        stack.Dock = DockStyle.Top;
+        switch (index)
+        {
+            case 0: AddAutoRow(stack, GeneralCard()); break;
+            case 1:
+                AddAutoRow(stack, HotkeysCard());
+                AddAutoRow(stack, Note(L10n.T("welcome.note.altShift")));
+                break;
+            case 2: AddAutoRow(stack, BehaviourCard()); break;
+            default: AddAutoRow(stack, ProbeCard()); break;
+        }
+
+        _tabIndex = index;
+        _page.Controls.Add(stack);
+        _page.ResumeLayout(true);
+    }
+
+    /// <summary>Пояснение под карточкой — мелким второстепенным текстом.</summary>
+    private static Control Note(string text) => new Label
+    {
+        Text = text,
+        Font = Theme.Caption,
+        ForeColor = Theme.TextMuted,
+        AutoSize = true,
+        Margin = new Padding(Theme.S1, Theme.S2, Theme.S1, 0),
+        BackColor = Color.Transparent,
+    };
 
     private static void AddAutoRow(TableLayoutPanel host, Control child)
     {
@@ -146,15 +208,6 @@ public sealed class SettingsForm : ThemedForm
         return stack;
     }
 
-    private static Control SectionLabel(string text) => new Label
-    {
-        Text = text,
-        Font = Theme.SectionLabel,
-        ForeColor = Theme.TextMuted,
-        AutoSize = true,
-        Margin = new Padding(Theme.S1, Theme.S3, 0, Theme.S2),
-        BackColor = Color.Transparent,
-    };
 
     private Control GeneralCard()
     {
@@ -496,6 +549,32 @@ public sealed class SettingsForm : ThemedForm
 
     // ------------------------------------------------------------------ data
 
+    /// <summary>
+    /// Смена языка применяется сразу: перезагружаем словарь и пересобираем окно,
+    /// а не ждём сохранения и перезапуска. Настройка при этом всё равно
+    /// записывается только по «Сохранить», как и остальные.
+    /// </summary>
+    private void OnLanguagePicked()
+    {
+        var picked = LanguageValues[_language.SelectedIndex];
+        if (L10n.Resolve(picked) == L10n.Language) return;   // ничего не меняется
+
+        L10n.Init(picked);
+        _onLanguageChanged?.Invoke();
+
+        // Тексты сидят в уже созданных контролах, поэтому окно строим заново.
+        // Значения полей переносим через Populate — они хранятся в самих
+        // контролах, а хоткеи в полях формы.
+        SuspendLayout();
+        Controls.Clear();
+        BuildLayout();
+        Populate();
+        _tabs.SelectedIndex = _tabIndex;
+        ResumeLayout(true);
+    }
+
+    private int _tabIndex;
+
     private void Populate()
     {
         _cbEnabled.Checked = _settings.Enabled;
@@ -505,6 +584,9 @@ public sealed class SettingsForm : ThemedForm
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
         _language.SelectedIndex = Math.Max(0, Array.IndexOf(LanguageValues, _settings.Language));
+        // Подписываемся после установки значения, чтобы Populate не вызвал пересборку.
+        _language.SelectedIndexChanged -= LanguageChangedHandler;
+        _language.SelectedIndexChanged += LanguageChangedHandler;
         _nudIdle.Value = _settings.BufferIdleTimeoutSeconds;    // Stepper сам ограничит диапазоном
         _nudExpand.Value = _settings.ExpandWindowSeconds;
         _convertKeys.SetCombo(_convertHotkey.ToString());
@@ -531,6 +613,8 @@ public sealed class SettingsForm : ThemedForm
             try { _probe.Install(); } catch { }
         }
     }
+
+    private void LanguageChangedHandler(object? sender, EventArgs e) => OnLanguagePicked();
 
     private static HotkeyConfig Clone(HotkeyConfig h) => new()
     {
