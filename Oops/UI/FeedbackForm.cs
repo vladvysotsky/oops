@@ -119,7 +119,7 @@ internal sealed class FeedbackForm : ThemedForm
             DialogResult = DialogResult.Cancel,
         };
 
-        Add(root, ButtonBar.Create(new Padding(0, Theme.S4, 0, 0), send, cancel));
+        Add(root, ButtonBar.Create(ContentWidth, new Padding(0, Theme.S4, 0, 0), send, cancel));
 
         Controls.Add(root);
         AutoSize = true;

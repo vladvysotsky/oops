@@ -237,7 +237,7 @@ internal sealed class Notice : ThemedForm
             buttons.Add(copy);
         }
 
-        return ButtonBar.Create(new Padding(0, Theme.S4, 0, 0), buttons.ToArray());
+        return ButtonBar.Create(ContentWidth, new Padding(0, Theme.S4, 0, 0), buttons.ToArray());
     }
 
     private static void OpenIssue(string context, string? details)
