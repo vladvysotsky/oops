@@ -265,6 +265,33 @@ public class ThemedForm : Form
         base.OnHandleCreated(e);
         Theme.ApplyWindowChrome(this);
     }
+
+    /// <summary>
+    /// Страховка от обрезанного правого и нижнего края.
+    ///
+    /// AutoSize формы иногда недосчитывает размер: содержимое разложено верно,
+    /// а окно оказывается уже него, и край — обычно это кнопка — уходит под
+    /// границу. Здесь размер проверяется уже ПОСЛЕ раскладки, когда фактические
+    /// координаты известны точно, и окно доводится до нужного.
+    ///
+    /// Только увеличиваем: сузить окно эта проверка не может по построению,
+    /// поэтому правильной раскладке навредить не способна.
+    /// </summary>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+
+        int right = 0, bottom = 0;
+        foreach (Control child in Controls)
+        {
+            right = Math.Max(right, child.Right + child.Margin.Right);
+            bottom = Math.Max(bottom, child.Bottom + child.Margin.Bottom);
+        }
+        if (right > ClientSize.Width || bottom > ClientSize.Height)
+            ClientSize = new Size(
+                Math.Max(right, ClientSize.Width),
+                Math.Max(bottom, ClientSize.Height));
+    }
 }
 
 /// <summary>
