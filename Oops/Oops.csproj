@@ -24,9 +24,15 @@
     <!-- Строки интерфейса. Именно встроенными ресурсами, а не .resx с
          сателлитными сборками: при PublishSingleFile сателлиты не попадают
          внутрь exe, а раскладываются в подпапки культур рядом — портативный
-         архив собирается из одного файла и потерял бы переводы. -->
-    <EmbeddedResource Include="Resources\lang.ru.json" />
-    <EmbeddedResource Include="Resources\lang.en.json" />
+         архив собирается из одного файла и потерял бы переводы.
+
+         ПОДЧЁРКИВАНИЕ В ИМЕНИ ОБЯЗАТЕЛЬНО. При «lang.ru.json» MSBuild видит
+         «.ru.» и считает файл ресурсом культуры ru — тогда он уходит в
+         сателлитную сборку ru\, а из главной пропадает: приложение падало на
+         старте с «не найден ресурс Oops.Resources.lang.en.json». WithCulture
+         отключает это распознавание, имя с подчёркиванием — вторая страховка. -->
+    <EmbeddedResource Include="Resources\lang_ru.json" WithCulture="false" />
+    <EmbeddedResource Include="Resources\lang_en.json" WithCulture="false" />
   </ItemGroup>
 
 </Project>
