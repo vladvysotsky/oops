@@ -144,17 +144,25 @@ internal sealed class Notice : ThemedForm
             Margin = new Padding(0),
             Width = ContentWidth,
         };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth - 36));
+        // Колонка под значок считается от него самого, а не магическим числом:
+        // при 36 на значок 24 с отступом 8 заголовок вплотную упирался в метку.
+        const int badge = 24;
+        int iconColumn = badge + Theme.S3;
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, iconColumn));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth - iconColumn));
 
-        row.Controls.Add(new Badge(kind) { Size = new Size(24, 24), Margin = new Padding(0, 2, Theme.S2, 0) }, 0, 0);
+        row.Controls.Add(new Badge(kind)
+        {
+            Size = new Size(badge, badge),
+            Margin = new Padding(0, 2, Theme.S3, 0),
+        }, 0, 0);
         row.Controls.Add(new Label
         {
             Text = title,
             Font = Theme.Title,
             ForeColor = Theme.Text,
             AutoSize = true,
-            MaximumSize = new Size(ContentWidth - 36, 0),
+            MaximumSize = new Size(ContentWidth - iconColumn, 0),
             Margin = new Padding(0),
             BackColor = Color.Transparent,
         }, 1, 0);
