@@ -307,19 +307,22 @@ internal static class ButtonBar
         {
             ColumnCount = 2,
             RowCount = 1,
-            // Высоту берём у кнопок, ширину — у колонки через Anchor. Прежняя
-            // явная высота (34) была меньше, чем нужно кнопке при крупном
-            // шрифте, и обрезала её: «в кнопки ничего не помещается».
+            // Dock = Top, а НЕ Anchor: якорь и AutoSize спорят за ширину —
+            // WinForms сжимает контейнер до предпочтительного размера, и правый
+            // край кнопок оказывался то за границей окна, то вплотную к ней.
+            // Dock даёт ширину рабочей области родителя (она уже учитывает его
+            // Padding), а AutoSize остаётся только на высоту.
+            Dock = DockStyle.Top,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Anchor = AnchorStyles.Left | AnchorStyles.Right,
             BackColor = Color.Transparent,
             Margin = margin,
         };
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        bar.Controls.Add(new Panel { Margin = new Padding(0), Width = 0 }, 0, 0);
+        bar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        // Пустая тянущаяся колонка слева съедает всё свободное место.
+        bar.Controls.Add(new Panel { Margin = new Padding(0), Width = 0, Height = 0 }, 0, 0);
         bar.Controls.Add(flow, 1, 0);
         return bar;
     }
