@@ -22,7 +22,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbAutostart = new ToggleBox();
     private readonly CheckBox _cbAutoUpdate = new ToggleBox();
     private readonly CheckBox _cbCharByChar = new ToggleBox();
-    private readonly ComboBox _cbLanguage = new();
+    private readonly SegmentedControl _language = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly Stepper _nudIdle = new();
@@ -173,28 +173,18 @@ public sealed class SettingsForm : ThemedForm
     }
 
     /// <summary>
-    /// Выбор языка интерфейса. Список короткий и фиксированный, поэтому
-    /// системный ComboBox в DropDownList — он не даёт вводить произвольный
-    /// текст и не требует своей отрисовки.
+    /// Выбор языка интерфейса. Сегментированный переключатель, а не системный
+    /// ComboBox: тот рисует своё системно-синее выделение и выпадающий список
+    /// чужой темы, то есть выпадал из дизайн-системы. Вариантов три — все видны
+    /// сразу, раскрывать нечего.
     /// </summary>
     private Control LanguageRow()
     {
-        _cbLanguage.DropDownStyle = ComboBoxStyle.DropDownList;
-        _cbLanguage.FlatStyle = FlatStyle.Flat;
-        _cbLanguage.Font = Theme.Body;
-        _cbLanguage.BackColor = Theme.Surface;
-        _cbLanguage.ForeColor = Theme.Text;
-        _cbLanguage.Items.Clear();
-        var languages = new object[] { L10n.T("settings.language.auto"), "Русский", "English" };
-        _cbLanguage.Items.AddRange(languages);
-
-        // Ширина — по самому длинному пункту, а не константой: «Same as Windows»
-        // в английской локали не влезал в прежние 160 и обрезался. Запас — на
-        // стрелку списка и внутренние поля.
-        int widest = languages.Max(item =>
-            TextRenderer.MeasureText(item!.ToString(), Theme.Body).Width);
-        _cbLanguage.Width = widest + Theme.S5 + Theme.S2;
-        return Row(L10n.T("settings.language"), L10n.T("settings.language.hint"), _cbLanguage);
+        // Названия языков — на самих языках, так принято: человек, открывший
+        // чужую локаль, всё равно найдёт свою строку. «Авто» короткое, чтобы
+        // три сегмента не растянули строку на всю карточку.
+        _language.SetItems(L10n.T("settings.language.auto"), "Русский", "English");
+        return Row(L10n.T("settings.language"), L10n.T("settings.language.hint"), _language);
     }
 
     /// <summary>Порядок пунктов списка языков — он же порядок значений настройки.</summary>
@@ -547,7 +537,7 @@ public sealed class SettingsForm : ThemedForm
         _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
-        _cbLanguage.SelectedIndex = Math.Max(0, Array.IndexOf(LanguageValues, _settings.Language));
+        _language.SelectedIndex = Math.Max(0, Array.IndexOf(LanguageValues, _settings.Language));
         _nudIdle.Value = _settings.BufferIdleTimeoutSeconds;    // Stepper сам ограничит диапазоном
         _nudExpand.Value = _settings.ExpandWindowSeconds;
         _convertKeys.SetCombo(_convertHotkey.ToString());
@@ -595,8 +585,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.Enabled = _cbEnabled.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
-        if (_cbLanguage.SelectedIndex >= 0)
-            _settings.Language = LanguageValues[_cbLanguage.SelectedIndex];
+        _settings.Language = LanguageValues[_language.SelectedIndex];
         _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
         _settings.ExpandWindowSeconds = _nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
