@@ -120,6 +120,19 @@ internal static class Theme
     /// </summary>
     public const int MinHitHeight = 32;
 
+    /// <summary>
+    /// Высота контрола с обычным текстом: строка плюс вертикальные поля.
+    ///
+    /// СЧИТАЕТСЯ ОТ ШРИФТА, А НЕ КОНСТАНТОЙ. При 125–150% масштабирования
+    /// Windows шрифт крупнее, и строке нужно больше 30–34 пикселей: зашитые
+    /// значения обрезали текст в переключателе, степперах и кнопках. Правило
+    /// уже записано в CLAUDE.md про карточки — оно и здесь.
+    /// </summary>
+    public static int TextRowHeight => TextRenderer.MeasureText("Ag", Body).Height + S2 * 2;
+
+    /// <summary>То же для «клавиш» — там моноширинный шрифт крупнее.</summary>
+    public static int KeyRowHeight => TextRenderer.MeasureText("Ag", KeyCap).Height + S2 * 2;
+
     /// <summary>Скруглённый прямоугольник для отрисовки карточек и кнопок.</summary>
     public static GraphicsPath RoundedRect(Rectangle r, int radius)
     {
@@ -284,11 +297,9 @@ internal static class ButtonBar
             Anchor = AnchorStyles.Right,
         };
 
-        int height = 0;
         foreach (var b in buttons)
         {
             b.Margin = new Padding(Theme.S2, 0, 0, 0);
-            height = Math.Max(height, Math.Max(b.Height, b.MinimumSize.Height));
             flow.Controls.Add(b);
         }
 
@@ -296,8 +307,12 @@ internal static class ButtonBar
         {
             ColumnCount = 2,
             RowCount = 1,
-            AutoSize = false,           // ширину даёт колонка, высоту задаём сами
-            Height = height,
+            // Высоту берём у кнопок, ширину — у колонки через Anchor. Прежняя
+            // явная высота (34) была меньше, чем нужно кнопке при крупном
+            // шрифте, и обрезала её: «в кнопки ничего не помещается».
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
             BackColor = Color.Transparent,
             Margin = margin,
         };
@@ -368,14 +383,16 @@ internal sealed class FlatButton : Button
     /// <summary>
     /// Кнопка сама знает свою ширину: текст + горизонтальные поля. Фиксированный
     /// размер, заданный снаружи, при чуть более длинной надписи прижимал текст
-    /// к рамке фокуса — выглядело как «не помещается». Используется при
-    /// AutoSize = true; MinimumSize держит одинаковую высоту и минимальную
-    /// ширину коротких кнопок.
+    /// к рамке фокуса — выглядело как «не помещается».
+    ///
+    /// Пола высоты здесь нет намеренно: прежний Math.Max(34, …) при крупном
+    /// шрифте врал родителю о нужной высоте, и кнопку обрезало. Ровный ряд
+    /// кнопок держит MinimumSize по ШИРИНЕ, высоту диктует шрифт.
     /// </summary>
     public override Size GetPreferredSize(Size proposedSize)
     {
         var text = TextRenderer.MeasureText(Text, Font);
-        return new Size(text.Width + Theme.S4, Math.Max(34, text.Height + Theme.S3));
+        return new Size(text.Width + Theme.S4, text.Height + Theme.S3);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -523,13 +540,22 @@ internal sealed class SegmentedControl : Control
                | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         BackColor = Theme.Surface;   // иначе Control отдаст системный светло-серый
         TabStop = true;
-        Height = 30;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+    }
+
+    /// <summary>Ширина — по самому длинному пункту, высота — от шрифта.</summary>
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        if (_items.Length == 0) return new Size(0, Theme.TextRowHeight);
+        int widest = _items.Max(i => TextRenderer.MeasureText(i, Theme.Body).Width);
+        return new Size((widest + Theme.S3) * _items.Length + Theme.S1, Theme.TextRowHeight);
     }
 
     public void SetItems(params string[] items)
     {
         _items = items;
-        Width = PreferredWidth();
+        Size = GetPreferredSize(Size.Empty);
         Invalidate();
     }
 
@@ -544,14 +570,6 @@ internal sealed class SegmentedControl : Control
             Invalidate();
             SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
         }
-    }
-
-    /// <summary>Ширина — по самому длинному пункту, чтобы сегменты были равными.</summary>
-    private int PreferredWidth()
-    {
-        if (_items.Length == 0) return 0;
-        int widest = _items.Max(i => TextRenderer.MeasureText(i, Theme.Body).Width);
-        return (widest + Theme.S3) * _items.Length + Theme.S1;
     }
 
     private int SegmentWidth => _items.Length == 0 ? 0 : (Width - Theme.S1) / _items.Length;
@@ -674,7 +692,20 @@ internal sealed class Stepper : Control
                | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         BackColor = Theme.Surface;
         TabStop = true;
-        Size = new Size(108, 30);
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+    }
+
+    /// <summary>
+    /// Ширина — под самое длинное значение с единицей плюс две квадратные зоны
+    /// «−» и «+». Высота от шрифта: зашитые 30 обрезали текст при крупном DPI.
+    /// </summary>
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        int h = Theme.TextRowHeight;
+        var sample = Suffix.Length == 0 ? Maximum.ToString() : $"{Maximum} {Suffix}";
+        int text = TextRenderer.MeasureText(sample, Theme.BodyStrong).Width;
+        return new Size(text + Theme.S3 + h * 2, h);
     }
 
     private int ZoneWidth => Height;   // квадратные зоны по краям

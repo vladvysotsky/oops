@@ -245,7 +245,7 @@ public sealed class SettingsForm : ThemedForm
             BackColor = Color.Transparent,
         });
 
-        _probeKeys.Height = 34;
+        _probeKeys.Height = Theme.KeyRowHeight;
         _probeKeys.Margin = new Padding(0);
         _probeKeys.SetCombo(string.Empty);
         AddAutoRow(rows, _probeKeys);
@@ -319,8 +319,8 @@ public sealed class SettingsForm : ThemedForm
 
     private Control Footer()
     {
-        var save = new FlatButton { Text = L10n.T("common.save"), Primary = true, AutoSize = true, MinimumSize = new Size(124, 34), DialogResult = DialogResult.OK };
-        var cancel = new FlatButton { Text = L10n.T("common.cancel"), AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
+        var save = new FlatButton { Text = L10n.T("common.save"), Primary = true, AutoSize = true, MinimumSize = new Size(124, 0), DialogResult = DialogResult.OK };
+        var cancel = new FlatButton { Text = L10n.T("common.cancel"), AutoSize = true, MinimumSize = new Size(104, 0), DialogResult = DialogResult.Cancel };
         // Button.OnClick выставляет DialogResult формы ДО вызова наших обработчиков,
         // поэтому вернуть None — штатный способ отменить закрытие окна.
         save.Click += (_, _) => { if (!ApplyToSettings()) DialogResult = DialogResult.None; };
@@ -456,7 +456,7 @@ public sealed class SettingsForm : ThemedForm
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
     {
-        display.Size = new Size(HotkeyWidth, 30);
+        display.Size = new Size(HotkeyWidth, Theme.KeyRowHeight);
         display.Margin = new Padding(0, 0, Theme.S2, 0);
         display.Click += (_, _) => record();   // сами клавиши и есть кнопка «изменить»
 
@@ -464,7 +464,7 @@ public sealed class SettingsForm : ThemedForm
         {
             Text = L10n.T("hotkey.change"),
             AutoSize = true,                       // ширину диктует текст, не константа
-            MinimumSize = new Size(92, 30),
+            MinimumSize = new Size(92, 0),
             Margin = new Padding(0),
         };
         btn.Click += (_, _) => record();
@@ -489,8 +489,8 @@ public sealed class SettingsForm : ThemedForm
         // Единица измерения — внутри степпера («30 сек»), а не подписью рядом:
         // внешняя подпись сдвигала контрол влево, и правый край рядов в карточке
         // становился рваным — галочки прижаты, степперы нет.
+        // Размер степпер считает сам от шрифта — см. Stepper.GetPreferredSize.
         nud.Suffix = unit;
-        nud.Size = new Size(132, 30);
         return Row(title, hint, nud);
     }
 
@@ -611,7 +611,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
             Height = 66,
             Margin = new Padding(0, 0, 0, Theme.S3),
         };
-        _preview.Size = new Size(340 - Theme.S3 * 2, 34);
+        _preview.Size = new Size(340 - Theme.S3 * 2, Theme.KeyRowHeight);
         _preview.Location = new Point(Theme.S3, 16);
         _preview.SetCombo(string.Empty);
         card.Controls.Add(_preview);

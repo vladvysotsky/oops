@@ -198,7 +198,7 @@ internal sealed class Notice : ThemedForm
             Text = L10n.T("notice.ok"),
             Primary = true,
             AutoSize = true,
-            MinimumSize = new Size(112, 34),
+            MinimumSize = new Size(112, 0),
             DialogResult = DialogResult.OK,
         };
         buttons.Add(ok);
@@ -211,7 +211,7 @@ internal sealed class Notice : ThemedForm
             {
                 Text = L10n.T("notice.report"),
                 AutoSize = true,
-                MinimumSize = new Size(120, 34),
+                MinimumSize = new Size(120, 0),
             };
             report.Click += (_, _) => OpenIssue(reportContext, details);
             buttons.Add(report);
@@ -225,7 +225,7 @@ internal sealed class Notice : ThemedForm
             {
                 Text = L10n.T("notice.copy"),
                 AutoSize = true,
-                MinimumSize = new Size(112, 34),
+                MinimumSize = new Size(112, 0),
             };
             copy.Click += (_, _) =>
             {
