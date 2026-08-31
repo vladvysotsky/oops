@@ -438,17 +438,7 @@ public sealed class WelcomeForm : ThemedForm
         };
         primary.Click += (_, _) => primaryAction();
 
-        var flow = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0),
-        };
-        flow.Controls.Add(primary);
-
+        var buttons = new List<Control> { primary };
         if (showBack)
         {
             var back = new FlatButton
@@ -456,31 +446,13 @@ public sealed class WelcomeForm : ThemedForm
                 Text = L10n.T("common.back"),
                 AutoSize = true,
                 MinimumSize = new Size(104, 34),
-                Margin = new Padding(Theme.S2, 0, 0, 0),
             };
             back.Click += (_, _) => ShowPage(0);
-            flow.Controls.Add(back);
+            buttons.Add(back);
         }
 
         AcceptButton = primary;
-
-        // Подвал во всю ширину — та же причина, что в SettingsForm: Anchor = Right
-        // позиционирует панель, но не заставляет родителя быть нужной ширины.
-        var bar = new TableLayoutPanel
-        {
-            ColumnCount = 2,
-            RowCount = 1,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0, Theme.S4, 0, Theme.S2),
-        };
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        bar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        bar.Controls.Add(new Panel { Width = 0, Height = 0, Margin = new Padding(0) }, 0, 0);
-        bar.Controls.Add(flow, 1, 0);
-        return bar;
+        return ButtonBar.Create(new Padding(0, Theme.S4, 0, Theme.S2), buttons.ToArray());
     }
 
     private static HotkeyConfig Clone(HotkeyConfig h) => new()

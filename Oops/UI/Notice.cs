@@ -191,16 +191,7 @@ internal sealed class Notice : ThemedForm
 
     private Control Buttons(string? reportContext, string? details)
     {
-        var flow = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Anchor = AnchorStyles.Right,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0, Theme.S4, 0, 0),
-        };
+        var buttons = new List<Control>();
 
         var ok = new FlatButton
         {
@@ -208,10 +199,9 @@ internal sealed class Notice : ThemedForm
             Primary = true,
             AutoSize = true,
             MinimumSize = new Size(112, 34),
-            Margin = new Padding(Theme.S2, 0, 0, 0),
             DialogResult = DialogResult.OK,
         };
-        flow.Controls.Add(ok);
+        buttons.Add(ok);
         AcceptButton = ok;
         CancelButton = ok;
 
@@ -222,23 +212,20 @@ internal sealed class Notice : ThemedForm
                 Text = L10n.T("notice.report"),
                 AutoSize = true,
                 MinimumSize = new Size(120, 34),
-                Margin = new Padding(Theme.S2, 0, 0, 0),
             };
             report.Click += (_, _) => OpenIssue(reportContext, details);
-            flow.Controls.Add(report);
+            buttons.Add(report);
         }
 
         if (details != null)
         {
-            // Локальная копия, а не поле-параметр: анализ null не переносится
-            // внутрь лямбды, и Clipboard.SetText(details) ругался бы на возможный null.
+            // Локальная копия: анализ null не переносится внутрь лямбды.
             var text = details;
             var copy = new FlatButton
             {
                 Text = L10n.T("notice.copy"),
                 AutoSize = true,
                 MinimumSize = new Size(112, 34),
-                Margin = new Padding(Theme.S2, 0, 0, 0),
             };
             copy.Click += (_, _) =>
             {
@@ -247,10 +234,10 @@ internal sealed class Notice : ThemedForm
                 try { Clipboard.SetText(text); copy.Text = L10n.T("notice.copied"); }
                 catch { copy.Text = L10n.T("notice.copyFailed"); }
             };
-            flow.Controls.Add(copy);
+            buttons.Add(copy);
         }
 
-        return flow;
+        return ButtonBar.Create(new Padding(0, Theme.S4, 0, 0), buttons.ToArray());
     }
 
     private static void OpenIssue(string context, string? details)

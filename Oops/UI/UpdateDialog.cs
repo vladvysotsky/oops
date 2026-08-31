@@ -126,21 +126,8 @@ public sealed class UpdateDialog : ThemedForm
         _status.BackColor = Color.Transparent;
         AddRow(root, _status);
 
-        var buttons = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Anchor = AnchorStyles.Right,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0, Theme.S3, 0, 0),
-        };
-        _install.Margin = new Padding(Theme.S2, 0, 0, 0);
-        _later.Margin = new Padding(Theme.S2, 0, 0, 0);
-        buttons.Controls.Add(_install);
-        buttons.Controls.Add(_later);
-        AddRow(root, buttons);
+        AddRow(root, ButtonBar.Create(
+            new Padding(0, Theme.S3, 0, 0), _install, _later));
 
         Controls.Add(root);
     }

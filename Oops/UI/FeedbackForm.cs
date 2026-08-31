@@ -108,7 +108,6 @@ internal sealed class FeedbackForm : ThemedForm
             Primary = true,
             AutoSize = true,
             MinimumSize = new Size(124, 34),
-            Margin = new Padding(Theme.S2, 0, 0, 0),
         };
         send.Click += (_, _) => Send();
 
@@ -117,23 +116,10 @@ internal sealed class FeedbackForm : ThemedForm
             Text = L10n.T("common.cancel"),
             AutoSize = true,
             MinimumSize = new Size(104, 34),
-            Margin = new Padding(Theme.S2, 0, 0, 0),
             DialogResult = DialogResult.Cancel,
         };
 
-        var buttons = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Anchor = AnchorStyles.Right,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0, Theme.S4, 0, 0),
-        };
-        buttons.Controls.Add(send);
-        buttons.Controls.Add(cancel);
-        Add(root, buttons);
+        Add(root, ButtonBar.Create(new Padding(0, Theme.S4, 0, 0), send, cancel));
 
         Controls.Add(root);
         AutoSize = true;

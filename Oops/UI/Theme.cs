@@ -147,7 +147,12 @@ internal static class Theme
     /// </summary>
     public static Color EffectiveBackColor(Control? c)
     {
-        for (var p = c; p != null; p = p.Parent)
+        // Начинаем С РОДИТЕЛЯ, а не с самого контрола. У Control, которому фон не
+        // задавали явно, свойство BackColor возвращает НЕ прозрачный цвет
+        // родителя, а SystemColors.Control — светло-серый системный. Он
+        // непрозрачный, проверка «A == 255» его принимала, и углы скруглённых
+        // контролов заливались светлым квадратом поверх тёмной карточки.
+        for (var p = c?.Parent; p != null; p = p.Parent)
             if (p.BackColor.A == 255) return p.BackColor;
         return Canvas;
     }
@@ -246,6 +251,62 @@ public class ThemedForm : Form
     {
         base.OnHandleCreated(e);
         Theme.ApplyWindowChrome(this);
+    }
+}
+
+/// <summary>
+/// Ряд кнопок, прижатый к правому краю, во всю ширину колонки.
+///
+/// Раньше в каждом окне стояла FlowLayoutPanel с Anchor = Right. Якорь
+/// позиционирует панель внутри ячейки, но не требует от неё нужной ширины, а
+/// вместе с AutoSize у самой панели вообще конфликтует: WinForms сжимает её до
+/// предпочтительного размера и якорь перестаёт что-либо значить. Правый край
+/// кнопок из-за этого уезжал за границу окна.
+///
+/// Здесь контейнер БЕЗ AutoSize: ширину ему даёт колонка, высоту задаём явно,
+/// а кнопки живут в AutoSize-колонке справа. Пустая тянущаяся колонка слева
+/// съедает всё остальное место.
+/// </summary>
+internal static class ButtonBar
+{
+    /// <param name="buttons">Слева направо в порядке важности: главная первой.</param>
+    public static TableLayoutPanel Create(Padding margin, params Control[] buttons)
+    {
+        var flow = new FlowLayoutPanel
+        {
+            // RightToLeft: первая добавленная кнопка оказывается самой правой.
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+            Anchor = AnchorStyles.Right,
+        };
+
+        int height = 0;
+        foreach (var b in buttons)
+        {
+            b.Margin = new Padding(Theme.S2, 0, 0, 0);
+            height = Math.Max(height, Math.Max(b.Height, b.MinimumSize.Height));
+            flow.Controls.Add(b);
+        }
+
+        var bar = new TableLayoutPanel
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = false,           // ширину даёт колонка, высоту задаём сами
+            Height = height,
+            BackColor = Color.Transparent,
+            Margin = margin,
+        };
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        bar.Controls.Add(new Panel { Margin = new Padding(0), Width = 0 }, 0, 0);
+        bar.Controls.Add(flow, 1, 0);
+        return bar;
     }
 }
 
@@ -460,6 +521,7 @@ internal sealed class SegmentedControl : Control
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint
                | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        BackColor = Theme.Surface;   // иначе Control отдаст системный светло-серый
         TabStop = true;
         Height = 30;
     }
