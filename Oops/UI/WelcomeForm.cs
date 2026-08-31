@@ -444,9 +444,8 @@ public sealed class WelcomeForm : ThemedForm
             WrapContents = false,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Anchor = AnchorStyles.Right,
             BackColor = Theme.Canvas,
-            Margin = new Padding(0, Theme.S4, 0, Theme.S2),
+            Margin = new Padding(0),
         };
         flow.Controls.Add(primary);
 
@@ -464,7 +463,24 @@ public sealed class WelcomeForm : ThemedForm
         }
 
         AcceptButton = primary;
-        return flow;
+
+        // Подвал во всю ширину — та же причина, что в SettingsForm: Anchor = Right
+        // позиционирует панель, но не заставляет родителя быть нужной ширины.
+        var bar = new TableLayoutPanel
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Theme.Canvas,
+            Margin = new Padding(0, Theme.S4, 0, Theme.S2),
+        };
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        bar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        bar.Controls.Add(new Panel { Width = 0, Height = 0, Margin = new Padding(0) }, 0, 0);
+        bar.Controls.Add(flow, 1, 0);
+        return bar;
     }
 
     private static HotkeyConfig Clone(HotkeyConfig h) => new()

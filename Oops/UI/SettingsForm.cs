@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using Oops.Core;
 using Oops.Hooks;
@@ -183,12 +184,16 @@ public sealed class SettingsForm : ThemedForm
         _cbLanguage.Font = Theme.Body;
         _cbLanguage.BackColor = Theme.Surface;
         _cbLanguage.ForeColor = Theme.Text;
-        _cbLanguage.Width = 160;
         _cbLanguage.Items.Clear();
-        _cbLanguage.Items.AddRange(new object[]
-        {
-            L10n.T("settings.language.auto"), "Русский", "English",
-        });
+        var languages = new object[] { L10n.T("settings.language.auto"), "Русский", "English" };
+        _cbLanguage.Items.AddRange(languages);
+
+        // Ширина — по самому длинному пункту, а не константой: «Same as Windows»
+        // в английской локали не влезал в прежние 160 и обрезался. Запас — на
+        // стрелку списка и внутренние поля.
+        int widest = languages.Max(item =>
+            TextRenderer.MeasureText(item!.ToString(), Theme.Body).Width);
+        _cbLanguage.Width = widest + Theme.S5 + Theme.S2;
         return Row(L10n.T("settings.language"), L10n.T("settings.language.hint"), _cbLanguage);
     }
 
@@ -336,18 +341,36 @@ public sealed class SettingsForm : ThemedForm
             WrapContents = false,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Anchor = AnchorStyles.Right,
             BackColor = Theme.Canvas,
-            Margin = new Padding(0, Theme.S4, 0, Theme.S2),
+            Margin = new Padding(0),
         };
         save.Margin = new Padding(Theme.S2, 0, 0, 0);
         cancel.Margin = new Padding(Theme.S2, 0, 0, 0);
         flow.Controls.Add(save);
         flow.Controls.Add(cancel);
 
+        // Подвал во всю ширину: пустая тянущаяся колонка слева, кнопки в
+        // AutoSize-колонке справа. Прежний Anchor = Right позиционировал панель,
+        // но не заставлял её родителя быть нужной ширины — правый край кнопок
+        // уезжал за границу окна.
+        var bar = new TableLayoutPanel
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Theme.Canvas,
+            Margin = new Padding(0, Theme.S4, 0, Theme.S2),
+        };
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        bar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        bar.Controls.Add(new Panel { Width = 0, Height = 0, Margin = new Padding(0) }, 0, 0);
+        bar.Controls.Add(flow, 1, 0);
+
         AcceptButton = save;
         CancelButton = cancel;
-        return flow;
+        return bar;
     }
 
     // ------------------------------------------------------------- building blocks
