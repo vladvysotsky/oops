@@ -540,8 +540,9 @@ internal sealed class SegmentedControl : Control
                | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         BackColor = Theme.Surface;   // иначе Control отдаст системный светло-серый
         TabStop = true;
+        // AutoSizeMode есть у Form, Panel и кнопок, но не у обычного Control —
+        // здесь достаточно AutoSize: размер приходит из GetPreferredSize.
         AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
     }
 
     /// <summary>Ширина — по самому длинному пункту, высота — от шрифта.</summary>
@@ -692,8 +693,9 @@ internal sealed class Stepper : Control
                | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         BackColor = Theme.Surface;
         TabStop = true;
+        // AutoSizeMode есть у Form, Panel и кнопок, но не у обычного Control —
+        // здесь достаточно AutoSize: размер приходит из GetPreferredSize.
         AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
     }
 
     /// <summary>
