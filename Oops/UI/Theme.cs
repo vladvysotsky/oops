@@ -141,6 +141,24 @@ internal static class Theme
     /// <summary>Проектный размер в пикселях экрана. 420 при 125% → 525.</summary>
     public static int Px(int design) => (int)Math.Round(design * DpiScale);
 
+    /// <summary>
+    /// Не меньше собственного MinimumSize.
+    ///
+    /// **Обязательно в КАЖДОМ нашем GetPreferredSize.** Родитель раскладывает
+    /// ряд по тому размеру, который мы ему назвали, а фактическую ширину
+    /// контрол потом всё равно доводит до MinimumSize в SetBoundsCore. Если
+    /// названный размер меньше минимума, кнопка вылезает за ячейку, которую
+    /// под неё выделили, и её обрезает родитель — снаружи это выглядит как
+    /// «кнопка обрезана», хотя сама кнопка нужного размера.
+    ///
+    /// Ровно это и происходило: «Понятно» просило по тексту ~98 px, а
+    /// MinimumSize держал 168 — ряд разложили по 98, нарисовали 168, лишние
+    /// 70 срезал край панели.
+    /// </summary>
+    public static Size AtLeastMinimum(Control c, Size preferred) => new(
+        Math.Max(preferred.Width, c.MinimumSize.Width),
+        Math.Max(preferred.Height, c.MinimumSize.Height));
+
     // --- Сетка (8px) -----------------------------------------------------
     // Не const: значение зависит от DPI и известно только в рантайме.
     public static readonly int S1 = Px(4);
@@ -495,7 +513,7 @@ internal sealed class FlatButton : Button
     public override Size GetPreferredSize(Size proposedSize)
     {
         var text = TextRenderer.MeasureText(Text, Font);
-        return new Size(text.Width + Theme.S4, text.Height + Theme.S3);
+        return Theme.AtLeastMinimum(this, new Size(text.Width + Theme.S4, text.Height + Theme.S3));
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -651,9 +669,10 @@ internal sealed class SegmentedControl : Control
     /// <summary>Ширина — по самому длинному пункту, высота — от шрифта.</summary>
     public override Size GetPreferredSize(Size proposedSize)
     {
-        if (_items.Length == 0) return new Size(0, Theme.TextRowHeight);
+        if (_items.Length == 0) return Theme.AtLeastMinimum(this, new Size(0, Theme.TextRowHeight));
         int widest = _items.Max(i => TextRenderer.MeasureText(i, Theme.Body).Width);
-        return new Size((widest + Theme.S3) * _items.Length + Theme.S1, Theme.TextRowHeight);
+        return Theme.AtLeastMinimum(this,
+            new Size((widest + Theme.S3) * _items.Length + Theme.S1, Theme.TextRowHeight));
     }
 
     public void SetItems(params string[] items)
@@ -810,7 +829,7 @@ internal sealed class Stepper : Control
         int h = Theme.TextRowHeight;
         var sample = Suffix.Length == 0 ? Maximum.ToString() : $"{Maximum} {Suffix}";
         int text = TextRenderer.MeasureText(sample, Theme.BodyStrong).Width;
-        return new Size(text + Theme.S3 + h * 2, h);
+        return Theme.AtLeastMinimum(this, new Size(text + Theme.S3 + h * 2, h));
     }
 
     private int ZoneWidth => Height;   // квадратные зоны по краям
