@@ -121,15 +121,32 @@ public sealed class SettingsForm : ThemedForm
         _tabs.SelectedIndexChanged += (_, _) => ShowPage(_tabs.SelectedIndex);
         root.Controls.Add(_tabs, 0, 1);
 
-        // Высота страницы — по самой высокой вкладке, посчитанной заранее.
-        // Прокрутки нет намеренно: она прячет часть настроек и появляется
-        // ровно на крупном шрифте, где нужнее всего видеть всё сразу. А общая
-        // высота для всех вкладок нужна, чтобы окно не прыгало при переключении.
+        // Все вкладки строятся сразу и живут одновременно — видна одна.
+        // Строить их заново на каждое переключение нельзя: контролы (галочки,
+        // степперы, поля хоткеев) — общие поля формы, и они принадлежат ровно
+        // одной вкладке каждый.
         _page.AutoScroll = false;
         _page.BackColor = Theme.Canvas;
         _page.Margin = new Padding(0);
-        _page.Height = TallestPageHeight();
         _page.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        int tallest = 0;
+        for (int i = 0; i < TabCount; i++)
+        {
+            var page = BuildPage(i);
+            page.Dock = DockStyle.Top;
+            page.Visible = false;
+            _pages[i] = page;
+            _page.Controls.Add(page);
+            // Меряем с шириной колонки: подписи переносятся по строкам, и без
+            // ограничения ширины высота вышла бы заниженной.
+            tallest = Math.Max(tallest, page.GetPreferredSize(new Size(ContentWidth, 0)).Height);
+        }
+
+        // Общая высота по самой высокой вкладке: окно не прыгает при
+        // переключении, а прокрутки нет намеренно — она прятала бы часть
+        // настроек ровно на крупном шрифте, где видеть всё сразу нужнее всего.
+        _page.Height = tallest;
         root.Controls.Add(_page, 0, 2);
 
         root.Controls.Add(Footer(), 0, 3);
@@ -138,27 +155,10 @@ public sealed class SettingsForm : ThemedForm
         ShowPage(0);
     }
 
-    /// <summary>
-    /// Измеряет все вкладки и возвращает высоту самой высокой.
-    /// Меряем именно с шириной колонки: подписи переносятся по строкам, и без
-    /// ограничения ширины высота вышла бы заниженной.
-    /// </summary>
-    private int TallestPageHeight()
-    {
-        int tallest = 0;
-        for (int i = 0; i < TabCount; i++)
-        {
-            var probe = BuildPage(i);
-            probe.Width = ContentWidth;
-            tallest = Math.Max(tallest, probe.GetPreferredSize(new Size(ContentWidth, 0)).Height);
-            probe.Dispose();
-        }
-        return tallest;
-    }
-
     private const int TabCount = 3;
+    private readonly TableLayoutPanel[] _pages = new TableLayoutPanel[TabCount];
 
-    /// <summary>Содержимое одной вкладки. Карточки строятся заново на каждый вызов.</summary>
+    /// <summary>Содержимое одной вкладки.</summary>
     private TableLayoutPanel BuildPage(int index)
     {
         var stack = Stack();
@@ -182,18 +182,12 @@ public sealed class SettingsForm : ThemedForm
         return stack;
     }
 
-    /// <summary>Показывает вкладку. Контролы пересоздаются — они общие для страниц.</summary>
+    /// <summary>Переключает вкладку — только видимостью, ничего не пересоздаём.</summary>
     private void ShowPage(int index)
     {
-        _page.SuspendLayout();
-        _page.Controls.Clear();
-
-        var stack = BuildPage(index);
-        stack.Dock = DockStyle.Top;
-        _page.Controls.Add(stack);
-
+        for (int i = 0; i < TabCount; i++)
+            if (_pages[i] != null) _pages[i].Visible = i == index;
         _tabIndex = index;
-        _page.ResumeLayout(true);
     }
 
     /// <summary>Заголовок подраздела внутри вкладки.</summary>
@@ -613,11 +607,18 @@ public sealed class SettingsForm : ThemedForm
         // Тексты сидят в уже созданных контролах, поэтому окно строим заново.
         // Значения полей переносим через Populate — они хранятся в самих
         // контролах, а хоткеи в полях формы.
+        //
+        // Controls.Clear() снимает старое дерево с формы, но НЕ уничтожает его:
+        // Dispose здесь недопустим, потому что вместе с панелями он уничтожил
+        // бы общие контролы формы (галочки, степперы, поля хоткеев), и окно
+        // упало бы при следующем показе. Отвязанные панели соберёт GC.
+        int tab = _tabIndex;
         SuspendLayout();
         Controls.Clear();
         BuildLayout();
         Populate();
-        _tabs.SelectedIndex = _tabIndex;
+        _tabs.SelectedIndex = tab;
+        ShowPage(tab);
         ResumeLayout(true);
     }
 
