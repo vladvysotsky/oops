@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Linq;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -433,6 +434,145 @@ internal sealed class ToggleBox : CheckBox
             using var ringPath = Theme.RoundedRect(ring, 3);
             using var ringPen = new Pen(Checked ? Theme.OnAccent : Theme.Accent, 1f);
             g.DrawPath(ringPen, ringPath);
+        }
+    }
+}
+
+/// <summary>
+/// Сегментированный переключатель: несколько вариантов в ряд, выбранный залит
+/// акцентом. Вместо системного ComboBox — тот не перекрашивается, рисует своё
+/// системно-синее выделение и выпадающий список чужой темы, то есть выпадает
+/// из дизайн-системы ровно там, где всё остальное в неё приведено.
+///
+/// Годится, пока вариантов немного и их названия коротки: всё видно сразу, без
+/// раскрытия списка. Для длинных перечней нужен был бы другой контрол.
+/// </summary>
+internal sealed class SegmentedControl : Control
+{
+    private string[] _items = Array.Empty<string>();
+    private int _selected;
+    private int _hover = -1;
+
+    public event EventHandler? SelectedIndexChanged;
+
+    public SegmentedControl()
+    {
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint
+               | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        TabStop = true;
+        Height = 30;
+    }
+
+    public void SetItems(params string[] items)
+    {
+        _items = items;
+        Width = PreferredWidth();
+        Invalidate();
+    }
+
+    public int SelectedIndex
+    {
+        get => _selected;
+        set
+        {
+            int clamped = Math.Clamp(value, 0, Math.Max(0, _items.Length - 1));
+            if (clamped == _selected) return;
+            _selected = clamped;
+            Invalidate();
+            SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Ширина — по самому длинному пункту, чтобы сегменты были равными.</summary>
+    private int PreferredWidth()
+    {
+        if (_items.Length == 0) return 0;
+        int widest = _items.Max(i => TextRenderer.MeasureText(i, Theme.Body).Width);
+        return (widest + Theme.S3) * _items.Length + Theme.S1;
+    }
+
+    private int SegmentWidth => _items.Length == 0 ? 0 : (Width - Theme.S1) / _items.Length;
+
+    private int IndexAt(int x)
+    {
+        int w = SegmentWidth;
+        if (w <= 0) return -1;
+        int i = (x - Theme.S1 / 2) / w;
+        return i >= 0 && i < _items.Length ? i : -1;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        int i = IndexAt(e.X);
+        if (i != _hover) { _hover = i; Invalidate(); }
+        Cursor = i >= 0 && i != _selected ? Cursors.Hand : Cursors.Default;
+        base.OnMouseMove(e);
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        if (_hover != -1) { _hover = -1; Invalidate(); }
+        base.OnMouseLeave(e);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        Focus();
+        int i = IndexAt(e.X);
+        if (i >= 0) SelectedIndex = i;
+        base.OnMouseDown(e);
+    }
+
+    protected override bool IsInputKey(Keys keyData) =>
+        keyData is Keys.Left or Keys.Right || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Right) { SelectedIndex = _selected + 1; e.Handled = true; }
+        else if (e.KeyCode == Keys.Left) { SelectedIndex = _selected - 1; e.Handled = true; }
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Theme.EffectiveBackColor(this));
+        Theme.EnableSmoothing(g);
+
+        var track = new Rectangle(0, 0, Width - 1, Height - 1);
+        using (var path = Theme.RoundedRect(track, 6))
+        using (var fill = new SolidBrush(Theme.KeyCapFill))
+        using (var pen = new Pen(Focused ? Theme.Accent : Theme.Border))
+        {
+            g.FillPath(fill, path);
+            g.DrawPath(pen, path);
+        }
+
+        int w = SegmentWidth;
+        for (int i = 0; i < _items.Length; i++)
+        {
+            var seg = new Rectangle(Theme.S1 / 2 + i * w, Theme.S1 / 2, w, Height - Theme.S1 - 1);
+            if (i == _selected)
+            {
+                using var path = Theme.RoundedRect(seg, 5);
+                using var fill = new SolidBrush(Theme.Accent);
+                g.FillPath(fill, path);
+            }
+            else if (i == _hover)
+            {
+                using var path = Theme.RoundedRect(seg, 5);
+                using var fill = new SolidBrush(Theme.Surface);
+                g.FillPath(fill, path);
+            }
+
+            TextRenderer.DrawText(g, _items[i], Theme.Body, seg,
+                i == _selected ? Theme.OnAccent : Theme.Text,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter
+                | TextFormatFlags.EndEllipsis);
         }
     }
 }
