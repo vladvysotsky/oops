@@ -139,6 +139,12 @@ public sealed class SettingsForm : ThemedForm
         _page.Margin = new Padding(0);
         _page.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
+        // При пересборке (смена языка) _page — то же самое поле формы, и его
+        // прежние страницы остаются внутри: Controls.Clear() у ФОРМЫ снимает
+        // только корень. Без этой строки старые вкладки копились и рисовались
+        // под новыми — на экране была русская карточка, а под ней английская.
+        _page.Controls.Clear();
+
         int tallest = 0;
         for (int i = 0; i < TabCount; i++)
         {
@@ -431,7 +437,7 @@ public sealed class SettingsForm : ThemedForm
 
         AcceptButton = save;
         CancelButton = cancel;
-        return ButtonBar.Create(new Padding(0, Theme.S4, 0, Theme.S2), save, cancel);
+        return ButtonBar.Create(ContentWidth, new Padding(0, Theme.S4, 0, Theme.S2), save, cancel);
     }
 
     // ------------------------------------------------------------- building blocks

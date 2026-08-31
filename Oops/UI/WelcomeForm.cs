@@ -452,7 +452,7 @@ public sealed class WelcomeForm : ThemedForm
         }
 
         AcceptButton = primary;
-        return ButtonBar.Create(new Padding(0, Theme.S4, 0, Theme.S2), buttons.ToArray());
+        return ButtonBar.Create(ContentWidth, new Padding(0, Theme.S4, 0, Theme.S2), buttons.ToArray());
     }
 
     private static HotkeyConfig Clone(HotkeyConfig h) => new()

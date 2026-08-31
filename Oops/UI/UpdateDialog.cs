@@ -127,7 +127,7 @@ public sealed class UpdateDialog : ThemedForm
         AddRow(root, _status);
 
         AddRow(root, ButtonBar.Create(
-            new Padding(0, Theme.S3, 0, 0), _install, _later));
+            ContentWidth, new Padding(0, Theme.S3, 0, 0), _install, _later));
 
         Controls.Add(root);
     }
