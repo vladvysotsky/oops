@@ -269,28 +269,51 @@ public class ThemedForm : Form
     /// <summary>
     /// Страховка от обрезанного правого и нижнего края.
     ///
-    /// AutoSize формы иногда недосчитывает размер: содержимое разложено верно,
-    /// а окно оказывается уже него, и край — обычно это кнопка — уходит под
-    /// границу. Здесь размер проверяется уже ПОСЛЕ раскладки, когда фактические
-    /// координаты известны точно, и окно доводится до нужного.
+    /// AutoSize формы недосчитывает размер: содержимое разложено верно, а окно
+    /// оказывается уже него, и край — обычно это кнопка — уходит под границу.
+    /// Прошлая версия этой проверки смотрела только на контролы первого уровня
+    /// (корневую панель) и потому не видела кнопку, лежащую тремя уровнями
+    /// глубже — именно она и вылезала.
     ///
-    /// Только увеличиваем: сузить окно эта проверка не может по построению,
-    /// поэтому правильной раскладке навредить не способна.
+    /// Здесь дерево обходится целиком, координаты приводятся к системе координат
+    /// формы, и окно доводится до фактически занятого места. Только увеличиваем:
+    /// сузить окно проверка не может по построению.
     /// </summary>
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
 
-        int right = 0, bottom = 0;
-        foreach (Control child in Controls)
-        {
-            right = Math.Max(right, child.Right + child.Margin.Right);
-            bottom = Math.Max(bottom, child.Bottom + child.Margin.Bottom);
-        }
-        if (right > ClientSize.Width || bottom > ClientSize.Height)
+        var needed = DeepestExtent(this);
+        if (needed.Width > ClientSize.Width || needed.Height > ClientSize.Height)
             ClientSize = new Size(
-                Math.Max(right, ClientSize.Width),
-                Math.Max(bottom, ClientSize.Height));
+                Math.Max(needed.Width, ClientSize.Width),
+                Math.Max(needed.Height, ClientSize.Height));
+    }
+
+    /// <summary>
+    /// Правый нижний угол самого выступающего контрола во всём дереве,
+    /// в координатах клиентской области формы.
+    /// </summary>
+    private Size DeepestExtent(Control parent)
+    {
+        int right = 0, bottom = 0;
+        foreach (Control child in parent.Controls)
+        {
+            if (!child.Visible) continue;
+
+            // Через экранные координаты: у вложенных контролов Left/Top заданы
+            // относительно своего родителя, и складывать их вручную нельзя.
+            var corner = PointToClient(child.PointToScreen(new Point(
+                child.Width + child.Margin.Right,
+                child.Height + child.Margin.Bottom)));
+            right = Math.Max(right, corner.X);
+            bottom = Math.Max(bottom, corner.Y);
+
+            var inner = DeepestExtent(child);
+            right = Math.Max(right, inner.Width);
+            bottom = Math.Max(bottom, inner.Height);
+        }
+        return new Size(right, bottom);
     }
 }
 
