@@ -107,7 +107,7 @@ internal sealed class FeedbackForm : ThemedForm
             Text = L10n.T("feedback.submit"),
             Primary = true,
             AutoSize = true,
-            MinimumSize = new Size(124, 34),
+            MinimumSize = new Size(124, 0),
         };
         send.Click += (_, _) => Send();
 
@@ -115,7 +115,7 @@ internal sealed class FeedbackForm : ThemedForm
         {
             Text = L10n.T("common.cancel"),
             AutoSize = true,
-            MinimumSize = new Size(104, 34),
+            MinimumSize = new Size(104, 0),
             DialogResult = DialogResult.Cancel,
         };
 

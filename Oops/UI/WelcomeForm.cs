@@ -397,7 +397,7 @@ public sealed class WelcomeForm : ThemedForm
 
     private static Control HotkeyRow(string title, string hint, HotkeyDisplay display, Action record)
     {
-        display.Size = new Size(HotkeyWidth, 30);
+        display.Size = new Size(HotkeyWidth, Theme.KeyRowHeight);
         display.Margin = new Padding(0, 0, Theme.S2, 0);
         // Click у display подписан один раз в конструкторе: страница пересобирается
         // при каждом «Назад/Далее», и подписка здесь копилась бы с каждым разом.
@@ -406,7 +406,7 @@ public sealed class WelcomeForm : ThemedForm
         {
             Text = L10n.T("hotkey.change"),
             AutoSize = true,
-            MinimumSize = new Size(92, 30),
+            MinimumSize = new Size(92, 0),
             Margin = new Padding(0),
         };
         btn.Click += (_, _) => record();
@@ -433,7 +433,7 @@ public sealed class WelcomeForm : ThemedForm
             Text = primaryText,
             Primary = true,
             AutoSize = true,
-            MinimumSize = new Size(124, 34),
+            MinimumSize = new Size(124, 0),
             Margin = new Padding(Theme.S2, 0, 0, 0),
         };
         primary.Click += (_, _) => primaryAction();
@@ -445,7 +445,7 @@ public sealed class WelcomeForm : ThemedForm
             {
                 Text = L10n.T("common.back"),
                 AutoSize = true,
-                MinimumSize = new Size(104, 34),
+                MinimumSize = new Size(104, 0),
             };
             back.Click += (_, _) => ShowPage(0);
             buttons.Add(back);
