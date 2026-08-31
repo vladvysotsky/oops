@@ -284,6 +284,19 @@ public class ThemedForm : Form
         base.OnShown(e);
 
         var needed = DeepestExtent(this);
+
+        // Плюс отступы корневой панели: без них окно вырастало ровно до края
+        // кнопки, и справа не оставалось поля — кнопка упиралась в границу.
+        // Если раскладка верна, эта прибавка ничего не меняет: сумма совпадёт
+        // с текущей шириной, и условие ниже не сработает.
+        if (Controls.Count > 0)
+        {
+            var root = Controls[0];
+            needed = new Size(
+                needed.Width + root.Padding.Right,
+                needed.Height + root.Padding.Bottom);
+        }
+
         if (needed.Width > ClientSize.Width || needed.Height > ClientSize.Height)
             ClientSize = new Size(
                 Math.Max(needed.Width, ClientSize.Width),
