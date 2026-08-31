@@ -10,7 +10,7 @@ namespace Oops.UI;
 /// </summary>
 public sealed class UpdateDialog : ThemedForm
 {
-    private const int ContentWidth = 460;
+    private static readonly int ContentWidth = Theme.Px(460);
 
     private readonly ReleaseInfo _release;
     private readonly FlatButton _install;
@@ -30,8 +30,8 @@ public sealed class UpdateDialog : ThemedForm
         StartPosition = FormStartPosition.CenterScreen;
         // Фон, шрифт, DPI и тёмный заголовок окна приходят из ThemedForm.
 
-        _install = new FlatButton { Text = L10n.T("update.install"), Primary = true, AutoSize = true, MinimumSize = new Size(124, 0) };
-        _later = new FlatButton { Text = L10n.T("update.later"), AutoSize = true, MinimumSize = new Size(104, 0), DialogResult = DialogResult.Cancel };
+        _install = new FlatButton { Text = L10n.T("update.install"), Primary = true, AutoSize = true, MinimumSize = new Size(Theme.Px(124), 0) };
+        _later = new FlatButton { Text = L10n.T("update.later"), AutoSize = true, MinimumSize = new Size(Theme.Px(104), 0), DialogResult = DialogResult.Cancel };
         _install.Click += OnInstallClick;
 
         BuildLayout();
@@ -83,7 +83,7 @@ public sealed class UpdateDialog : ThemedForm
             var card = new Card
             {
                 Width = ContentWidth,
-                Height = 150,
+                Height = Theme.Px(150),
                 Margin = new Padding(0, 0, 0, Theme.S3),
             };
             var notes = new TextBox
@@ -112,7 +112,7 @@ public sealed class UpdateDialog : ThemedForm
 
         _progress.Style = ProgressBarStyle.Continuous;
         _progress.Width = ContentWidth;
-        _progress.Height = 6;
+        _progress.Height = Theme.Px(6);
         _progress.Visible = false;
         _progress.Margin = new Padding(0, 0, 0, Theme.S2);
         AddRow(root, _progress);

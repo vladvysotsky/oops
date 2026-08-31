@@ -24,7 +24,10 @@ internal enum NoticeKind { Info, Warning, Error }
 /// </summary>
 internal sealed class Notice : ThemedForm
 {
-    private const int ContentWidth = 420;
+    // Ширина колонки контента в пикселях ЭКРАНА: на 125% это 525, и все
+    // размеры внутри окна считаются от неё, иначе кнопка не помещается
+    // в ряд, а значок — в свою колонку (см. Theme.DpiScale).
+    private static readonly int ContentWidth = Theme.Px(420);
 
     private Notice(NoticeKind kind, string title, string message, string? hint,
                    string? details, string? reportContext)
@@ -146,7 +149,7 @@ internal sealed class Notice : ThemedForm
         };
         // Колонка под значок считается от него самого, а не магическим числом:
         // при 36 на значок 24 с отступом 8 заголовок вплотную упирался в метку.
-        const int badge = 24;
+        int badge = Theme.Px(24);
         int iconColumn = badge + Theme.S3;
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, iconColumn));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth - iconColumn));
@@ -193,7 +196,7 @@ internal sealed class Notice : ThemedForm
         ForeColor = Theme.TextMuted,
         Font = Theme.Mono,
         Width = ContentWidth,
-        Height = 140,
+        Height = Theme.Px(140),
         Margin = new Padding(0, Theme.S2, 0, 0),
     };
 
@@ -206,7 +209,7 @@ internal sealed class Notice : ThemedForm
             Text = L10n.T("notice.ok"),
             Primary = true,
             AutoSize = true,
-            MinimumSize = new Size(112, 0),
+            MinimumSize = new Size(Theme.Px(112), 0),
             DialogResult = DialogResult.OK,
         };
         buttons.Add(ok);
@@ -219,7 +222,7 @@ internal sealed class Notice : ThemedForm
             {
                 Text = L10n.T("notice.report"),
                 AutoSize = true,
-                MinimumSize = new Size(120, 0),
+                MinimumSize = new Size(Theme.Px(120), 0),
             };
             report.Click += (_, _) => OpenIssue(reportContext, details);
             buttons.Add(report);
@@ -233,7 +236,7 @@ internal sealed class Notice : ThemedForm
             {
                 Text = L10n.T("notice.copy"),
                 AutoSize = true,
-                MinimumSize = new Size(112, 0),
+                MinimumSize = new Size(Theme.Px(112), 0),
             };
             copy.Click += (_, _) =>
             {
@@ -285,7 +288,10 @@ internal sealed class Notice : ThemedForm
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Parent?.BackColor ?? Theme.Canvas);
+            // Именно EffectiveBackColor, а не Parent.BackColor: строка заголовка
+            // прозрачная, и Clear(Color.Transparent) заливает круг белым
+            // прямоугольником — значок выглядел приехавшим неизвестно откуда.
+            g.Clear(Theme.EffectiveBackColor(this));
             Theme.EnableSmoothing(g);
 
             var color = _kind switch

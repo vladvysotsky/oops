@@ -105,20 +105,57 @@ internal static class Theme
     /// <summary>Моноширинный для примеров «до/после»: там важно выравнивание колонок.</summary>
     public static readonly Font Mono = new("Consolas", 9f, FontStyle.Regular);
 
-    // --- Сетка (8px) -----------------------------------------------------
-    public const int S1 = 4;
-    public const int S2 = 8;
-    public const int S3 = 16;
-    public const int S4 = 24;
-    public const int S5 = 32;
+    // --- Масштаб экрана --------------------------------------------------
 
-    public const int Radius = 8;
+    /// <summary>
+    /// Во сколько раз экран крупнее эталонных 96 DPI (125% → 1.25).
+    ///
+    /// НАС НИКТО НЕ МАСШТАБИРУЕТ. Формы стоят на `AutoScaleMode.Dpi`, но
+    /// `AutoScaleDimensions` у рукописных окон пуст (его проставляет дизайнер
+    /// Visual Studio, а у нас его нет), и при пустом значении WinForms считает
+    /// коэффициент равным единице и не трогает НИ ОДИН размер.
+    ///
+    /// Отсюда весь класс «обрезанных» дефектов: шрифт задан в пунктах и на
+    /// 125% рисуется крупнее сам собой, а все числа в пикселях — ширина
+    /// колонки, MinimumSize кнопки, размер значка — остаются как при 96 DPI.
+    /// Текст растёт, коробка нет. Кнопка не помещается в ряд шириной 420,
+    /// значок 24×24 не попадает в свою колонку. Полностью объясняет и то,
+    /// почему у меня на скриншотах всё сходилось: при 100% расхождения нет.
+    ///
+    /// Поэтому масштабируем сами — ЛЮБОЕ число в пикселях идёт через
+    /// <see cref="Px"/>. Высоты по-прежнему считаются от шрифта
+    /// (<see cref="TextRowHeight"/>) и в Px не нуждаются.
+    /// </summary>
+    public static readonly float DpiScale = DetectDpiScale();
+
+    private static float DetectDpiScale()
+    {
+        try
+        {
+            using var g = Graphics.FromHwnd(IntPtr.Zero);
+            return g.DpiX > 0 ? g.DpiX / 96f : 1f;
+        }
+        catch { return 1f; }
+    }
+
+    /// <summary>Проектный размер в пикселях экрана. 420 при 125% → 525.</summary>
+    public static int Px(int design) => (int)Math.Round(design * DpiScale);
+
+    // --- Сетка (8px) -----------------------------------------------------
+    // Не const: значение зависит от DPI и известно только в рантайме.
+    public static readonly int S1 = Px(4);
+    public static readonly int S2 = Px(8);
+    public static readonly int S3 = Px(16);
+    public static readonly int S4 = Px(24);
+    public static readonly int S5 = Px(32);
+
+    public static readonly int Radius = Px(8);
 
     /// <summary>
     /// Минимальная высота кликабельной строки. Галочка 20×20 — это меньше, чем
     /// человек целится мышью; строку целиком делаем зоной попадания.
     /// </summary>
-    public const int MinHitHeight = 32;
+    public static readonly int MinHitHeight = Px(32);
 
     /// <summary>
     /// Высота контрола с обычным текстом: строка плюс вертикальные поля.
@@ -269,38 +306,33 @@ public class ThemedForm : Form
     /// <summary>
     /// Страховка от обрезанного правого и нижнего края.
     ///
-    /// AutoSize формы недосчитывает размер: содержимое разложено верно, а окно
-    /// оказывается уже него, и край — обычно это кнопка — уходит под границу.
-    /// Прошлая версия этой проверки смотрела только на контролы первого уровня
-    /// (корневую панель) и потому не видела кнопку, лежащую тремя уровнями
-    /// глубже — именно она и вылезала.
+    /// Считаем самый выступающий контрол ВНУТРИ корневой панели (сама панель
+    /// в замер не входит — её правый край и есть текущая ширина окна, и от
+    /// сравнения с самим собой толку нет; прежняя версия складывала её край с
+    /// отступом и потому растила окно на каждом показе).
     ///
-    /// Здесь дерево обходится целиком, координаты приводятся к системе координат
-    /// формы, и окно доводится до фактически занятого места. Только увеличиваем:
-    /// сузить окно проверка не может по построению.
+    /// Если окно всё-таки доращиваем — AutoSize выключаем. Иначе следующий же
+    /// проход раскладки вернёт форму к её же заниженному preferred size, и
+    /// правка не доживает до отрисовки: ровно поэтому предыдущие заходы
+    /// «ничего не меняли».
     /// </summary>
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        if (Controls.Count == 0) return;
 
-        var needed = DeepestExtent(this);
+        var root = Controls[0];
+        var inner = DeepestExtent(root);
+        var needed = new Size(
+            inner.Width + root.Padding.Right,
+            inner.Height + root.Padding.Bottom);
 
-        // Плюс отступы корневой панели: без них окно вырастало ровно до края
-        // кнопки, и справа не оставалось поля — кнопка упиралась в границу.
-        // Если раскладка верна, эта прибавка ничего не меняет: сумма совпадёт
-        // с текущей шириной, и условие ниже не сработает.
-        if (Controls.Count > 0)
-        {
-            var root = Controls[0];
-            needed = new Size(
-                needed.Width + root.Padding.Right,
-                needed.Height + root.Padding.Bottom);
-        }
+        if (needed.Width <= ClientSize.Width && needed.Height <= ClientSize.Height) return;
 
-        if (needed.Width > ClientSize.Width || needed.Height > ClientSize.Height)
-            ClientSize = new Size(
-                Math.Max(needed.Width, ClientSize.Width),
-                Math.Max(needed.Height, ClientSize.Height));
+        AutoSize = false;
+        ClientSize = new Size(
+            Math.Max(needed.Width, ClientSize.Width),
+            Math.Max(needed.Height, ClientSize.Height));
     }
 
     /// <summary>
@@ -400,7 +432,7 @@ internal static class ButtonBar
 internal sealed class Card : Panel
 {
     /// <summary>Сколько пикселей внизу занимает тень — на них уменьшается тело карточки.</summary>
-    public const int ShadowRoom = 3;
+    public static readonly int ShadowRoom = Theme.Px(3);
 
     public Card()
     {
