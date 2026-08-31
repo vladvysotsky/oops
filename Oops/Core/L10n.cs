@@ -36,7 +36,7 @@ public static class L10n
     public static void Init(string? preference)
     {
         _language = Resolve(preference);
-        _strings = Load(_language);
+        _strings = TryLoad(_language);
 
         // Русский — исходный язык, в нём заведомо есть все ключи. Английский
         // дополняем им же: пропущенный перевод покажет русский текст, а не
@@ -44,7 +44,7 @@ public static class L10n
         // сломанного экрана не увидит.
         if (_language != Russian)
         {
-            foreach (var (key, value) in Load(Russian))
+            foreach (var (key, value) in TryLoad(Russian))
                 _strings.TryAdd(key, value);
         }
     }
@@ -69,10 +69,22 @@ public static class L10n
         catch (FormatException) { return format; }   // кривой плейсхолдер не должен ронять окно
     }
 
+    /// <summary>
+    /// Читает словарь, не бросая исключений. Инициализация языка не имеет права
+    /// уронить запуск: без строк интерфейс покажет ключи — уродливо, но человек
+    /// хотя бы сможет открыть настройки и переключить язык. Раньше здесь падало
+    /// приложение целиком, ещё до появления трея.
+    /// </summary>
+    private static Dictionary<string, string> TryLoad(string language)
+    {
+        try { return Load(language); }
+        catch { return new Dictionary<string, string>(); }
+    }
+
     /// <summary>Читает встроенный словарь. Публичный — им же пользуется тест.</summary>
     public static Dictionary<string, string> Load(string language)
     {
-        var name = $"Oops.Resources.lang.{language}.json";
+        var name = $"Oops.Resources.lang_{language}.json";
         using var stream = typeof(L10n).Assembly.GetManifestResourceStream(name)
             ?? throw new InvalidOperationException($"Не найден ресурс со строками: {name}");
         return JsonSerializer.Deserialize<Dictionary<string, string>>(stream) ?? new();

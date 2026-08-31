@@ -12,6 +12,17 @@ public class L10nTests
     private static readonly Dictionary<string, string> En = L10n.Load(L10n.English);
 
     [Fact]
+    public void BothDictionariesAreEmbeddedInTheAssembly()
+    {
+        // Регрессия: файлы назывались lang.ru.json / lang.en.json, MSBuild принял
+        // «.ru.» и «.en.» за обозначение культуры и убрал оба словаря в
+        // сателлитные сборки — из главной они пропали, приложение падало на
+        // старте. Этот тест ловит такое до запуска.
+        Assert.NotEmpty(Ru);
+        Assert.NotEmpty(En);
+    }
+
+    [Fact]
     public void BothLanguagesHaveTheSameKeys()
     {
         var onlyRu = Ru.Keys.Except(En.Keys).OrderBy(k => k).ToArray();
