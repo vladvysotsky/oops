@@ -21,14 +21,14 @@ public sealed class WelcomeForm : ThemedForm
 {
     // Единственный источник ширины — колонка контента; всё внутри растягивается
     // якорями. Логика та же, что в SettingsForm — см. комментарий там.
-    private const int ContentWidth = 580;
+    private static readonly int ContentWidth = Theme.Px(580);
 
     /// <summary>
     /// Ширина поля с клавишами: «Ctrl+Shift+Win» помещается с запасом. Шире не
     /// надо — лишняя ширина отбирает место у подписи слева и заставляет её
     /// переноситься.
     /// </summary>
-    private const int HotkeyWidth = 220;
+    private static readonly int HotkeyWidth = Theme.Px(220);
 
     private readonly TableLayoutPanel _root;
     private readonly CheckBox _cbAutostart = new ToggleBox();
@@ -406,7 +406,7 @@ public sealed class WelcomeForm : ThemedForm
         {
             Text = L10n.T("hotkey.change"),
             AutoSize = true,
-            MinimumSize = new Size(92, 0),
+            MinimumSize = new Size(Theme.Px(92), 0),
             Margin = new Padding(0),
         };
         btn.Click += (_, _) => record();
@@ -433,7 +433,7 @@ public sealed class WelcomeForm : ThemedForm
             Text = primaryText,
             Primary = true,
             AutoSize = true,
-            MinimumSize = new Size(124, 0),
+            MinimumSize = new Size(Theme.Px(124), 0),
             Margin = new Padding(Theme.S2, 0, 0, 0),
         };
         primary.Click += (_, _) => primaryAction();
@@ -445,7 +445,7 @@ public sealed class WelcomeForm : ThemedForm
             {
                 Text = L10n.T("common.back"),
                 AutoSize = true,
-                MinimumSize = new Size(104, 0),
+                MinimumSize = new Size(Theme.Px(104), 0),
             };
             back.Click += (_, _) => ShowPage(0);
             buttons.Add(back);

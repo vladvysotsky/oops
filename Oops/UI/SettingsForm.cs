@@ -78,7 +78,7 @@ public sealed class SettingsForm : ThemedForm
     // ---------------------------------------------------------------- layout
 
     /// <summary>Ширина колонки контента (карточки, заголовки). Масштабируется системой по DPI.</summary>
-    private const int ContentWidth = 580;
+    private static readonly int ContentWidth = Theme.Px(580);
 
     // ЕДИНСТВЕННЫЙ источник ширины — колонка контента. Всё внутри растягивается
     // якорями (Left|Right) и доками, правые контролы сидят в AutoSize-колонках.
@@ -92,7 +92,7 @@ public sealed class SettingsForm : ThemedForm
     /// надо — лишняя ширина отбирает место у подписи слева и заставляет её
     /// переноситься.
     /// </summary>
-    private const int HotkeyWidth = 220;
+    private static readonly int HotkeyWidth = Theme.Px(220);
 
     /// <summary>Вкладки: порядок совпадает с порядком страниц в BuildPage.</summary>
     private readonly SegmentedControl _tabs = new();
@@ -429,8 +429,8 @@ public sealed class SettingsForm : ThemedForm
 
     private Control Footer()
     {
-        var save = new FlatButton { Text = L10n.T("common.save"), Primary = true, AutoSize = true, MinimumSize = new Size(124, 0), DialogResult = DialogResult.OK };
-        var cancel = new FlatButton { Text = L10n.T("common.cancel"), AutoSize = true, MinimumSize = new Size(104, 0), DialogResult = DialogResult.Cancel };
+        var save = new FlatButton { Text = L10n.T("common.save"), Primary = true, AutoSize = true, MinimumSize = new Size(Theme.Px(124), 0), DialogResult = DialogResult.OK };
+        var cancel = new FlatButton { Text = L10n.T("common.cancel"), AutoSize = true, MinimumSize = new Size(Theme.Px(104), 0), DialogResult = DialogResult.Cancel };
         // Button.OnClick выставляет DialogResult формы ДО вызова наших обработчиков,
         // поэтому вернуть None — штатный способ отменить закрытие окна.
         save.Click += (_, _) => { if (!ApplyToSettings()) DialogResult = DialogResult.None; };
@@ -574,7 +574,7 @@ public sealed class SettingsForm : ThemedForm
         {
             Text = L10n.T("hotkey.change"),
             AutoSize = true,                       // ширину диктует текст, не константа
-            MinimumSize = new Size(92, 0),
+            MinimumSize = new Size(Theme.Px(92), 0),
             Margin = new Padding(0),
         };
         btn.Click += (_, _) => record();
@@ -761,12 +761,12 @@ public sealed class HotkeyRecordDialog : ThemedForm
 
         var card = new Card
         {
-            Width = 340,
-            Height = 66,
+            Width = Theme.Px(340),
+            Height = Theme.Px(66),
             Margin = new Padding(0, 0, 0, Theme.S3),
         };
-        _preview.Size = new Size(340 - Theme.S3 * 2, Theme.KeyRowHeight);
-        _preview.Location = new Point(Theme.S3, 16);
+        _preview.Size = new Size(Theme.Px(340) - Theme.S3 * 2, Theme.KeyRowHeight);
+        _preview.Location = new Point(Theme.S3, Theme.S3);
         _preview.SetCombo(string.Empty);
         card.Controls.Add(_preview);
 
@@ -786,7 +786,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
             BackColor = Theme.Canvas,
             Padding = new Padding(Theme.S4),
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.Px(340)));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.Controls.Add(card, 0, 0);
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));

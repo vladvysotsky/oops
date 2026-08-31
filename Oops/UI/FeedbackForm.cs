@@ -17,8 +17,8 @@ namespace Oops.UI;
 /// </summary>
 internal sealed class FeedbackForm : ThemedForm
 {
-    private const int ContentWidth = 460;
-    private const int CardInnerWidth = ContentWidth - Theme.S3 * 2;
+    private static readonly int ContentWidth = Theme.Px(460);
+    private static readonly int CardInnerWidth = ContentWidth - Theme.S3 * 2;
 
     private readonly RadioButton _rbProblem = new();
     private readonly RadioButton _rbIdea = new();
@@ -81,7 +81,7 @@ internal sealed class FeedbackForm : ThemedForm
         Add(rows, _rbIdea);
 
         _text.Multiline = true;
-        _text.Height = 120;
+        _text.Height = Theme.Px(120);
         _text.Width = CardInnerWidth;
         _text.BorderStyle = BorderStyle.FixedSingle;
         _text.BackColor = Theme.Surface;
@@ -107,7 +107,7 @@ internal sealed class FeedbackForm : ThemedForm
             Text = L10n.T("feedback.submit"),
             Primary = true,
             AutoSize = true,
-            MinimumSize = new Size(124, 0),
+            MinimumSize = new Size(Theme.Px(124), 0),
         };
         send.Click += (_, _) => Send();
 
@@ -115,7 +115,7 @@ internal sealed class FeedbackForm : ThemedForm
         {
             Text = L10n.T("common.cancel"),
             AutoSize = true,
-            MinimumSize = new Size(104, 0),
+            MinimumSize = new Size(Theme.Px(104), 0),
             DialogResult = DialogResult.Cancel,
         };
 
