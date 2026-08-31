@@ -325,42 +325,9 @@ public sealed class SettingsForm : ThemedForm
         // поэтому вернуть None — штатный способ отменить закрытие окна.
         save.Click += (_, _) => { if (!ApplyToSettings()) DialogResult = DialogResult.None; };
 
-        var flow = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0),
-        };
-        save.Margin = new Padding(Theme.S2, 0, 0, 0);
-        cancel.Margin = new Padding(Theme.S2, 0, 0, 0);
-        flow.Controls.Add(save);
-        flow.Controls.Add(cancel);
-
-        // Подвал во всю ширину: пустая тянущаяся колонка слева, кнопки в
-        // AutoSize-колонке справа. Прежний Anchor = Right позиционировал панель,
-        // но не заставлял её родителя быть нужной ширины — правый край кнопок
-        // уезжал за границу окна.
-        var bar = new TableLayoutPanel
-        {
-            ColumnCount = 2,
-            RowCount = 1,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0, Theme.S4, 0, Theme.S2),
-        };
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        bar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        bar.Controls.Add(new Panel { Width = 0, Height = 0, Margin = new Padding(0) }, 0, 0);
-        bar.Controls.Add(flow, 1, 0);
-
         AcceptButton = save;
         CancelButton = cancel;
-        return bar;
+        return ButtonBar.Create(new Padding(0, Theme.S4, 0, Theme.S2), save, cancel);
     }
 
     // ------------------------------------------------------------- building blocks
