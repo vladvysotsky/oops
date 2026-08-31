@@ -65,7 +65,7 @@
   "settings.forget.hint": "After a pause the hotkey works with new text instead of the old one",
   "settings.language": "Interface language",
   "settings.language.auto": "Auto",
-  "settings.language.hint": "“Auto” follows Windows. The tray menu switches language after a restart",
+  "settings.language.hint": "“Auto” follows Windows. Applies immediately, no restart needed",
   "settings.section.behaviour": "BEHAVIOUR",
   "settings.section.general": "GENERAL",
   "settings.section.hotkeys": "HOTKEYS",

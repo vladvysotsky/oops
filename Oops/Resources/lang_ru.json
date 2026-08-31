@@ -65,7 +65,7 @@
   "settings.forget.hint": "После паузы в наборе хоткей будет работать с новым текстом, а не с прежним",
   "settings.language": "Язык интерфейса",
   "settings.language.auto": "Авто",
-  "settings.language.hint": "«Авто» — как в Windows. Меню в трее сменит язык после перезапуска",
+  "settings.language.hint": "«Авто» — как в Windows. Меняется сразу, перезапуск не нужен",
   "settings.section.behaviour": "ПОВЕДЕНИЕ",
   "settings.section.general": "ОБЩИЕ",
   "settings.section.hotkeys": "ГОРЯЧИЕ КЛАВИШИ",

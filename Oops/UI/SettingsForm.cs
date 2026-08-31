@@ -56,14 +56,14 @@ public sealed class SettingsForm : ThemedForm
         StartPosition = FormStartPosition.CenterScreen;
         // Фон, шрифт, DPI и тёмный заголовок окна приходят из ThemedForm.
 
-        // Размер задаём явно, окно НЕ AutoSize. Пока высота определялась суммой
-        // всех секций, окно вырастало выше экрана, а подвал с кнопками уезжал
-        // за край: вся раскладка висела на одной цепочке AutoSize. С вкладками
-        // на экране одна секция за раз, и размер предсказуем.
-        ClientSize = new Size(ContentWidth + Theme.S4 * 2, 560);
-
         BuildLayout();
         Populate();
+
+        // Окно по содержимому — но высота страницы уже посчитана по самой
+        // высокой вкладке и зафиксирована, поэтому окно не прыгает при
+        // переключении и не растёт выше экрана, как было до вкладок.
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
     }
 
     // ---------------------------------------------------------------- layout
@@ -97,16 +97,17 @@ public sealed class SettingsForm : ThemedForm
         {
             ColumnCount = 1,
             RowCount = 4,
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Theme.Canvas,
             Padding = new Padding(Theme.S4, Theme.S4, Theme.S4, Theme.S3),
             Margin = new Padding(0),
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // шапка
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // вкладки
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // страница
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));    // кнопки
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // шапка
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // вкладки
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // страница
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // кнопки
 
         var header = Header();
         header.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -115,18 +116,20 @@ public sealed class SettingsForm : ThemedForm
         _tabs.SetItems(
             L10n.T("settings.section.general"),
             L10n.T("settings.section.hotkeys"),
-            L10n.T("settings.section.behaviour"),
-            L10n.T("settings.section.probe"));
+            L10n.T("settings.section.behaviour"));
         _tabs.Margin = new Padding(0, Theme.S2, 0, Theme.S3);
         _tabs.SelectedIndexChanged += (_, _) => ShowPage(_tabs.SelectedIndex);
         root.Controls.Add(_tabs, 0, 1);
 
-        // Страница может оказаться выше окна на крупном шрифте — тогда лучше
-        // прокрутка внутри вкладки, чем окно выше экрана.
-        _page.Dock = DockStyle.Fill;
-        _page.AutoScroll = true;
+        // Высота страницы — по самой высокой вкладке, посчитанной заранее.
+        // Прокрутки нет намеренно: она прячет часть настроек и появляется
+        // ровно на крупном шрифте, где нужнее всего видеть всё сразу. А общая
+        // высота для всех вкладок нужна, чтобы окно не прыгало при переключении.
+        _page.AutoScroll = false;
         _page.BackColor = Theme.Canvas;
         _page.Margin = new Padding(0);
+        _page.Height = TallestPageHeight();
+        _page.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         root.Controls.Add(_page, 0, 2);
 
         root.Controls.Add(Footer(), 0, 3);
@@ -135,29 +138,74 @@ public sealed class SettingsForm : ThemedForm
         ShowPage(0);
     }
 
-    /// <summary>Пересобирает содержимое вкладки. Контролы переиспользуются.</summary>
+    /// <summary>
+    /// Измеряет все вкладки и возвращает высоту самой высокой.
+    /// Меряем именно с шириной колонки: подписи переносятся по строкам, и без
+    /// ограничения ширины высота вышла бы заниженной.
+    /// </summary>
+    private int TallestPageHeight()
+    {
+        int tallest = 0;
+        for (int i = 0; i < TabCount; i++)
+        {
+            var probe = BuildPage(i);
+            probe.Width = ContentWidth;
+            tallest = Math.Max(tallest, probe.GetPreferredSize(new Size(ContentWidth, 0)).Height);
+            probe.Dispose();
+        }
+        return tallest;
+    }
+
+    private const int TabCount = 3;
+
+    /// <summary>Содержимое одной вкладки. Карточки строятся заново на каждый вызов.</summary>
+    private TableLayoutPanel BuildPage(int index)
+    {
+        var stack = Stack();
+        switch (index)
+        {
+            case 0:
+                AddAutoRow(stack, GeneralCard());
+                break;
+            case 1:
+                // Проверка живёт рядом с хоткеями: она про них и нужна ровно в
+                // тот момент, когда сочетание молчит и его меняют.
+                AddAutoRow(stack, HotkeysCard());
+                AddAutoRow(stack, Note(L10n.T("welcome.note.altShift")));
+                AddAutoRow(stack, SectionLabel(L10n.T("settings.section.probe")));
+                AddAutoRow(stack, ProbeCard());
+                break;
+            default:
+                AddAutoRow(stack, BehaviourCard());
+                break;
+        }
+        return stack;
+    }
+
+    /// <summary>Показывает вкладку. Контролы пересоздаются — они общие для страниц.</summary>
     private void ShowPage(int index)
     {
         _page.SuspendLayout();
         _page.Controls.Clear();
 
-        var stack = Stack();
+        var stack = BuildPage(index);
         stack.Dock = DockStyle.Top;
-        switch (index)
-        {
-            case 0: AddAutoRow(stack, GeneralCard()); break;
-            case 1:
-                AddAutoRow(stack, HotkeysCard());
-                AddAutoRow(stack, Note(L10n.T("welcome.note.altShift")));
-                break;
-            case 2: AddAutoRow(stack, BehaviourCard()); break;
-            default: AddAutoRow(stack, ProbeCard()); break;
-        }
+        _page.Controls.Add(stack);
 
         _tabIndex = index;
-        _page.Controls.Add(stack);
         _page.ResumeLayout(true);
     }
+
+    /// <summary>Заголовок подраздела внутри вкладки.</summary>
+    private static Control SectionLabel(string text) => new Label
+    {
+        Text = text,
+        Font = Theme.SectionLabel,
+        ForeColor = Theme.TextMuted,
+        AutoSize = true,
+        Margin = new Padding(Theme.S1, Theme.S3, 0, Theme.S2),
+        BackColor = Color.Transparent,
+    };
 
     /// <summary>Пояснение под карточкой — мелким второстепенным текстом.</summary>
     private static Control Note(string text) => new Label
