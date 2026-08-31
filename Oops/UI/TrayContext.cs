@@ -18,29 +18,28 @@ public sealed class TrayContext : ApplicationContext
         _app = app;
         var menu = new ContextMenuStrip();
 
-        var miEnabled = new ToolStripMenuItem("Включено") { Checked = app.Settings.Enabled, CheckOnClick = true };
+        var miEnabled = new ToolStripMenuItem(L10n.T("tray.enabled")) { Checked = app.Settings.Enabled, CheckOnClick = true };
         miEnabled.CheckedChanged += (_, _) =>
         {
             app.Settings.Enabled = miEnabled.Checked;
             app.Settings.Save();
         };
 
-        var miSettings = new ToolStripMenuItem("Настройки…");
+        var miSettings = new ToolStripMenuItem(L10n.T("tray.settings"));
         miSettings.Click += (_, _) => ShowSettings();
 
-        _miUpdate = new ToolStripMenuItem("Проверить обновления");
+        _miUpdate = new ToolStripMenuItem(L10n.T("tray.update"));
         _miUpdate.Click += async (_, _) => await CheckForUpdatesAsync(silent: false);
 
-        var miFeedback = new ToolStripMenuItem("Сообщить о проблеме…");
+        var miFeedback = new ToolStripMenuItem(L10n.T("tray.feedback"));
         miFeedback.Click += (_, _) => FeedbackForm.ShowDialogFor();
 
-        var miAbout = new ToolStripMenuItem("О программе");
-        miAbout.Click += (_, _) => Notice.Info(null, $"oops {UpdateService.CurrentVersion}",
-            "Правит раскладку и регистр набранного текста. Границу задаёте вы: "
-            + "первое нажатие хоткея берёт последнее слово, второе — весь набранный текст.",
-            "Настройки — двойной клик по иконке в трее.");
+        var miAbout = new ToolStripMenuItem(L10n.T("tray.about"));
+        miAbout.Click += (_, _) => Notice.Info(null,
+            $"oops {UpdateService.CurrentVersion}",
+            L10n.T("about.body"), L10n.T("about.hint"));
 
-        var miExit = new ToolStripMenuItem("Выход");
+        var miExit = new ToolStripMenuItem(L10n.T("tray.exit"));
         miExit.Click += (_, _) => ExitThread();
 
         menu.Items.AddRange(new ToolStripItem[]
@@ -104,10 +103,9 @@ public sealed class TrayContext : ApplicationContext
                 _app.ApplySettings();
 
                 if (error != null)
-                    Notice.Error(null, "Настройки не сохранились",
-                        "Изменения действуют прямо сейчас, но после перезапуска "
-                        + "программа вернётся к прежним.",
-                        $"Проверьте, доступна ли для записи папка:\n{AppSettings.Location}",
+                    Notice.Error(null, L10n.T("save.failed.title"),
+                        L10n.T("save.failed.body"),
+                        L10n.T("save.failed.hint", AppSettings.Location),
                         error, reportContext: "Не удалось сохранить настройки");
             }
         }
@@ -148,29 +146,26 @@ public sealed class TrayContext : ApplicationContext
             if (check.Failed)
             {
                 if (!silent)
-                    Notice.Warn(null, "Не удалось проверить обновления",
-                        "GitHub не ответил. Обычно это интернет или временный сбой на их стороне.",
-                        "Программа продолжает работать; можно скачать новую версию вручную "
-                        + $"со страницы релизов: {UpdateService.ReleasesPageUrl}");
+                    Notice.Warn(null, L10n.T("update.failed.title"),
+                        L10n.T("update.failed.body"),
+                        L10n.T("update.failed.hint", UpdateService.ReleasesPageUrl));
                 return;
             }
 
             if (check.Unavailable)
             {
                 if (!silent)
-                    Notice.Warn(null, "Репозиторий недоступен",
-                        "GitHub отвечает, что такого репозитория нет. Обычно это значит, "
-                        + "что он закрыт (private) или переименован.",
-                        "Пока это так, обновления проверяться не будут ни у кого — "
-                        + $"как и скачивание по ссылке {UpdateService.ReleasesPageUrl}");
+                    Notice.Warn(null, L10n.T("update.unavailable.title"),
+                        L10n.T("update.unavailable.body"),
+                        L10n.T("update.unavailable.hint", UpdateService.ReleasesPageUrl));
                 return;
             }
 
             if (check.NoReleases)
             {
                 if (!silent)
-                    Notice.Info(null, "Обновлений нет",
-                        "В репозитории пока не опубликовано ни одного релиза.");
+                    Notice.Info(null, L10n.T("update.none.title"),
+                        L10n.T("update.none.body"));
                 return;
             }
 
@@ -178,8 +173,8 @@ public sealed class TrayContext : ApplicationContext
             if (!UpdateService.IsNewer(release))
             {
                 if (!silent)
-                    Notice.Info(null, "Установлена последняя версия",
-                        $"У вас {UpdateService.CurrentVersion} — новее пока нет.");
+                    Notice.Info(null, L10n.T("update.latest.title"),
+                        L10n.T("update.latest.body", UpdateService.CurrentVersion));
                 return;
             }
 
@@ -190,9 +185,9 @@ public sealed class TrayContext : ApplicationContext
         {
             // Проверка обновлений не должна мешать работе приложения.
             if (!silent)
-                Notice.Error(null, "Не удалось проверить обновления",
-                    "Что-то пошло не так при обращении к GitHub.",
-                    $"Скачать новую версию вручную можно здесь: {UpdateService.ReleasesPageUrl}",
+                Notice.Error(null, L10n.T("update.failed.title"),
+                    L10n.T("update.error.body"),
+                    L10n.T("update.error.hint", UpdateService.ReleasesPageUrl),
                     ex.ToString(), reportContext: "Ошибка проверки обновлений");
         }
         finally

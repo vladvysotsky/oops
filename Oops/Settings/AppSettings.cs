@@ -9,6 +9,12 @@ public sealed class AppSettings
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Язык интерфейса: «auto» (по языку Windows), «ru» или «en».
+    /// См. <see cref="Core.L10n"/>.
+    /// </summary>
+    public string Language { get; set; } = Core.L10n.Auto;
+
+    /// <summary>
     /// Мастер первого запуска уже показывали.
     ///
     /// Автозапуска здесь намеренно НЕТ: единственный источник правды —
@@ -64,7 +70,7 @@ public sealed class AppSettings
                 var json = File.ReadAllText(FilePath);
                 var s = JsonSerializer.Deserialize<AppSettings>(json);
                 if (s != null) { s.Sanitize(); return s; }
-                return new AppSettings { LoadError = "Файл настроек пуст." };
+                return new AppSettings { LoadError = "settings file is empty" };
             }
         }
         catch (Exception ex)

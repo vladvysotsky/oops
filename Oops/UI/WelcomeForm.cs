@@ -47,7 +47,7 @@ public sealed class WelcomeForm : ThemedForm
         _convertHotkey = Clone(settings.ConvertHotkey);
         _caseHotkey = Clone(settings.ChangeCaseHotkey);
 
-        Text = "Добро пожаловать в oops";
+        Text = L10n.T("welcome.window.title");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -133,75 +133,66 @@ public sealed class WelcomeForm : ThemedForm
     private void BuildIntro()
     {
         AddRow(_root, Heading("oops",
-            "Правит раскладку и регистр текста, который вы только что набрали. "
-            + "Работает во всех приложениях Windows."));
+            L10n.T("welcome.intro.subtitle")));
 
-        AddRow(_root, SectionLabel("КАК ЭТО РАБОТАЕТ"));
+        AddRow(_root, SectionLabel(L10n.T("welcome.section.how")));
 
         var card = NewCard(out var rows);
         AddRow(rows, Paragraph(
-            "Программа не угадывает, где вы сбились с раскладки — границу задаёте вы "
-            + "количеством нажатий хоткея:"));
+            L10n.T("welcome.how.p1")));
         AddRow(rows, Example(
-            "набрали:   ghjdthrf njuj rfr 'nj hf,jnftn",
-            "1-е нажатие:  ghjdthrf njuj rfr 'nj работает",
-            "2-е нажатие:  проверка того как это работает"));
+            L10n.T("welcome.example.typed"),
+            L10n.T("welcome.example.first"),
+            L10n.T("welcome.example.second")));
         AddRow(rows, Paragraph(
-            "Первое нажатие правит последнее слово, второе — весь набранный текст. "
-            + "Нажатия должны идти подряд, в пределах пары секунд."));
+            L10n.T("welcome.how.p2")));
         AddRow(rows, Divider());
         AddRow(rows, Paragraph(
-            "Если текст выделен мышью, хоткей преобразует всё выделение целиком."));
+            L10n.T("welcome.how.selection")));
         AddRow(rows, Divider());
         AddRow(rows, Paragraph(
-            "Исправленный текст печатается эмуляцией клавиатуры и в буфер обмена "
-            + "не попадает — история Win+V остаётся чистой."));
+            L10n.T("welcome.how.clipboard")));
         AddRow(_root, card);
 
-        AddRow(_root, Footer("Далее", () => ShowPage(1), showBack: false));
+        AddRow(_root, Footer(L10n.T("common.next"), () => ShowPage(1), showBack: false));
     }
 
     private void BuildHotkeys()
     {
-        AddRow(_root, Heading("Горячие клавиши",
-            "Сочетание может быть из одних модификаторов (Ctrl + Win), а может "
-            + "включать обычную клавишу — например Ctrl + Alt + X. Всё меняется "
-            + "потом в настройках."));
+        AddRow(_root, Heading(L10n.T("welcome.hotkeys.title"),
+            L10n.T("welcome.hotkeys.subtitle")));
 
         var keys = NewCard(out var keyRows);
-        AddRow(keyRows, HotkeyRow("Раскладка", "Меняет RU ↔ EN",
+        AddRow(keyRows, HotkeyRow(L10n.T("hotkey.layout"), L10n.T("hotkey.layout.hint"),
             _convertKeys, () => Record(ref _convertHotkey, _convertKeys)));
         AddRow(keyRows, Divider());
-        AddRow(keyRows, HotkeyRow("Регистр", "ВЕРХНИЙ ↔ нижний",
+        AddRow(keyRows, HotkeyRow(L10n.T("hotkey.case"), L10n.T("hotkey.case.hint"),
             _caseKeys, () => Record(ref _caseHotkey, _caseKeys)));
         _convertKeys.SetCombo(_convertHotkey.ToString());
         _caseKeys.SetCombo(_caseHotkey.ToString());
         AddRow(_root, keys);
 
         AddRow(_root, Note(
-            "Alt + Shift назначить нельзя: эту комбинацию Windows забирает себе "
-            + "под смену раскладки, до приложения она не доходит."));
+            L10n.T("welcome.note.altShift")));
 
-        AddRow(_root, SectionLabel("ЗАПУСК"));
+        AddRow(_root, SectionLabel(L10n.T("welcome.section.startup")));
         var start = NewCard(out var startRows);
-        AddRow(startRows, CheckRow(_cbAutostart, "Запускать при входе в Windows",
-            "Иначе после перезагрузки придётся открывать вручную"));
+        AddRow(startRows, CheckRow(_cbAutostart, L10n.T("settings.autostart"),
+            L10n.T("settings.autostart.hint")));
         AddRow(_root, start);
 
         AddRow(_root, Note(
-            "Программа живёт в трее. Двойной клик по иконке открывает настройки."));
+            L10n.T("welcome.note.tray")));
 
-        AddRow(_root, Footer("Готово", Finish, showBack: true));
+        AddRow(_root, Footer(L10n.T("common.done"), Finish, showBack: true));
     }
 
     private void Finish()
     {
         if (_convertHotkey.SameCombo(_caseHotkey))
         {
-            Notice.Warn(this, "Сочетания совпадают",
-                "Раскладка и регистр не могут висеть на одном сочетании: сработает "
-                + "только первое, второе будет молчать без единого признака.",
-                "Назначьте разные — например, раскладке Ctrl + Win, регистру Alt + Win.");
+            Notice.Warn(this, L10n.T("hotkey.clash.title"),
+                L10n.T("hotkey.clash.body"), L10n.T("hotkey.clash.hint"));
             return;
         }
         DialogResult = DialogResult.OK;
@@ -413,7 +404,7 @@ public sealed class WelcomeForm : ThemedForm
 
         var btn = new FlatButton
         {
-            Text = "Изменить",
+            Text = L10n.T("hotkey.change"),
             AutoSize = true,
             MinimumSize = new Size(92, 30),
             Margin = new Padding(0),
@@ -463,7 +454,7 @@ public sealed class WelcomeForm : ThemedForm
         {
             var back = new FlatButton
             {
-                Text = "Назад",
+                Text = L10n.T("common.back"),
                 AutoSize = true,
                 MinimumSize = new Size(104, 34),
                 Margin = new Padding(Theme.S2, 0, 0, 0),
