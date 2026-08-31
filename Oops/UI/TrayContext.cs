@@ -11,18 +11,39 @@ public sealed class TrayContext : ApplicationContext
 {
     private readonly NotifyIcon _icon;
     private readonly App _app;
-    private readonly ToolStripMenuItem _miUpdate;
+    private ToolStripMenuItem _miUpdate = new();
 
     public TrayContext(App app)
     {
         _app = app;
+
+        _icon = new NotifyIcon
+        {
+            Icon = LoadIcon(),
+            Text = "oops",
+            Visible = true,
+        };
+        BuildMenu();
+        _icon.DoubleClick += (_, _) => ShowSettings();
+
+        _ = ScheduleStartupUpdateCheckAsync();
+    }
+
+    /// <summary>
+    /// Собирает меню заново. Вызывается при старте и после смены языка: тексты
+    /// пунктов сидят в уже созданных ToolStripMenuItem, менять их по одному
+    /// пришлось бы вручную и с риском что-нибудь забыть.
+    /// </summary>
+    private void BuildMenu()
+    {
         var menu = new ContextMenuStrip();
 
-        var miEnabled = new ToolStripMenuItem(L10n.T("tray.enabled")) { Checked = app.Settings.Enabled, CheckOnClick = true };
+        var miEnabled = new ToolStripMenuItem(L10n.T("tray.enabled"))
+            { Checked = _app.Settings.Enabled, CheckOnClick = true };
         miEnabled.CheckedChanged += (_, _) =>
         {
-            app.Settings.Enabled = miEnabled.Checked;
-            app.Settings.Save();
+            _app.Settings.Enabled = miEnabled.Checked;
+            _app.Settings.Save();
         };
 
         var miSettings = new ToolStripMenuItem(L10n.T("tray.settings"));
@@ -55,16 +76,8 @@ public sealed class TrayContext : ApplicationContext
         });
         Theme.ApplyMenuChrome(menu);
 
-        _icon = new NotifyIcon
-        {
-            Icon = LoadIcon(),
-            Text = "oops",
-            Visible = true,
-            ContextMenuStrip = menu,
-        };
-        _icon.DoubleClick += (_, _) => ShowSettings();
-
-        _ = ScheduleStartupUpdateCheckAsync();
+        _icon.ContextMenuStrip?.Dispose();
+        _icon.ContextMenuStrip = menu;
     }
 
     /// <summary>
@@ -93,7 +106,7 @@ public sealed class TrayContext : ApplicationContext
         _app.HotkeysSuspended = true;
         try
         {
-            using var form = new SettingsForm(_app.Settings);
+            using var form = new SettingsForm(_app.Settings, onLanguageChanged: BuildMenu);
             if (form.ShowDialog() == DialogResult.OK)
             {
                 // Автозапуск форма записывает в реестр сама: держать его копию в
