@@ -39,6 +39,14 @@ public sealed class SettingsForm : ThemedForm
     private HotkeyConfig _convertHotkey;
     private HotkeyConfig _caseHotkey;
 
+    /// <summary>
+    /// Выбранный язык — отдельно от настроек. В settings.Language он попадает
+    /// только по «Сохранить», а Populate после пересборки окна читал именно
+    /// настройки и возвращал переключатель к прежнему значению: язык менялся и
+    /// тут же откатывался, окно моргало впустую.
+    /// </summary>
+    private string _languagePref;
+
     /// <summary>Вызывается, когда язык сменили: трей пересобирает своё меню.</summary>
     private readonly Action? _onLanguageChanged;
 
@@ -48,6 +56,7 @@ public sealed class SettingsForm : ThemedForm
         _onLanguageChanged = onLanguageChanged;
         _convertHotkey = Clone(settings.ConvertHotkey);
         _caseHotkey = Clone(settings.ChangeCaseHotkey);
+        _languagePref = settings.Language;
 
         Text = "oops";
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -599,7 +608,12 @@ public sealed class SettingsForm : ThemedForm
     private void OnLanguagePicked()
     {
         var picked = LanguageValues[_language.SelectedIndex];
-        if (L10n.Resolve(picked) == L10n.Language) return;   // ничего не меняется
+        if (picked == _languagePref) return;
+        _languagePref = picked;
+
+        // «Авто» и явный язык могут разрешаться в один и тот же — тогда
+        // перерисовывать нечего, но выбор всё равно надо запомнить.
+        if (L10n.Resolve(picked) == L10n.Language) return;
 
         L10n.Init(picked);
         _onLanguageChanged?.Invoke();
@@ -632,9 +646,10 @@ public sealed class SettingsForm : ThemedForm
         _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
-        _language.SelectedIndex = Math.Max(0, Array.IndexOf(LanguageValues, _settings.Language));
-        // Подписываемся после установки значения, чтобы Populate не вызвал пересборку.
+        // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
+        // запустит пересборку окна по кругу.
         _language.SelectedIndexChanged -= LanguageChangedHandler;
+        _language.SelectedIndex = Math.Max(0, Array.IndexOf(LanguageValues, _languagePref));
         _language.SelectedIndexChanged += LanguageChangedHandler;
         _nudIdle.Value = _settings.BufferIdleTimeoutSeconds;    // Stepper сам ограничит диапазоном
         _nudExpand.Value = _settings.ExpandWindowSeconds;
@@ -685,7 +700,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.Enabled = _cbEnabled.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
-        _settings.Language = LanguageValues[_language.SelectedIndex];
+        _settings.Language = _languagePref;
         _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
         _settings.ExpandWindowSeconds = _nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
