@@ -60,7 +60,7 @@ internal sealed class Notice : ThemedForm
         {
             var toggle = new LinkLabel
             {
-                Text = "Подробности",
+                Text = L10n.T("notice.details"),
                 Font = Theme.Caption,
                 LinkColor = Theme.Accent,
                 ActiveLinkColor = Theme.AccentPressed,
@@ -75,7 +75,7 @@ internal sealed class Notice : ThemedForm
             toggle.LinkClicked += (_, _) =>
             {
                 detailsBox.Visible = !detailsBox.Visible;
-                toggle.Text = detailsBox.Visible ? "Скрыть подробности" : "Подробности";
+                toggle.Text = L10n.T(detailsBox.Visible ? "notice.detailsHide" : "notice.details");
             };
 
             Add(root, toggle);
@@ -110,11 +110,7 @@ internal sealed class Notice : ThemedForm
     public static void Crash(Exception ex)
     {
         Show(null, NoticeKind.Error,
-            "oops неожиданно сломался",
-            "Произошла ошибка, которую программа не предусмотрела. "
-            + "Горячие клавиши могли перестать работать — перезапустите программу.",
-            "Если это повторяется, отправьте отчёт: он придёт с описанием ошибки, "
-            + "нам не придётся угадывать.",
+            L10n.T("crash.title"), L10n.T("crash.body"), L10n.T("crash.hint"),
             ex.ToString(),
             reportContext: "Необработанное исключение");
     }
@@ -208,7 +204,7 @@ internal sealed class Notice : ThemedForm
 
         var ok = new FlatButton
         {
-            Text = "Понятно",
+            Text = L10n.T("notice.ok"),
             Primary = true,
             AutoSize = true,
             MinimumSize = new Size(112, 34),
@@ -223,7 +219,7 @@ internal sealed class Notice : ThemedForm
         {
             var report = new FlatButton
             {
-                Text = "Сообщить об ошибке",
+                Text = L10n.T("notice.report"),
                 AutoSize = true,
                 MinimumSize = new Size(120, 34),
                 Margin = new Padding(Theme.S2, 0, 0, 0),
@@ -239,7 +235,7 @@ internal sealed class Notice : ThemedForm
             var text = details;
             var copy = new FlatButton
             {
-                Text = "Скопировать",
+                Text = L10n.T("notice.copy"),
                 AutoSize = true,
                 MinimumSize = new Size(112, 34),
                 Margin = new Padding(Theme.S2, 0, 0, 0),
@@ -248,8 +244,8 @@ internal sealed class Notice : ThemedForm
             {
                 // Единственное место, кроме чтения выделения, где мы пишем в буфер
                 // обмена — и только по явному нажатию кнопки самим пользователем.
-                try { Clipboard.SetText(text); copy.Text = "Скопировано"; }
-                catch { copy.Text = "Не вышло"; }
+                try { Clipboard.SetText(text); copy.Text = L10n.T("notice.copied"); }
+                catch { copy.Text = L10n.T("notice.copyFailed"); }
             };
             flow.Controls.Add(copy);
         }
@@ -277,7 +273,7 @@ internal sealed class Notice : ThemedForm
     }
 
     private static string Truncate(string s, int max) =>
-        s.Length <= max ? s : s[..max] + "\n… обрезано";
+        s.Length <= max ? s : s[..max] + "\n… truncated";
 
     /// <summary>Круглая метка со знаком: цвет несёт смысл, знак дублирует его формой.</summary>
     private sealed class Badge : Control

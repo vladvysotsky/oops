@@ -27,7 +27,7 @@ internal sealed class FeedbackForm : ThemedForm
 
     private FeedbackForm()
     {
-        Text = "Обратная связь";
+        Text = L10n.T("feedback.window.title");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -47,7 +47,7 @@ internal sealed class FeedbackForm : ThemedForm
 
         Add(root, new Label
         {
-            Text = "Что-то не так или есть идея?",
+            Text = L10n.T("feedback.title"),
             Font = Theme.Title,
             ForeColor = Theme.Text,
             AutoSize = true,
@@ -74,8 +74,8 @@ internal sealed class FeedbackForm : ThemedForm
         };
         card.Controls.Add(rows);
 
-        Style(_rbProblem, "Проблема — что-то работает не так");
-        Style(_rbIdea, "Предложение — чего не хватает");
+        Style(_rbProblem, L10n.T("feedback.problem"));
+        Style(_rbIdea, L10n.T("feedback.idea"));
         _rbProblem.Checked = true;
         Add(rows, _rbProblem);
         Add(rows, _rbIdea);
@@ -104,7 +104,7 @@ internal sealed class FeedbackForm : ThemedForm
 
         var send = new FlatButton
         {
-            Text = "Продолжить на GitHub",
+            Text = L10n.T("feedback.submit"),
             Primary = true,
             AutoSize = true,
             MinimumSize = new Size(124, 34),
@@ -114,7 +114,7 @@ internal sealed class FeedbackForm : ThemedForm
 
         var cancel = new FlatButton
         {
-            Text = "Отмена",
+            Text = L10n.T("common.cancel"),
             AutoSize = true,
             MinimumSize = new Size(104, 34),
             Margin = new Padding(Theme.S2, 0, 0, 0),
@@ -162,9 +162,8 @@ internal sealed class FeedbackForm : ThemedForm
     private void UpdateHint()
     {
         _hint.Text = _text.Text.Trim().Length == 0
-            ? "Опишите своими словами — версия программы и Windows подставятся сами."
-            : "Откроется страница GitHub с уже заполненным текстом — останется нажать Submit. "
-              + "Понадобится аккаунт GitHub.";
+            ? L10n.T("feedback.hint.empty")
+            : L10n.T("feedback.hint.ready");
     }
 
     private void Send()
@@ -172,7 +171,7 @@ internal sealed class FeedbackForm : ThemedForm
         var text = _text.Text.Trim();
         if (text.Length == 0)
         {
-            _hint.Text = "Сначала напишите пару слов о том, что случилось или чего не хватает.";
+            _hint.Text = L10n.T("feedback.hint.required");
             _hint.ForeColor = Theme.Danger;
             return;
         }
@@ -198,8 +197,8 @@ internal sealed class FeedbackForm : ThemedForm
         }
         catch
         {
-            _hint.Text = "Не удалось открыть браузер. Напишите вручную: "
-                       + UpdateService.ReleasesPageUrl.Replace("/releases", "/issues");
+            _hint.Text = L10n.T("feedback.browserFailed",
+                UpdateService.ReleasesPageUrl.Replace("/releases", "/issues"));
             _hint.ForeColor = Theme.Danger;
         }
     }

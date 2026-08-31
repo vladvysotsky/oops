@@ -1,4 +1,5 @@
 using System.Windows.Forms;
+using Oops.Core;
 using Oops.Settings;
 using Oops.UI;
 
@@ -30,9 +31,11 @@ internal static class Program
             name: "Local\\Oops_SingleInstance", out var createdNew);
         if (!createdNew)
         {
-            Notice.Info(null, "oops уже запущен",
-                "Программа работает и сейчас — просто не показывается окном.",
-                "Ищите иконку в трее, у часов. Двойной клик по ней откроет настройки.");
+            // L10n ещё не инициализирован (настройки не читали) — берём язык
+            // системы: до чтения настроек это единственный доступный источник.
+            L10n.Init(L10n.Auto);
+            Notice.Info(null, L10n.T("running.title"),
+                L10n.T("running.body"), L10n.T("running.hint"));
             return;
         }
 
@@ -41,15 +44,15 @@ internal static class Program
         _ = new Control(); // принудительно создаёт SyncContext в этом потоке
 
         var settings = AppSettings.Load();
+        L10n.Init(settings.Language);
 
         // Файл настроек был, но не прочитался. Молча вернуть дефолты — значит
         // отобрать настроенные хоткеи без единого слова, и человек решит, что
         // программа сломалась сама по себе.
         if (settings.LoadError != null)
-            Notice.Warn(null, "Настройки не прочитались",
-                "Файл настроек повреждён, программа запустилась с настройками по умолчанию.",
-                $"Проверьте хоткеи в настройках — возможно, их придётся назначить заново.\n"
-                + $"Файл: {AppSettings.Location}");
+            Notice.Warn(null, L10n.T("settings.unreadable.title"),
+                L10n.T("settings.unreadable.body"),
+                L10n.T("settings.unreadable.hint", AppSettings.Location));
 
         App app;
         try
@@ -60,10 +63,8 @@ internal static class Program
         {
             // Без клавиатурного хука программа не делает вообще ничего, так что
             // это не «работаем дальше», а честный отказ запуститься.
-            Notice.Error(null, "Не удалось перехватить клавиатуру",
-                "Без этого горячие клавиши работать не могут, поэтому программа не запустится.",
-                "Чаще всего мешает другая программа с глобальными хоткеями "
-                + "(Punto Switcher, менеджер раскладок, античит). Закройте её и попробуйте снова.",
+            Notice.Error(null, L10n.T("hook.failed.title"),
+                L10n.T("hook.failed.body"), L10n.T("hook.failed.hint"),
                 ex.ToString(), reportContext: "Не удалось установить клавиатурный хук");
             return;
         }

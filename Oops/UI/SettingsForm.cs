@@ -21,6 +21,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbAutostart = new ToggleBox();
     private readonly CheckBox _cbAutoUpdate = new ToggleBox();
     private readonly CheckBox _cbCharByChar = new ToggleBox();
+    private readonly ComboBox _cbLanguage = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly Stepper _nudIdle = new();
@@ -93,13 +94,13 @@ public sealed class SettingsForm : ThemedForm
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
 
         AddAutoRow(content, Header());
-        AddAutoRow(content, SectionLabel("ОБЩИЕ"));
+        AddAutoRow(content, SectionLabel(L10n.T("settings.section.general")));
         AddAutoRow(content, GeneralCard());
-        AddAutoRow(content, SectionLabel("ГОРЯЧИЕ КЛАВИШИ"));
+        AddAutoRow(content, SectionLabel(L10n.T("settings.section.hotkeys")));
         AddAutoRow(content, HotkeysCard());
-        AddAutoRow(content, SectionLabel("ПОВЕДЕНИЕ"));
+        AddAutoRow(content, SectionLabel(L10n.T("settings.section.behaviour")));
         AddAutoRow(content, BehaviourCard());
-        AddAutoRow(content, SectionLabel("ПРОВЕРКА"));
+        AddAutoRow(content, SectionLabel(L10n.T("settings.section.probe")));
         AddAutoRow(content, ProbeCard());
         AddAutoRow(content, Footer());
 
@@ -134,8 +135,7 @@ public sealed class SettingsForm : ThemedForm
         });
         AddAutoRow(stack, new Label
         {
-            Text = "Правит раскладку и регистр набранного текста. Границу задаёте вы: "
-                 + "каждое следующее нажатие хоткея захватывает ещё одно слово.",
+            Text = L10n.T("settings.subtitle"),
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
@@ -158,26 +158,52 @@ public sealed class SettingsForm : ThemedForm
     private Control GeneralCard()
     {
         var card = NewCard(out var rows);
-        AddAutoRow(rows, CheckRow(_cbEnabled, "Включено",
-            "Глобально включает и выключает горячие клавиши"));
+        AddAutoRow(rows, CheckRow(_cbEnabled, L10n.T("settings.enabled"),
+            L10n.T("settings.enabled.hint")));
         AddAutoRow(rows, Divider());
-        AddAutoRow(rows, CheckRow(_cbAutostart, "Запускать при входе в Windows",
-            "Иначе после перезагрузки придётся открывать вручную"));
+        AddAutoRow(rows, CheckRow(_cbAutostart, L10n.T("settings.autostart"),
+            L10n.T("settings.autostart.hint")));
         AddAutoRow(rows, Divider());
-        AddAutoRow(rows, CheckRow(_cbAutoUpdate, "Проверять обновления",
-            "Раз в сутки; о новой версии сообщим, ставить или нет — решаете вы"));
+        AddAutoRow(rows, CheckRow(_cbAutoUpdate, L10n.T("settings.autoupdate"),
+            L10n.T("settings.autoupdate.hint")));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, LanguageRow());
         return card;
     }
+
+    /// <summary>
+    /// Выбор языка интерфейса. Список короткий и фиксированный, поэтому
+    /// системный ComboBox в DropDownList — он не даёт вводить произвольный
+    /// текст и не требует своей отрисовки.
+    /// </summary>
+    private Control LanguageRow()
+    {
+        _cbLanguage.DropDownStyle = ComboBoxStyle.DropDownList;
+        _cbLanguage.FlatStyle = FlatStyle.Flat;
+        _cbLanguage.Font = Theme.Body;
+        _cbLanguage.BackColor = Theme.Surface;
+        _cbLanguage.ForeColor = Theme.Text;
+        _cbLanguage.Width = 160;
+        _cbLanguage.Items.Clear();
+        _cbLanguage.Items.AddRange(new object[]
+        {
+            L10n.T("settings.language.auto"), "Русский", "English",
+        });
+        return Row(L10n.T("settings.language"), L10n.T("settings.language.hint"), _cbLanguage);
+    }
+
+    /// <summary>Порядок пунктов списка языков — он же порядок значений настройки.</summary>
+    private static readonly string[] LanguageValues = { L10n.Auto, L10n.Russian, L10n.English };
 
     private Control HotkeysCard()
     {
         var card = NewCard(out var rows);
         AddAutoRow(rows, HotkeyRow(
-            "Раскладка", "Меняет RU ↔ EN",
+            L10n.T("hotkey.layout"), L10n.T("hotkey.layout.hint"),
             _convertKeys, () => RecordInto(ref _convertHotkey, _convertKeys)));
         AddAutoRow(rows, Divider());
         AddAutoRow(rows, HotkeyRow(
-            "Регистр", "ВЕРХНИЙ ↔ нижний",
+            L10n.T("hotkey.case"), L10n.T("hotkey.case.hint"),
             _caseKeys, () => RecordInto(ref _caseHotkey, _caseKeys)));
         return card;
     }
@@ -187,17 +213,17 @@ public sealed class SettingsForm : ThemedForm
         var card = NewCard(out var rows);
 
         _nudExpand.Minimum = 1; _nudExpand.Maximum = 10;
-        AddAutoRow(rows, NumberRow(_nudExpand, "Второе нажатие засчитывается", "сек",
-            "Успели нажать повторно — правится весь текст, не успели — снова последнее слово"));
+        AddAutoRow(rows, NumberRow(_nudExpand, L10n.T("settings.expand"), L10n.T("unit.sec"),
+            L10n.T("settings.expand.hint")));
         AddAutoRow(rows, Divider());
 
         _nudIdle.Minimum = 5; _nudIdle.Maximum = 600;
-        AddAutoRow(rows, NumberRow(_nudIdle, "Забывать набранное через", "сек",
-            "После паузы в наборе хоткей будет работать с новым текстом, а не с прежним"));
+        AddAutoRow(rows, NumberRow(_nudIdle, L10n.T("settings.forget"), L10n.T("unit.sec"),
+            L10n.T("settings.forget.hint")));
         AddAutoRow(rows, Divider());
 
-        AddAutoRow(rows, CheckRow(_cbCharByChar, "Печатать медленно, по одному символу",
-            "Включайте, если в каком-то приложении текст вставляется с потерями"));
+        AddAutoRow(rows, CheckRow(_cbCharByChar, L10n.T("settings.slowTyping"),
+            L10n.T("settings.slowTyping.hint")));
         return card;
     }
 
@@ -216,7 +242,7 @@ public sealed class SettingsForm : ThemedForm
         // ломала заголовок переносом.
         AddAutoRow(rows, new Label
         {
-            Text = "Нажмите сочетание — здесь появится то, что реально дошло до oops.",
+            Text = L10n.T("probe.prompt"),
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
@@ -229,7 +255,7 @@ public sealed class SettingsForm : ThemedForm
         _probeKeys.SetCombo(string.Empty);
         AddAutoRow(rows, _probeKeys);
 
-        _probeStatus.Text = "Ждём нажатия…";
+        _probeStatus.Text = L10n.T("probe.waiting");
         _probeStatus.Font = Theme.Caption;
         _probeStatus.ForeColor = Theme.TextMuted;
         _probeStatus.AutoSize = true;
@@ -245,7 +271,7 @@ public sealed class SettingsForm : ThemedForm
         base.OnLoad(e);
         _probe.KeyDown += OnProbeKey;
         try { _probe.Install(); }
-        catch { _probeStatus.Text = "Не удалось перехватить клавиатуру."; }
+        catch { _probeStatus.Text = L10n.T("probe.hookFailed"); }
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
@@ -275,17 +301,17 @@ public sealed class SettingsForm : ThemedForm
 
         if (isConvert)
         {
-            _probeStatus.Text = "Совпадает с хоткеем раскладки — сработает.";
+            _probeStatus.Text = L10n.T("probe.matchLayout");
             _probeStatus.ForeColor = Theme.Accent;
         }
         else if (isCase)
         {
-            _probeStatus.Text = "Совпадает с хоткеем регистра — сработает.";
+            _probeStatus.Text = L10n.T("probe.matchCase");
             _probeStatus.ForeColor = Theme.Accent;
         }
         else
         {
-            _probeStatus.Text = "Не совпадает ни с одним из назначенных сочетаний.";
+            _probeStatus.Text = L10n.T("probe.noMatch");
             _probeStatus.ForeColor = Theme.TextMuted;
         }
     }
@@ -298,8 +324,8 @@ public sealed class SettingsForm : ThemedForm
 
     private Control Footer()
     {
-        var save = new FlatButton { Text = "Сохранить", Primary = true, AutoSize = true, MinimumSize = new Size(124, 34), DialogResult = DialogResult.OK };
-        var cancel = new FlatButton { Text = "Отмена", AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
+        var save = new FlatButton { Text = L10n.T("common.save"), Primary = true, AutoSize = true, MinimumSize = new Size(124, 34), DialogResult = DialogResult.OK };
+        var cancel = new FlatButton { Text = L10n.T("common.cancel"), AutoSize = true, MinimumSize = new Size(104, 34), DialogResult = DialogResult.Cancel };
         // Button.OnClick выставляет DialogResult формы ДО вызова наших обработчиков,
         // поэтому вернуть None — штатный способ отменить закрытие окна.
         save.Click += (_, _) => { if (!ApplyToSettings()) DialogResult = DialogResult.None; };
@@ -456,7 +482,7 @@ public sealed class SettingsForm : ThemedForm
 
         var btn = new FlatButton
         {
-            Text = "Изменить",
+            Text = L10n.T("hotkey.change"),
             AutoSize = true,                       // ширину диктует текст, не константа
             MinimumSize = new Size(92, 30),
             Margin = new Padding(0),
@@ -498,6 +524,7 @@ public sealed class SettingsForm : ThemedForm
         _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
+        _cbLanguage.SelectedIndex = Math.Max(0, Array.IndexOf(LanguageValues, _settings.Language));
         _nudIdle.Value = _settings.BufferIdleTimeoutSeconds;    // Stepper сам ограничит диапазоном
         _nudExpand.Value = _settings.ExpandWindowSeconds;
         _convertKeys.SetCombo(_convertHotkey.ToString());
@@ -537,16 +564,16 @@ public sealed class SettingsForm : ThemedForm
         // второй хоткей просто перестал бы отвечать — без единого признака.
         if (_convertHotkey.SameCombo(_caseHotkey))
         {
-            Notice.Warn(this, "Сочетания совпадают",
-                "Раскладка и регистр не могут висеть на одном сочетании: сработает "
-                + "только первое, второе будет молчать без единого признака.",
-                "Назначьте разные — например, раскладке Ctrl + Win, регистру Alt + Win.");
+            Notice.Warn(this, L10n.T("hotkey.clash.title"),
+                L10n.T("hotkey.clash.body"), L10n.T("hotkey.clash.hint"));
             return false;
         }
 
         _settings.Enabled = _cbEnabled.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
+        if (_cbLanguage.SelectedIndex >= 0)
+            _settings.Language = LanguageValues[_cbLanguage.SelectedIndex];
         _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
         _settings.ExpandWindowSeconds = _nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
@@ -593,7 +620,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
 
     public HotkeyRecordDialog()
     {
-        Text = "Новое сочетание";
+        Text = L10n.T("record.title");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -610,9 +637,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
         _preview.SetCombo(string.Empty);
         card.Controls.Add(_preview);
 
-        _hint.Text = "Нажмите сочетание и отпустите клавиши. Можно из одних "
-                   + "модификаторов (Ctrl + Alt + Win) или с обычной клавишей "
-                   + "(Ctrl + Alt + X). Esc — отмена.";
+        _hint.Text = L10n.T("record.hint");
         _hint.Font = Theme.Caption;
         _hint.ForeColor = Theme.TextMuted;
         _hint.AutoSize = true;
@@ -649,7 +674,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
         try { _hook.Install(); }
         catch
         {
-            _hint.Text = "Не удалось перехватить клавиатуру. Закройте окно и попробуйте снова.";
+            _hint.Text = L10n.T("record.hookFailed");
             _hint.ForeColor = Theme.Danger;
         }
     }
@@ -712,7 +737,7 @@ public sealed class HotkeyRecordDialog : ThemedForm
         // Alt+Shift — системный шорткат смены раскладки Windows: до нас он не дойдёт.
         if (_alt && _shift && !_ctrl && !_win)
         {
-            Fail("Alt+Shift занят Windows (смена раскладки). Выберите другое.");
+            Fail(L10n.T("record.altShift"));
             return;
         }
 
