@@ -26,6 +26,12 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+# Вывод внешних программ (git в первую очередь) читаем как UTF-8.
+# По умолчанию консоль Windows разбирает его в кодовой странице 866, и
+# сообщение коммита превращается в «╨▓╨╝╨╡╤Б╤В╨╛». На работу это не влияет,
+# но строку «Собираю коммит …» печатают ровно затем, чтобы её прочитали.
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+
 $RepoRoot = $PSScriptRoot
 $Project  = Join-Path $RepoRoot "Oops"
 $Exe      = Join-Path $RepoRoot "Oops\bin\Release\net8.0-windows\win-x64\publish\oops.exe"
