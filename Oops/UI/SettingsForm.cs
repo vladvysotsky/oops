@@ -26,6 +26,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _translateKeys = new() { Interactive = true };
+    private readonly HotkeyDisplay _voiceKeys = new() { Interactive = true };
     private readonly Stepper _nudIdle = new();
     private readonly Stepper _nudExpand = new();
 
@@ -40,11 +41,7 @@ public sealed class SettingsForm : ThemedForm
     private HotkeyConfig _convertHotkey;
     private HotkeyConfig _caseHotkey;
     private HotkeyConfig _translateHotkey;
-
-    // Карточка перевода: состояние моделей и кнопка их скачать или удалить.
-    private readonly Label _modelStatus = new();
-    private readonly FlatButton _modelAction = new();
-    private CancellationTokenSource? _modelCts;
+    private HotkeyConfig _voiceHotkey;
 
     /// <summary>
     /// Выбранный язык — отдельно от настроек. В settings.Language он попадает
@@ -64,6 +61,7 @@ public sealed class SettingsForm : ThemedForm
         _convertHotkey = Clone(settings.ConvertHotkey);
         _caseHotkey = Clone(settings.ChangeCaseHotkey);
         _translateHotkey = Clone(settings.TranslateHotkey);
+        _voiceHotkey = Clone(settings.VoiceHotkey);
         _languagePref = settings.Language;
 
         Text = "oops";
@@ -204,7 +202,17 @@ public sealed class SettingsForm : ThemedForm
             default:
                 AddAutoRow(stack, BehaviourCard());
                 AddAutoRow(stack, SectionLabel(L10n.T("settings.translation.title")));
-                AddAutoRow(stack, TranslationCard());
+                AddAutoRow(stack, ModelCard(_translation, "settings.translation.body",
+                    "settings.translation",
+                    () => Translator.IsReady,
+                    (p, ct) => Translator.EnsureModelsAsync(p, ct),
+                    Translator.RemoveModels));
+                AddAutoRow(stack, SectionLabel(L10n.T("settings.voice.title")));
+                AddAutoRow(stack, ModelCard(_voice, "settings.voice.body",
+                    "settings.voice",
+                    () => VoiceInput.IsReady,
+                    (p, ct) => VoiceInput.EnsureModelAsync(p, ct),
+                    VoiceInput.RemoveModel));
                 break;
         }
         return stack;
@@ -327,6 +335,10 @@ public sealed class SettingsForm : ThemedForm
         AddAutoRow(rows, HotkeyRow(
             L10n.T("hotkey.translate"), L10n.T("hotkey.translate.hint"),
             _translateKeys, () => RecordInto(ref _translateHotkey, _translateKeys)));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, HotkeyRow(
+            L10n.T("hotkey.voice"), L10n.T("hotkey.voice.hint"),
+            _voiceKeys, () => RecordInto(ref _voiceHotkey, _voiceKeys)));
         return card;
     }
 
@@ -350,17 +362,34 @@ public sealed class SettingsForm : ThemedForm
     }
 
     /// <summary>
-    /// Карточка перевода. Модели весят под полсотни мегабайт и в установщик не
-    /// кладутся — их скачивают отсюда, по явному нажатию. Пока их нет, хоткей
-    /// перевода не молчит, а приводит человека сюда же.
+    /// Одна карточка моделей: перевод и голосовой ввод устроены одинаково —
+    /// текст состояния, одна кнопка и своя отменяемая загрузка.
     /// </summary>
-    private Control TranslationCard()
+    private sealed class ModelSection
+    {
+        public readonly Label Status = new();
+        public readonly FlatButton Action = new();
+        public CancellationTokenSource? Cts;
+    }
+
+    private readonly ModelSection _translation = new();
+    private readonly ModelSection _voice = new();
+
+    /// <summary>
+    /// Карточка моделей. Модели весят от полусотни мегабайт до полугигабайта и
+    /// в установщик не кладутся — их скачивают отсюда, по явному нажатию. Пока
+    /// их нет, соответствующий хоткей не молчит, а приводит человека сюда же.
+    /// </summary>
+    private Control ModelCard(ModelSection section, string bodyKey, string prefix,
+        Func<bool> isReady,
+        Func<IProgress<ModelProgress>, CancellationToken, Task> ensure,
+        Action remove)
     {
         var card = NewCard(out var rows);
 
         AddAutoRow(rows, new Label
         {
-            Text = L10n.T("settings.translation.body"),
+            Text = L10n.T(bodyKey),
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
@@ -369,70 +398,66 @@ public sealed class SettingsForm : ThemedForm
             BackColor = Color.Transparent,
         });
 
-        _modelStatus.Font = Theme.Body;
-        _modelStatus.ForeColor = Theme.Text;
-        _modelStatus.AutoSize = true;
-        _modelStatus.MaximumSize = new Size(CardInnerWidth, 0);
-        _modelStatus.Margin = new Padding(0, 0, 0, Theme.S2);
-        _modelStatus.BackColor = Color.Transparent;
-        AddAutoRow(rows, _modelStatus);
+        section.Status.Font = Theme.Body;
+        section.Status.ForeColor = Theme.Text;
+        section.Status.AutoSize = true;
+        section.Status.MaximumSize = new Size(CardInnerWidth, 0);
+        section.Status.Margin = new Padding(0, 0, 0, Theme.S2);
+        section.Status.BackColor = Color.Transparent;
+        AddAutoRow(rows, section.Status);
 
-        _modelAction.AutoSize = true;
-        _modelAction.MinimumSize = new Size(Theme.Px(160), 0);
-        _modelAction.Click += (_, _) => ToggleModels();
-        AddAutoRow(rows, ButtonBar.Create(CardInnerWidth, new Padding(0), _modelAction));
+        section.Action.AutoSize = true;
+        section.Action.MinimumSize = new Size(Theme.Px(160), 0);
+        section.Action.Click += async (_, _) => await ToggleModels(section, prefix, isReady, ensure, remove);
+        AddAutoRow(rows, ButtonBar.Create(CardInnerWidth, new Padding(0), section.Action));
 
-        UpdateModelCard();
+        RefreshModelCard(section, prefix, isReady);
         return card;
     }
 
-    /// <summary>Показывает, что сейчас с моделями: скачаны, качаются или их нет.</summary>
-    private void UpdateModelCard()
+    /// <summary>Показывает, что сейчас с моделями: скачаны или их нет.</summary>
+    private static void RefreshModelCard(ModelSection section, string prefix, Func<bool> isReady)
     {
-        bool busy = _modelCts != null;
-        if (busy) return;   // текст во время загрузки ведёт обработчик прогресса
+        // Во время загрузки текст ведёт обработчик прогресса — не перебиваем.
+        if (section.Cts != null) return;
 
-        if (Translator.IsReady)
-        {
-            _modelStatus.Text = L10n.T("settings.translation.ready");
-            _modelAction.Text = L10n.T("settings.translation.remove");
-            _modelAction.Primary = false;
-        }
-        else
-        {
-            _modelStatus.Text = L10n.T("settings.translation.absent",
-                ModelCatalog.TranslationMegabytes);
-            _modelAction.Text = L10n.T("settings.translation.download");
-            _modelAction.Primary = true;
-        }
+        bool ready = isReady();
+        section.Status.Text = ready
+            ? L10n.T(prefix + ".ready")
+            : L10n.T(prefix + ".absent", Megabytes(prefix));
+        section.Action.Text = L10n.T(ready ? prefix + ".remove" : prefix + ".download");
+        section.Action.Primary = !ready;
     }
 
-    private async void ToggleModels()
+    private static int Megabytes(string prefix) => prefix == "settings.voice"
+        ? ModelCatalog.VoiceMegabytes
+        : ModelCatalog.TranslationMegabytes;
+
+    private async Task ToggleModels(ModelSection section, string prefix,
+        Func<bool> isReady,
+        Func<IProgress<ModelProgress>, CancellationToken, Task> ensure,
+        Action remove)
     {
         // Идёт загрузка — эта же кнопка её отменяет: недокачанное остаётся
         // в .part и в следующий раз досылается, а не качается заново.
-        if (_modelCts != null)
+        if (section.Cts != null) { section.Cts.Cancel(); return; }
+
+        if (isReady())
         {
-            _modelCts.Cancel();
+            remove();
+            RefreshModelCard(section, prefix, isReady);
             return;
         }
 
-        if (Translator.IsReady)
-        {
-            Translator.RemoveModels();
-            UpdateModelCard();
-            return;
-        }
-
-        _modelCts = new CancellationTokenSource();
-        _modelAction.Text = L10n.T("common.cancel");
-        _modelAction.Primary = false;
+        section.Cts = new CancellationTokenSource();
+        section.Action.Text = L10n.T("common.cancel");
+        section.Action.Primary = false;
         try
         {
             var progress = new Progress<ModelProgress>(p =>
-                _modelStatus.Text = L10n.T("settings.translation.progress",
+                section.Status.Text = L10n.T("settings.models.progress",
                     p.FileIndex, p.FileCount, p.Percent));
-            await Translator.EnsureModelsAsync(progress, _modelCts.Token);
+            await ensure(progress, section.Cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -440,16 +465,15 @@ public sealed class SettingsForm : ThemedForm
         }
         catch (Exception ex)
         {
-            Notice.Error(this, L10n.T("translate.download.failed.title"),
-                L10n.T("translate.download.failed.body"),
-                L10n.T("translate.download.failed.hint"),
-                ex.ToString(), reportContext: "Не удалось скачать модели перевода");
+            Notice.Error(this, L10n.T("models.failed.title"),
+                L10n.T("models.failed.body"), L10n.T("models.failed.hint"),
+                ex.ToString(), reportContext: "Не удалось скачать модели");
         }
         finally
         {
-            _modelCts.Dispose();
-            _modelCts = null;
-            UpdateModelCard();
+            section.Cts.Dispose();
+            section.Cts = null;
+            RefreshModelCard(section, prefix, isReady);
         }
     }
 
@@ -515,10 +539,12 @@ public sealed class SettingsForm : ThemedForm
         bool isCase = !isConvert && _caseHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
         bool isTranslate = !isConvert && !isCase
             && _translateHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
+        bool isVoice = !isConvert && !isCase && !isTranslate
+            && _voiceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
 
         // Совпавшее сочетание глотаем: иначе Win откроет «Пуск» прямо из окна
         // настроек. Всё остальное пропускаем — окном надо пользоваться.
-        if (isConvert || isCase || isTranslate) e.Handled = true;
+        if (isConvert || isCase || isTranslate || isVoice) e.Handled = true;
 
         var seen = new HotkeyConfig
         {
@@ -540,6 +566,11 @@ public sealed class SettingsForm : ThemedForm
         else if (isTranslate)
         {
             _probeStatus.Text = L10n.T("probe.matchTranslate");
+            _probeStatus.ForeColor = Theme.Accent;
+        }
+        else if (isVoice)
+        {
+            _probeStatus.Text = L10n.T("probe.matchVoice");
             _probeStatus.ForeColor = Theme.Accent;
         }
         else
@@ -790,6 +821,7 @@ public sealed class SettingsForm : ThemedForm
         _convertKeys.SetCombo(_convertHotkey.ToString());
         _caseKeys.SetCombo(_caseHotkey.ToString());
         _translateKeys.SetCombo(_translateHotkey.ToString());
+        _voiceKeys.SetCombo(_voiceHotkey.ToString());
     }
 
     private void RecordInto(ref HotkeyConfig target, HotkeyDisplay display)
@@ -827,7 +859,10 @@ public sealed class SettingsForm : ThemedForm
         // второй хоткей просто перестал бы отвечать — без единого признака.
         if (_convertHotkey.SameCombo(_caseHotkey)
             || _translateHotkey.SameCombo(_convertHotkey)
-            || _translateHotkey.SameCombo(_caseHotkey))
+            || _translateHotkey.SameCombo(_caseHotkey)
+            || _voiceHotkey.SameCombo(_convertHotkey)
+            || _voiceHotkey.SameCombo(_caseHotkey)
+            || _voiceHotkey.SameCombo(_translateHotkey))
         {
             Notice.Warn(this, L10n.T("hotkey.clash.title"),
                 L10n.T("hotkey.clash.body"), L10n.T("hotkey.clash.hint"));
@@ -843,6 +878,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.ConvertHotkey = _convertHotkey;
         _settings.ChangeCaseHotkey = _caseHotkey;
         _settings.TranslateHotkey = _translateHotkey;
+        _settings.VoiceHotkey = _voiceHotkey;
         _settings.TranslationEnabled = Translator.IsReady;
 
         // Реестр — единственный источник правды для автозапуска.

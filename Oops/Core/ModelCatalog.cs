@@ -49,6 +49,25 @@ public static class ModelCatalog
             "07ed9055319f2adc50a16bc7e636fe1547ab745eb986e40b6384956dc1fc6cfd", 419_005),
     });
 
+    /// <summary>
+    /// Модель распознавания речи: whisper.cpp, размер small.
+    ///
+    /// Не base: на русском base ошибается заметно чаще, а голосовой ввод, за
+    /// которым надо править каждое второе слово, никто не использует дважды.
+    /// Цена — 465 МБ на диске, и это честно сказано в окне до скачивания.
+    ///
+    /// Сумма снята с опубликованного файла на Hugging Face.
+    /// </summary>
+    public static readonly ModelPackage Voice = new("voice-whisper-small", new[]
+    {
+        new ModelFile("ggml-small.bin",
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+            "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b", 487_601_967),
+    });
+
+    /// <summary>Сколько весит модель распознавания речи, в мегабайтах.</summary>
+    public static int VoiceMegabytes => (int)Math.Round(Voice.TotalBytes / 1024.0 / 1024.0);
+
     /// <summary>Оба направления перевода: без обоих переводить нечем.</summary>
     public static readonly IReadOnlyList<ModelPackage> Translation = new[] { RuEn, EnRu };
 

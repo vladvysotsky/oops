@@ -25,6 +25,13 @@
          MPL-2.0. Сама библиотека весит ~22 МБ на win-x64; модели в неё не
          входят и скачиваются отдельно (Core/ModelStore.cs). -->
     <PackageReference Include="BergamotTranslatorSharp" Version="0.5.1" />
+    <!-- Голосовой ввод: распознавание речи целиком на машине. Whisper.net —
+         обёртка над whisper.cpp, Runtime несёт нативные библиотеки, NAudio
+         снимает звук с микрофона. Модель (~465 МБ) в пакет не входит и
+         скачивается отдельно, как и модели перевода. -->
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="NAudio" Version="2.4.0" />
   </ItemGroup>
 
   <ItemGroup>

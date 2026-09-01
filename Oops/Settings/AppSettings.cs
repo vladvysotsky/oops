@@ -58,6 +58,15 @@ public sealed class AppSettings
     /// <summary>Перевод включён пользователем (модели скачаны и не удалены).</summary>
     public bool TranslationEnabled { get; set; } = false;
 
+    /// <summary>
+    /// Голосовой ввод: нажали — говорите, нажали ещё раз — текст печатается.
+    /// Как и перевод, работает только со скачанной моделью.
+    /// </summary>
+    public HotkeyConfig VoiceHotkey { get; set; } = HotkeyConfig.VoiceDefault;
+
+    /// <summary>Максимальная длина одной записи, секунд.</summary>
+    public int VoiceMaxSeconds { get; set; } = 120;
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");
@@ -101,6 +110,7 @@ public sealed class AppSettings
         ConvertHotkey = Fix(ConvertHotkey, HotkeyConfig.Default);
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);
         TranslateHotkey = Fix(TranslateHotkey, HotkeyConfig.TranslateDefault);
+        VoiceHotkey = Fix(VoiceHotkey, HotkeyConfig.VoiceDefault);
 
         // Совпавшие сочетания = второй хоткей мёртв: App проверяет их по
         // порядку и до второго сравнения не доходит вообще — «никакой
@@ -113,9 +123,13 @@ public sealed class AppSettings
         }
         if (TranslateHotkey.SameCombo(ConvertHotkey) || TranslateHotkey.SameCombo(ChangeCaseHotkey))
             TranslateHotkey = HotkeyConfig.TranslateDefault;
+        if (VoiceHotkey.SameCombo(ConvertHotkey) || VoiceHotkey.SameCombo(ChangeCaseHotkey)
+            || VoiceHotkey.SameCombo(TranslateHotkey))
+            VoiceHotkey = HotkeyConfig.VoiceDefault;
 
         if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
         if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;
+        if (VoiceMaxSeconds < 10 || VoiceMaxSeconds > 600) VoiceMaxSeconds = 120;
 
         static HotkeyConfig Fix(HotkeyConfig? h, HotkeyConfig fallback)
         {

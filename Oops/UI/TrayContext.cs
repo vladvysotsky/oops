@@ -34,6 +34,22 @@ public sealed class TrayContext : ApplicationContext
             L10n.T("translate.models.body", ModelCatalog.TranslationMegabytes),
             L10n.T("translate.models.hint"));
 
+        // Идёт запись — единственный видимый признак: подсказка у иконки в трее.
+        // Окна у программы нет, и без неё человек не знает, слушают его или нет.
+        _app.VoiceRecordingChanged += (_, recording) =>
+            _icon.Text = recording ? L10n.T("tray.recording") : "oops";
+
+        _app.VoiceModelMissing += (_, _) => Notice.Info(null,
+            L10n.T("voice.models.title"),
+            L10n.T("voice.models.body", ModelCatalog.VoiceMegabytes),
+            L10n.T("voice.models.hint"));
+
+        _app.VoiceFailed += (_, ex) => Notice.Error(null,
+            L10n.T("voice.failed.title"),
+            L10n.T("voice.failed.body"),
+            L10n.T("voice.failed.hint"),
+            ex.ToString(), reportContext: "Ошибка голосового ввода");
+
         _app.TranslationFailed += (_, ex) => Notice.Error(null,
             L10n.T("translate.failed.title"),
             L10n.T("translate.failed.body"),
