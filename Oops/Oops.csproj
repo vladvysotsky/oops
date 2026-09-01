@@ -13,7 +13,19 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
+    <!-- Нативная bergamot.dll обязана оказаться ВНУТРИ single-file exe. Без
+         этого флага .NET кладёт нативные библиотеки отдельными файлами рядом
+         с exe: портативный архив собирается из одного файла, и перевод в нём
+         молча не работал бы («не удалось загрузить библиотеку»). -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Локальный перевод RU<->EN движком Bergamot — тем же, что в Firefox.
+         MPL-2.0. Сама библиотека весит ~22 МБ на win-x64; модели в неё не
+         входят и скачиваются отдельно (Core/ModelStore.cs). -->
+    <PackageReference Include="BergamotTranslatorSharp" Version="0.5.1" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Иконка вшивается в сборку, а не кладётся файлом рядом: при single-file

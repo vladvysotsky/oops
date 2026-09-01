@@ -37,6 +37,15 @@ public sealed class App : IDisposable
 
     private readonly SynchronizationContext _uiContext;
 
+    /// <summary>Перевод уже идёт: повторные нажатия игнорируем.</summary>
+    private bool _translating;
+
+    /// <summary>Нажали хоткей перевода, а моделей на диске нет.</summary>
+    public event EventHandler? TranslationModelsMissing;
+
+    /// <summary>Движок перевода не смог отработать — показать человеку, а не молчать.</summary>
+    public event EventHandler<Exception>? TranslationFailed;
+
     public App(AppSettings settings)
     {
         Settings = settings;
@@ -105,6 +114,15 @@ public sealed class App : IDisposable
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
             _uiContext.Post(_ => RunStep(layout: false, pressedAtUtc), null);
+            return;
+        }
+
+        if (Settings.TranslateHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
+        {
+            e.Handled = true;
+            if (e.IsRepeat) return;
+            Sender.CancelMenuActivation();
+            _uiContext.Post(_ => RunTranslate(), null);
             return;
         }
 
@@ -228,6 +246,71 @@ public sealed class App : IDisposable
     }
 
     /// <summary>
+    /// Перевод набранного текста или выделения — одним шагом, без расширения
+    /// области.
+    ///
+    /// Расширения здесь нет по существу задачи: перевод не сохраняет длину и
+    /// не обратим, второе нажатие переводило бы уже переведённое. Границу
+    /// задаёт то же правило, что и везде: есть лента — переводим её, лента
+    /// пуста — пробуем выделение.
+    ///
+    /// Работа идёт в фоновом потоке: первая загрузка модели занимает сотни
+    /// миллисекунд, а держать столько UI-поток нельзя — на нём же висит
+    /// обработчик хука, и Windows снимает хук по таймауту.
+    /// </summary>
+    private void RunTranslate()
+    {
+        // Второе нажатие, пока идёт перевод, ничего не ускорит, а вот напечатать
+        // результат дважды поверх самого себя вполне может.
+        if (_translating) return;
+
+        Sender.WaitForModifiersReleased();
+        Sender.ReleaseHotkeyModifiers();
+
+        var source = _buffer.Length > 0 ? _buffer.Snapshot() : SelectionReader.TryRead();
+        if (string.IsNullOrWhiteSpace(source)) return;
+
+        // Стираем ровно столько, сколько сами вели в ленте. Выделение стирать не
+        // надо: оно ещё активно, и ввод перетирает его сам.
+        int erase = _buffer.Length > 0 ? source.Length : 0;
+
+        if (!Translator.IsReady)
+        {
+            ResetAll();
+            TranslationModelsMissing?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        _translating = true;
+        var text = source!;
+        Task.Run(() =>
+        {
+            try { return (Result: Translator.Translate(text), Error: (Exception?)null); }
+            catch (Exception ex) { return (Result: (string?)null, Error: ex); }
+        }).ContinueWith(t =>
+        {
+            var (result, error) = t.Result;
+            _uiContext.Post(_ =>
+            {
+                _translating = false;
+                if (error != null || string.IsNullOrEmpty(result))
+                {
+                    if (error != null) TranslationFailed?.Invoke(this, error);
+                    return;
+                }
+                if (result == text) return;
+
+                Sender.WaitForModifiersReleased();
+                if (erase > 0) Sender.SendBackspaces(erase);
+                Sender.SendUnicode(result!);
+
+                // Напечатали не то, что вели в ленте, — она больше не отражает экран.
+                ResetAll();
+            }, null);
+        });
+    }
+
+    /// <summary>
     /// Переключает системную раскладку и помечает смену как нашу, чтобы
     /// LayoutTracker не принял её за ручное переключение пользователем
     /// и не сбросил ленту — иначе следующее нажатие хоткея не смогло бы
@@ -244,6 +327,7 @@ public sealed class App : IDisposable
 
     public void Dispose()
     {
+        Translator.Unload();
         _kbHook.Dispose();
         _mouseHook.Dispose();
         _fgWatcher.Dispose();

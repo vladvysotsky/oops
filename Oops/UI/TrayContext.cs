@@ -26,6 +26,20 @@ public sealed class TrayContext : ApplicationContext
         BuildMenu();
         _icon.DoubleClick += (_, _) => ShowSettings();
 
+        // Хоткей перевода без скачанных моделей обязан сказать об этом, а не
+        // промолчать: молчащий хоткей неотличим от сломанной программы — на
+        // этом мы уже обжигались с проверкой сочетаний.
+        _app.TranslationModelsMissing += (_, _) => Notice.Info(null,
+            L10n.T("translate.models.title"),
+            L10n.T("translate.models.body", ModelCatalog.TranslationMegabytes),
+            L10n.T("translate.models.hint"));
+
+        _app.TranslationFailed += (_, ex) => Notice.Error(null,
+            L10n.T("translate.failed.title"),
+            L10n.T("translate.failed.body"),
+            L10n.T("translate.failed.hint"),
+            ex.ToString(), reportContext: "Ошибка перевода");
+
         _ = ScheduleStartupUpdateCheckAsync();
     }
 
