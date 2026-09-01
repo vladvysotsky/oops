@@ -36,8 +36,11 @@ function Step([string] $text) { Write-Host "`n=== $text" -ForegroundColor Cyan }
 # ненулевой код возврата внешней программы, а $ErrorActionPreference на него
 # не распространяется. Без явной проверки сборка падала, а скрипт бодро шёл
 # дальше и запускал ПРОШЛЫЙ exe — разница незаметная и очень обидная.
+# ${what}, а не $what: двоеточие сразу после имени PowerShell читает как
+# разделитель области видимости ($env:PATH) — строка не разбирается вовсе,
+# и скрипт падает ещё до первой команды.
 function Assert-LastExitCode([string] $what) {
-    if ($LASTEXITCODE -ne 0) { throw "$what: код возврата $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { throw "${what}: код возврата $LASTEXITCODE" }
 }
 
 Push-Location $RepoRoot
