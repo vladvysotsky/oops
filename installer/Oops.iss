@@ -48,19 +48,34 @@ RestartApplications=no
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+; Свои строки — обязательно через [CustomMessages], а не текстом в Description.
+; Установщик уже двуязычный ([Languages] выше), и зашитая русская строка в
+; английской установке выглядела ровно тем, чем является: недоделкой.
+[CustomMessages]
+russian.AutostartTask=Запускать при входе в Windows
+russian.LaunchTask=Запустить {#MyAppName} после установки
+russian.ExtraOptions=Дополнительные опции:
+russian.UninstallIcon=Удалить {#MyAppName}
+russian.LaunchAfterInstall=Запустить {#MyAppName}
+english.AutostartTask=Start when Windows starts
+english.LaunchTask=Run {#MyAppName} after installation
+english.ExtraOptions=Additional options:
+english.UninstallIcon=Uninstall {#MyAppName}
+english.LaunchAfterInstall=Run {#MyAppName}
+
 [Tasks]
 Name: "desktopicon";    Description: "{cm:CreateDesktopIcon}";  GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "autostart";      Description: "Запускать при входе в Windows"; GroupDescription: "Дополнительные опции:"; Flags: unchecked
-Name: "launchonfinish"; Description: "Запустить {#MyAppName} после установки"; GroupDescription: "Дополнительные опции:";
+Name: "autostart";      Description: "{cm:AutostartTask}"; GroupDescription: "{cm:ExtraOptions}"; Flags: unchecked
+Name: "launchonfinish"; Description: "{cm:LaunchTask}"; GroupDescription: "{cm:ExtraOptions}";
 
 [Files]
-; Publish folder contains either a single-file exe or a folder with deps —
-; either way пихаем всё содержимое.
+; В publish либо один exe, либо папка с зависимостями — забираем всё
+; содержимое в любом случае.
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}";                  Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Удалить {#MyAppName}";          Filename: "{uninstallexe}"
+Name: "{group}\{cm:UninstallIcon}";            Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";            Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
@@ -70,7 +85,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Запустить {#MyAppName}"; \
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchAfterInstall}"; \
     Flags: nowait postinstall skipifsilent; Tasks: launchonfinish
 
 [UninstallRun]
