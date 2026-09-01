@@ -42,6 +42,20 @@ public sealed class App : IDisposable
     /// <summary>Перевод уже идёт: повторные нажатия игнорируем.</summary>
     private bool _translating;
 
+    private readonly Recorder _recorder = new();
+
+    /// <summary>Идёт распознавание уже записанного — второе нажатие ждёт.</summary>
+    private bool _transcribing;
+
+    /// <summary>Запись включилась (true) или выключилась (false) — трею есть что показать.</summary>
+    public event EventHandler<bool>? VoiceRecordingChanged;
+
+    /// <summary>Нажали хоткей голосового ввода, а модели на диске нет.</summary>
+    public event EventHandler? VoiceModelMissing;
+
+    /// <summary>Микрофон или распознавание отказали.</summary>
+    public event EventHandler<Exception>? VoiceFailed;
+
     /// <summary>Нажали хоткей перевода, а моделей на диске нет.</summary>
     public event EventHandler? TranslationModelsMissing;
 
@@ -55,6 +69,10 @@ public sealed class App : IDisposable
             ?? throw new InvalidOperationException("App must be created on the UI thread");
 
         ApplySettings();
+
+        // Потолок записи упёрли — останавливаемся сами и печатаем, что успели.
+        // Молча оборвать запись значило бы потерять всё сказанное.
+        _recorder.LimitReached += (_, _) => _uiContext.Post(_ => StopVoice(), null);
 
         _kbHook.KeyDown += OnKeyDown;
         _mouseHook.Clicked += (_, _) => ResetAll();
@@ -74,6 +92,7 @@ public sealed class App : IDisposable
         _buffer.IdleTimeout = TimeSpan.FromSeconds(Settings.BufferIdleTimeoutSeconds);
         _scope.ExpandWindow = TimeSpan.FromSeconds(Settings.ExpandWindowSeconds);
         Sender.UseCharByChar(Settings.CharByCharTyping);
+        _recorder.MaxDuration = TimeSpan.FromSeconds(Settings.VoiceMaxSeconds);
     }
 
     private void ResetAll()
@@ -125,6 +144,15 @@ public sealed class App : IDisposable
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
             _uiContext.Post(_ => RunTranslate(), null);
+            return;
+        }
+
+        if (Settings.VoiceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
+        {
+            e.Handled = true;
+            if (e.IsRepeat) return;
+            Sender.CancelMenuActivation();
+            _uiContext.Post(_ => ToggleVoice(), null);
             return;
         }
 
@@ -313,6 +341,70 @@ public sealed class App : IDisposable
     }
 
     /// <summary>
+    /// Голосовой ввод: нажали — идёт запись, нажали ещё раз — записанное
+    /// распознаётся и печатается в активное поле.
+    ///
+    /// Именно переключатель, а не «держать нажатым»: диктовать фразу, удерживая
+    /// три клавиши, невозможно физически, а хук к тому же не отличает удержание
+    /// от автоповтора без отдельного учёта.
+    /// </summary>
+    private void ToggleVoice()
+    {
+        if (_recorder.IsRecording) { StopVoice(); return; }
+        if (_transcribing) return;
+
+        if (!VoiceInput.IsReady)
+        {
+            VoiceModelMissing?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        Sender.WaitForModifiersReleased();
+        Sender.ReleaseHotkeyModifiers();
+
+        try
+        {
+            _recorder.Start();
+            VoiceRecordingChanged?.Invoke(this, true);
+        }
+        catch (Exception ex)
+        {
+            VoiceFailed?.Invoke(this, ex);
+        }
+    }
+
+    private void StopVoice()
+    {
+        if (!_recorder.IsRecording) return;
+
+        var wav = _recorder.Stop();
+        VoiceRecordingChanged?.Invoke(this, false);
+        if (wav == null) return;
+
+        _transcribing = true;
+        Task.Run(async () =>
+        {
+            try { return (Text: await VoiceInput.TranscribeAsync(wav), Error: (Exception?)null); }
+            catch (Exception ex) { return (Text: (string?)null, Error: ex); }
+        }).ContinueWith(t =>
+        {
+            var (text, error) = t.Result;
+            _uiContext.Post(_ =>
+            {
+                _transcribing = false;
+                if (error != null) { VoiceFailed?.Invoke(this, error); return; }
+                if (string.IsNullOrWhiteSpace(text)) return;
+
+                Sender.WaitForModifiersReleased();
+                Sender.SendUnicode(text!);
+
+                // Напечатали не то, что вели в ленте, — она больше не отражает экран.
+                ResetAll();
+            }, null);
+        });
+    }
+
+    /// <summary>
     /// Переключает системную раскладку и помечает смену как нашу, чтобы
     /// LayoutTracker не принял её за ручное переключение пользователем
     /// и не сбросил ленту — иначе следующее нажатие хоткея не смогло бы
@@ -329,6 +421,8 @@ public sealed class App : IDisposable
 
     public void Dispose()
     {
+        _recorder.Dispose();
+        VoiceInput.Unload();
         Translator.Unload();
         _kbHook.Dispose();
         _mouseHook.Dispose();

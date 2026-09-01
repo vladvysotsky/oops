@@ -57,6 +57,15 @@ public sealed class HotkeyConfig
         Key = 0,
     };
 
+    /// <summary>Голосовой ввод — Ctrl+Shift+Win по умолчанию (modifier-only).</summary>
+    public static HotkeyConfig VoiceDefault => new()
+    {
+        Ctrl = true,
+        Shift = true,
+        Win = true,
+        Key = 0,
+    };
+
     /// <summary>Одно и то же сочетание (без учёта ссылочного равенства).</summary>
     public bool SameCombo(HotkeyConfig other) =>
         other != null &&
