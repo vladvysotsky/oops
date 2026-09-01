@@ -107,6 +107,16 @@ dotnet run --project Oops
 dotnet publish Oops -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
+Всё это разом — обновить ветку, прогнать тесты, собрать и запустить —
+делает `dev.ps1` (нужен PowerShell 7):
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File dev.ps1
+```
+
+Ключи: `-NoPull`, `-NoTest`, `-NoRun`, `-Branch <имя>`. Скрипт сам закрывает
+запущенную копию: она держит `oops.exe` открытым, и сборка иначе падает.
+
 Установщик — понадобится ещё [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 и PowerShell 7:
 
