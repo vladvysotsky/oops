@@ -48,6 +48,16 @@ public sealed class AppSettings
     public HotkeyConfig ConvertHotkey { get; set; } = HotkeyConfig.Default;
     public HotkeyConfig ChangeCaseHotkey { get; set; } = HotkeyConfig.ChangeCaseDefault;
 
+    /// <summary>
+    /// Локальный перевод выделения или набранного текста. Работает только
+    /// когда скачаны модели — без них хоткей сообщает об этом и предлагает
+    /// их скачать, а не молчит.
+    /// </summary>
+    public HotkeyConfig TranslateHotkey { get; set; } = HotkeyConfig.TranslateDefault;
+
+    /// <summary>Перевод включён пользователем (модели скачаны и не удалены).</summary>
+    public bool TranslationEnabled { get; set; } = false;
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");
@@ -90,16 +100,19 @@ public sealed class AppSettings
     {
         ConvertHotkey = Fix(ConvertHotkey, HotkeyConfig.Default);
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);
+        TranslateHotkey = Fix(TranslateHotkey, HotkeyConfig.TranslateDefault);
 
-        // Два одинаковых сочетания = второй хоткей мёртв: App проверяет раскладку
-        // первой и до регистра дело не доходит вообще — «никакой реакции».
-        // Такое могли сохранить старые сборки, где диалог записи ошибался.
+        // Совпавшие сочетания = второй хоткей мёртв: App проверяет их по
+        // порядку и до второго сравнения не доходит вообще — «никакой
+        // реакции» и ни одного признака причины.
         if (ConvertHotkey.SameCombo(ChangeCaseHotkey))
         {
             ChangeCaseHotkey = HotkeyConfig.ChangeCaseDefault;
             if (ConvertHotkey.SameCombo(ChangeCaseHotkey))
                 ConvertHotkey = HotkeyConfig.Default;
         }
+        if (TranslateHotkey.SameCombo(ConvertHotkey) || TranslateHotkey.SameCombo(ChangeCaseHotkey))
+            TranslateHotkey = HotkeyConfig.TranslateDefault;
 
         if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
         if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;

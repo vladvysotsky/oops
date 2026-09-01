@@ -482,7 +482,17 @@ internal sealed class FlatButton : Button
 {
     private bool _hover, _pressed;
 
-    public bool Primary { get; init; }
+    private bool _primary;
+
+    /// <summary>
+    /// Главная кнопка ряда — заливка акцентом. Не init-only: карточка моделей
+    /// меняет роль одной и той же кнопки («Скачать» → «Отмена» → «Удалить»).
+    /// </summary>
+    public bool Primary
+    {
+        get => _primary;
+        set { if (_primary == value) return; _primary = value; Invalidate(); }
+    }
 
     public FlatButton()
     {
