@@ -18,6 +18,10 @@
   ```
   dotnet publish Oops -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
   ```
+- Собрать и запустить одной командой: `pwsh -File dev.ps1` (pull → закрыть
+  запущенную копию → тесты → publish → запуск). Ключи `-NoPull`, `-NoTest`,
+  `-NoRun`, `-Branch`. Закрывать запущенный `oops.exe` обязательно: он держит
+  файл, и publish падает с MSB3027.
 - Инсталлятор: `installer\build.ps1` (нужен Inno Setup 6). Скрипт использует `?.`
   — требует **PowerShell 7**, не 5.1.
 - Манифест — **asInvoker**. НЕ ставить `requireAdministrator`: Windows молча
