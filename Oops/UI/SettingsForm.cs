@@ -580,6 +580,11 @@ public sealed class SettingsForm : ThemedForm
 
         _page.Height = pageHeight;
         ClientSize = new Size(ClientSize.Width, aroundPage + pageHeight);
+
+        // Высоту окна мы только что изменили, а позицию WinForms посчитала до
+        // этого — без ручного центрирования окно оказывается смещённым вниз
+        // ровно на половину прибавки.
+        CenterOnWorkArea();
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
