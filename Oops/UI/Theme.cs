@@ -315,10 +315,35 @@ public class ThemedForm : Form
         Font = Theme.Body;
     }
 
+    /// <summary>
+    /// Окно просили поставить по центру экрана. Запоминаем до того, как сами
+    /// переведём StartPosition в Manual: центрировать приходится ВРУЧНУЮ, потому
+    /// что WinForms считает позицию один раз, при показе, а мы после этого ещё
+    /// меняем размер — окно уезжало вниз и упиралось в панель задач.
+    /// </summary>
+    private bool _centerOnScreen;
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        _centerOnScreen = StartPosition == FormStartPosition.CenterScreen;
         Theme.ApplyWindowChrome(this);
+    }
+
+    /// <summary>
+    /// Ставит окно по центру РАБОЧЕЙ области, а не всего экрана: центр экрана
+    /// на мониторе с панелью задач внизу — это чуть ниже, чем нужно, и высокое
+    /// окно последними пикселями уходит под панель.
+    /// </summary>
+    protected void CenterOnWorkArea()
+    {
+        if (!_centerOnScreen) return;
+
+        var work = Screen.FromControl(this).WorkingArea;
+        StartPosition = FormStartPosition.Manual;
+        Location = new Point(
+            work.Left + Math.Max(0, (work.Width - Width) / 2),
+            work.Top + Math.Max(0, (work.Height - Height) / 2));
     }
 
     /// <summary>
@@ -351,6 +376,9 @@ public class ThemedForm : Form
         ClientSize = new Size(
             Math.Max(needed.Width, ClientSize.Width),
             Math.Max(needed.Height, ClientSize.Height));
+
+        // Размер изменился — центр уехал.
+        CenterOnWorkArea();
     }
 
     /// <summary>
