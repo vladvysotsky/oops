@@ -364,6 +364,12 @@ public class ThemedForm : Form
         {
             if (!child.Visible) continue;
 
+            // В прокручиваемую панель не заглядываем: её содержимое нарочно
+            // выходит за границы, на то и прокрутка. Иначе окно росло бы до
+            // высоты всего содержимого — то есть ровно за пределы экрана, от
+            // чего прокрутку и включили.
+            if (child is ScrollableControl { AutoScroll: true }) continue;
+
             // Через экранные координаты: у вложенных контролов Left/Top заданы
             // относительно своего родителя, и складывать их вручную нельзя.
             var corner = PointToClient(child.PointToScreen(new Point(

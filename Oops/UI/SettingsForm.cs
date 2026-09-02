@@ -154,7 +154,6 @@ public sealed class SettingsForm : ThemedForm
         // под новыми — на экране была русская карточка, а под ней английская.
         _page.Controls.Clear();
 
-        int tallest = 0;
         for (int i = 0; i < TabCount; i++)
         {
             var page = BuildPage(i);
@@ -162,15 +161,12 @@ public sealed class SettingsForm : ThemedForm
             page.Visible = false;
             _pages[i] = page;
             _page.Controls.Add(page);
-            // Меряем с шириной колонки: подписи переносятся по строкам, и без
-            // ограничения ширины высота вышла бы заниженной.
-            tallest = Math.Max(tallest, page.GetPreferredSize(new Size(ContentWidth, 0)).Height);
         }
 
-        // Общая высота по самой высокой вкладке: окно не прыгает при
-        // переключении, а прокрутки нет намеренно — она прятала бы часть
-        // настроек ровно на крупном шрифте, где видеть всё сразу нужнее всего.
-        _page.Height = tallest;
+        // Высоту страницы здесь НЕ считаем: до раскладки переносы строк ещё
+        // не известны, и любое число тут — выдумка. Настоящий замер идёт в
+        // FitPages() из OnLoad, когда ширина уже фактическая.
+        _page.Height = Theme.Px(200);   // временная величина до первого замера
         root.Controls.Add(_page, 0, 2);
 
         root.Controls.Add(Footer(), 0, 3);
@@ -519,9 +515,71 @@ public sealed class SettingsForm : ThemedForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        FitPages();
         _probe.KeyDown += OnProbeKey;
         try { _probe.Install(); }
         catch { _probeStatus.Text = L10n.T("probe.hookFailed"); }
+    }
+
+    /// <summary>
+    /// Подгоняет высоту области вкладок под самую высокую из них — и окно под
+    /// неё же. Прокрутки нет намеренно: она прятала бы часть настроек ровно на
+    /// крупном шрифте, где видеть всё сразу нужнее всего.
+    ///
+    /// Меряем ЗДЕСЬ, а не при сборке: до раскладки ширина карточек ещё не
+    /// известна, абзацы переносятся не там, где будут, и высота выходит
+    /// выдуманной. Ровно из-за этого окно однажды растянулось вдвое выше
+    /// экрана, а между карточками зияли дыры.
+    ///
+    /// Невидимую вкладку WinForms не раскладывает вовсе, поэтому каждую на миг
+    /// показываем — до первой отрисовки окна этого никто не увидит.
+    /// </summary>
+    private void FitPages()
+    {
+        int width = _page.ClientSize.Width;
+        if (width <= 0) width = ContentWidth;
+
+        int tallest = 0;
+        SuspendLayout();
+        foreach (var page in _pages)
+        {
+            if (page == null) continue;
+            bool wasVisible = page.Visible;
+            page.Visible = true;
+            page.Width = width;
+            page.PerformLayout();
+            tallest = Math.Max(tallest, page.PreferredSize.Height);
+            page.Visible = wasVisible;
+        }
+        ResumeLayout(true);
+
+        if (tallest <= 0) return;
+
+        // Всё, что в окне кроме страницы: шапка, вкладки, кнопки, отступы.
+        // Считаем ДО правки высоты страницы, иначе величина уедет вместе с ней.
+        int chrome = Height - ClientSize.Height;                 // рамка и заголовок
+        int aroundPage = ClientSize.Height - _page.Height;
+
+        // Окно следует за содержимым в обе стороны. AutoSize формы выключаем:
+        // иначе следующий проход раскладки вернёт её к прежнему размеру, и
+        // правка не доживёт до отрисовки.
+        AutoSize = false;
+
+        int maxClient = Screen.FromControl(this).WorkingArea.Height - chrome;
+        int pageHeight = tallest;
+
+        // Потолок — рабочая область экрана. Прокрутка здесь нежелательна, но
+        // окно выше экрана хуже неё во всех отношениях: кнопки «Сохранить»
+        // не видно, и мышью до неё не добраться. Упёрлись — прокручиваем
+        // именно страницу, шапка и кнопки остаются на месте.
+        if (aroundPage + pageHeight > maxClient)
+        {
+            pageHeight = Math.Max(Theme.Px(200), maxClient - aroundPage);
+            _page.AutoScroll = true;
+        }
+
+        _page.Height = pageHeight;
+        ClientSize = new Size(ClientSize.Width, aroundPage + pageHeight);
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
