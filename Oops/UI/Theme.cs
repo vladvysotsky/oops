@@ -497,7 +497,12 @@ internal sealed class Card : Panel
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Theme.Canvas);
+        // EffectiveBackColor, а не Parent.BackColor: страница-родитель
+        // прозрачная, её BackColor — Color.Transparent, и Clear заливал
+        // ARGB(0,255,255,255), то есть белым. Видно это ровно там, где карточка
+        // не закрывает свой прямоугольник: светлые уголки за скруглением и
+        // светлая полоса снизу, на месте тени.
+        g.Clear(Theme.EffectiveBackColor(this));
         Theme.EnableSmoothing(g);
 
         var body = new Rectangle(0, 0, Width - 1, Height - ShadowRoom - 1);
