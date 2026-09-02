@@ -18,6 +18,16 @@
          с exe: портативный архив собирается из одного файла, и перевод в нём
          молча не работал бы («не удалось загрузить библиотеку»). -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- И обычное содержимое туда же — иначе ломается голосовой ввод.
+         Как только single-file что-нибудь распаковывает, AppContext.BaseDirectory
+         начинает указывать на папку распаковки, а не на папку с exe. Whisper.net
+         ищет свои библиотеки строго в «<BaseDirectory>\runtimes\win-x64» и кладёт
+         их туда как ОБЫЧНЫЕ файлы, а не как нативные ресурсы NuGet — то есть
+         предыдущий флаг их не забирает, они остаются рядом с exe, и распознавание
+         падало с «Native Library not found in default paths».
+         С этим флагом распаковывается всё вместе с путями, и обе библиотеки
+         оказываются там, где их ищут. -->
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
