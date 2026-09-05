@@ -83,3 +83,18 @@ public class VoiceTests
         Assert.Equal(320, BitConverter.ToInt32(wav, 40));                // длина данных
     }
 }
+
+public class VoiceTextTests
+{
+    [Theory]
+    // Ровно то, что приходило в поле ввода вместо фразы.
+    [InlineData("[BLANK_AUDIO]", "")]
+    [InlineData(" [BLANK_AUDIO] ", "")]
+    [InlineData("[MUSIC] привет [BLANK_AUDIO]", "привет")]
+    [InlineData("(тишина)", "")]
+    [InlineData("  привет   как   дела  ", "привет как дела")]
+    // Круглые скобки внутри фразы — часть речи, а не пометка.
+    [InlineData("позвони (потом) мне", "позвони (потом) мне")]
+    public void NonSpeechMarkersAreStripped(string raw, string expected) =>
+        Assert.Equal(expected, VoiceInput.CleanText(raw));
+}

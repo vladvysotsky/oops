@@ -51,9 +51,34 @@ public static class VoiceInput
         await foreach (var segment in processor.ProcessAsync(audio, ct).ConfigureAwait(false))
             text.Append(segment.Text);
 
-        // Whisper отдаёт сегменты с ведущим пробелом — на стыке они складываются
-        // в двойные, а перед первым словом пробел просто лишний.
-        return text.ToString().Trim();
+        return CleanText(text.ToString());
+    }
+
+    /// <summary>
+    /// Чистит расшифровку от служебных пометок движка.
+    ///
+    /// Whisper обозначает НЕ-речь текстом в квадратных скобках: на тишине он
+    /// выдаёт «[BLANK_AUDIO]», на музыке «[MUSIC]», и всё это уезжало прямо в
+    /// поле ввода — человек получал «[BLANK_AUDIO]» вместо своей фразы.
+    /// В настоящей речи квадратных скобок не бывает, поэтому убираем их все.
+    ///
+    /// Круглые скобки трогаем осторожнее: «(смех)» — пометка, а «(два)» вполне
+    /// может быть сказано. Убираем только когда вся расшифровка целиком и есть
+    /// одна такая скобка.
+    /// </summary>
+    public static string CleanText(string raw)
+    {
+        var text = System.Text.RegularExpressions.Regex.Replace(raw, @"\[[^\]]*\]", " ");
+
+        // Пробелы схлопываем: сегменты Whisper приходят с ведущим пробелом, на
+        // стыке они складываются в двойные, а на месте вырезанных пометок
+        // остаются дыры.
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\([^)]*\)$"))
+            return string.Empty;
+
+        return text;
     }
 
     /// <summary>Выгружает модель из памяти — она занимает сотни мегабайт.</summary>
