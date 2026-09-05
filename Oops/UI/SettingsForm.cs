@@ -198,13 +198,13 @@ public sealed class SettingsForm : ThemedForm
                 break;
             default:
                 AddAutoRow(stack, BehaviourCard());
-                AddAutoRow(stack, SectionLabel(L10n.T("settings.translation.title")));
+                AddAutoRow(stack, SectionLabelBeta(L10n.T("settings.translation.title")));
                 AddAutoRow(stack, ModelCard(_translation, "settings.translation.body",
                     "settings.translation",
                     () => Translator.IsReady,
                     (p, ct) => Translator.EnsureModelsAsync(p, ct),
                     Translator.RemoveModels));
-                AddAutoRow(stack, SectionLabel(L10n.T("settings.voice.title")));
+                AddAutoRow(stack, SectionLabelBeta(L10n.T("settings.voice.title")));
                 AddAutoRow(stack, ModelCard(_voice, "settings.voice.body",
                     "settings.voice",
                     () => VoiceInput.IsReady,
@@ -233,6 +233,14 @@ public sealed class SettingsForm : ThemedForm
         Margin = new Padding(Theme.S1, Theme.S3, 0, Theme.S2),
         BackColor = Color.Transparent,
     };
+
+    /// <summary>
+    /// Заголовок раздела с пометкой «бета». Перевод и голосовой ввод появились
+    /// в 2.0 и обкатаны заметно меньше остального: честнее предупредить, чем
+    /// получать сообщения об ошибках от людей, ждавших готовой функции.
+    /// </summary>
+    private static Control SectionLabelBeta(string text) =>
+        SectionLabel(text + "   " + L10n.T("common.beta"));
 
     /// <summary>Пояснение под карточкой — мелким второстепенным текстом.</summary>
     private static Control Note(string text) => new Label
@@ -389,6 +397,19 @@ public sealed class SettingsForm : ThemedForm
             Text = L10n.T(bodyKey),
             Font = Theme.Caption,
             ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            MaximumSize = new Size(CardInnerWidth, 0),
+            Margin = new Padding(0, 0, 0, Theme.S2),
+            BackColor = Color.Transparent,
+        });
+
+        // Предупреждение цветом, а не мелким серым: пометка «бета» должна
+        // читаться до того, как человек скачает полгигабайта.
+        AddAutoRow(rows, new Label
+        {
+            Text = L10n.T("settings.beta.note"),
+            Font = Theme.Caption,
+            ForeColor = Theme.Warning,
             AutoSize = true,
             MaximumSize = new Size(CardInnerWidth, 0),
             Margin = new Padding(0, 0, 0, Theme.S2),
