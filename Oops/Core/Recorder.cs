@@ -81,6 +81,19 @@ public sealed class Recorder : IDisposable
         return wav;
     }
 
+    /// <summary>
+    /// Копия записанного на текущий момент, БЕЗ остановки записи — для
+    /// промежуточного распознавания, пока человек ещё говорит.
+    /// </summary>
+    public byte[]? Snapshot()
+    {
+        lock (_gate)
+        {
+            if (_pcm == null || _pcm.Length == 0) return null;
+            return WrapInWav(_pcm.ToArray());
+        }
+    }
+
     private void OnData(object? sender, WaveInEventArgs e)
     {
         bool overflow = false;

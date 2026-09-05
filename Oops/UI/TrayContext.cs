@@ -34,10 +34,18 @@ public sealed class TrayContext : ApplicationContext
             L10n.T("translate.models.body", ModelCatalog.TranslationMegabytes),
             L10n.T("translate.models.hint"));
 
-        // Идёт запись — единственный видимый признак: подсказка у иконки в трее.
-        // Окна у программы нет, и без неё человек не знает, слушают его или нет.
+        // Признак записи нужен видимый: подсказку у иконки в трее видно только
+        // под курсором, а во время диктовки мышь в другом месте. Плашка внизу
+        // экрана показывает состояние и живую расшифровку, подсказка в трее
+        // остаётся как второй признак.
         _app.VoiceRecordingChanged += (_, recording) =>
+        {
             _icon.Text = recording ? L10n.T("tray.recording") : "oops";
+            if (recording) VoiceOverlay.Listening();
+        };
+        _app.VoicePartial += (_, text) => VoiceOverlay.Partial(text);
+        _app.VoiceRecognising += (_, _) => VoiceOverlay.Recognising();
+        _app.VoiceFinished += (_, _) => VoiceOverlay.Hide();
 
         _app.VoiceModelMissing += (_, _) => Notice.Info(null,
             L10n.T("voice.models.title"),
@@ -241,6 +249,7 @@ public sealed class TrayContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        VoiceOverlay.Close();
         _icon.Visible = false;
         _icon.Dispose();
         _app.Dispose();

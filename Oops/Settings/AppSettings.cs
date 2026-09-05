@@ -67,6 +67,16 @@ public sealed class AppSettings
     /// <summary>Максимальная длина одной записи, секунд.</summary>
     public int VoiceMaxSeconds { get; set; } = 120;
 
+    /// <summary>
+    /// Печатать расшифровку по ходу речи, не дожидаясь конца фразы.
+    ///
+    /// Whisper распознаёт кусок целиком и может передумать насчёт уже
+    /// сказанного, поэтому текст в поле иногда переписывается — на медленной
+    /// машине это заметно. Выключите, если мельтешение мешает: тогда текст
+    /// появится один раз, после повторного нажатия хоткея.
+    /// </summary>
+    public bool VoiceLiveText { get; set; } = true;
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");

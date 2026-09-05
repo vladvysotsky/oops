@@ -50,6 +50,28 @@ public sealed class App : IDisposable
     /// <summary>Запись включилась (true) или выключилась (false) — трею есть что показать.</summary>
     public event EventHandler<bool>? VoiceRecordingChanged;
 
+    /// <summary>Промежуточная расшифровка, пока человек ещё говорит.</summary>
+    public event EventHandler<string>? VoicePartial;
+
+    /// <summary>Речь закончилась, идёт последний проход распознавания.</summary>
+    public event EventHandler? VoiceRecognising;
+
+    /// <summary>Всё закончено — плашку можно убирать.</summary>
+    public event EventHandler? VoiceFinished;
+
+    // Потоковое распознавание: пока идёт запись, раз в секунду прогоняем всё
+    // записанное с начала фразы и дописываем разницу. Whisper не умеет
+    // «продолжать» — он каждый раз распознаёт кусок целиком и может ПЕРЕДУМАТЬ
+    // насчёт уже сказанного, поэтому напечатанное сравнивается с новым по
+    // общему началу: расходящийся хвост стирается и печатается заново.
+    private readonly System.Windows.Forms.Timer _voiceTick = new() { Interval = 1000 };
+    private bool _partialBusy;
+    private string _voiceTyped = string.Empty;
+    private CancellationTokenSource? _voiceCts;
+
+    /// <summary>Меньше секунды звука распознавать бессмысленно — только шум.</summary>
+    private const int MinVoiceBytes = 44 + Recorder.SampleRate * 2;
+
     /// <summary>Нажали хоткей голосового ввода, а модели на диске нет.</summary>
     public event EventHandler? VoiceModelMissing;
 
@@ -73,6 +95,7 @@ public sealed class App : IDisposable
         // Потолок записи упёрли — останавливаемся сами и печатаем, что успели.
         // Молча оборвать запись значило бы потерять всё сказанное.
         _recorder.LimitReached += (_, _) => _uiContext.Post(_ => StopVoice(), null);
+        _voiceTick.Tick += OnVoiceTick;
 
         _kbHook.KeyDown += OnKeyDown;
         _mouseHook.Clicked += (_, _) => ResetAll();
@@ -364,8 +387,11 @@ public sealed class App : IDisposable
 
         try
         {
+            _voiceTyped = string.Empty;
+            _voiceCts = new CancellationTokenSource();
             _recorder.Start();
             VoiceRecordingChanged?.Invoke(this, true);
+            if (Settings.VoiceLiveText) _voiceTick.Start();
         }
         catch (Exception ex)
         {
@@ -373,14 +399,70 @@ public sealed class App : IDisposable
         }
     }
 
+    /// <summary>
+    /// Промежуточный проход, пока человек говорит. Если предыдущий ещё считает —
+    /// пропускаем такт: очередь из проходов только отстанет от речи.
+    /// </summary>
+    private async void OnVoiceTick(object? sender, EventArgs e)
+    {
+        if (_partialBusy || !_recorder.IsRecording) return;
+
+        var wav = _recorder.Snapshot();
+        if (wav == null || wav.Length < MinVoiceBytes) return;
+
+        _partialBusy = true;
+        try
+        {
+            var token = _voiceCts?.Token ?? CancellationToken.None;
+            var text = await Task.Run(() => VoiceInput.TranscribeAsync(wav, token));
+            // Пока считали, запись могли остановить — тогда последнее слово за
+            // финальным проходом, а не за этим.
+            if (_recorder.IsRecording) ApplyVoiceText(text);
+        }
+        catch
+        {
+            // Промежуточный проход не обязан удаваться: финальный всё исправит.
+        }
+        finally
+        {
+            _partialBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Приводит напечатанное к новой расшифровке: общее начало не трогаем,
+    /// расходящийся хвост стираем и печатаем заново. Стираем ровно столько,
+    /// сколько напечатали сами, — чужой текст в поле не страдает.
+    /// </summary>
+    private void ApplyVoiceText(string text)
+    {
+        text ??= string.Empty;
+        VoicePartial?.Invoke(this, text);
+        if (text == _voiceTyped) return;
+
+        int common = 0;
+        while (common < text.Length && common < _voiceTyped.Length
+               && text[common] == _voiceTyped[common]) common++;
+
+        Sender.WaitForModifiersReleased();
+        if (_voiceTyped.Length > common) Sender.SendBackspaces(_voiceTyped.Length - common);
+        if (text.Length > common) Sender.SendUnicode(text[common..]);
+        _voiceTyped = text;
+
+        // Напечатали не то, что вели в ленте, — она больше не отражает экран.
+        ResetAll();
+    }
+
     private void StopVoice()
     {
         if (!_recorder.IsRecording) return;
 
+        _voiceTick.Stop();
         var wav = _recorder.Stop();
         VoiceRecordingChanged?.Invoke(this, false);
         if (wav == null) return;
 
+        VoiceRecognising?.Invoke(this, EventArgs.Empty);
         _transcribing = true;
         Task.Run(async () =>
         {
@@ -392,14 +474,19 @@ public sealed class App : IDisposable
             _uiContext.Post(_ =>
             {
                 _transcribing = false;
-                if (error != null) { VoiceFailed?.Invoke(this, error); return; }
-                if (string.IsNullOrWhiteSpace(text)) return;
+                if (error != null)
+                {
+                    VoiceFinished?.Invoke(this, EventArgs.Empty);
+                    VoiceFailed?.Invoke(this, error);
+                    return;
+                }
 
-                Sender.WaitForModifiersReleased();
-                Sender.SendUnicode(text!);
-
-                // Напечатали не то, что вели в ленте, — она больше не отражает экран.
-                ResetAll();
+                // Пустая расшифровка при уже напечатанном тексте — не повод
+                // стирать напечатанное: молчание в конце фразы обычное дело.
+                if (!string.IsNullOrWhiteSpace(text) || _voiceTyped.Length == 0)
+                    ApplyVoiceText(text ?? string.Empty);
+                _voiceTyped = string.Empty;
+                VoiceFinished?.Invoke(this, EventArgs.Empty);
             }, null);
         });
     }
@@ -421,6 +508,10 @@ public sealed class App : IDisposable
 
     public void Dispose()
     {
+        _voiceTick.Stop();
+        _voiceTick.Dispose();
+        _voiceCts?.Cancel();
+        _voiceCts?.Dispose();
         _recorder.Dispose();
         VoiceInput.Unload();
         Translator.Unload();

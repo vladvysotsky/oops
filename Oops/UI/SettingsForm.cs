@@ -22,6 +22,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbAutostart = new ToggleBox();
     private readonly CheckBox _cbAutoUpdate = new ToggleBox();
     private readonly CheckBox _cbCharByChar = new ToggleBox();
+    private readonly CheckBox _cbVoiceLive = new ToggleBox();
     private readonly SegmentedControl _language = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
@@ -406,6 +407,13 @@ public sealed class SettingsForm : ThemedForm
         section.Action.MinimumSize = new Size(Theme.Px(160), 0);
         section.Action.Click += async (_, _) => await ToggleModels(section, prefix, isReady, ensure, remove);
         AddAutoRow(rows, ButtonBar.Create(CardInnerWidth, new Padding(0), section.Action));
+
+        if (prefix == "settings.voice")
+        {
+            AddAutoRow(rows, Divider());
+            AddAutoRow(rows, CheckRow(_cbVoiceLive, L10n.T("settings.voice.live"),
+                L10n.T("settings.voice.live.hint")));
+        }
 
         RefreshModelCard(section, prefix, isReady);
         return card;
@@ -886,6 +894,7 @@ public sealed class SettingsForm : ThemedForm
         _cbAutostart.Checked = Autostart.IsEnabled();
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
+        _cbVoiceLive.Checked = _settings.VoiceLiveText;
         // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
         // запустит пересборку окна по кругу.
         _language.SelectedIndexChanged -= LanguageChangedHandler;
@@ -947,6 +956,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.Enabled = _cbEnabled.Checked;
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
+        _settings.VoiceLiveText = _cbVoiceLive.Checked;
         _settings.Language = _languagePref;
         _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
         _settings.ExpandWindowSeconds = _nudExpand.Value;
