@@ -15,6 +15,12 @@ public sealed class AppSettings
     public string Language { get; set; } = Core.L10n.Auto;
 
     /// <summary>
+    /// Тема оформления: «auto» (по системе), «light» или «dark».
+    /// См. <see cref="Core.ThemePref"/> и <see cref="Oops.UI.Theme"/>.
+    /// </summary>
+    public string Theme { get; set; } = Core.ThemePref.Auto;
+
+    /// <summary>
     /// Мастер первого запуска уже показывали.
     ///
     /// Автозапуска здесь намеренно НЕТ: единственный источник правды —
@@ -140,6 +146,10 @@ public sealed class AppSettings
         if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
         if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;
         if (VoiceMaxSeconds < 10 || VoiceMaxSeconds > 600) VoiceMaxSeconds = 120;
+
+        // Мусор из старого файла (null или неизвестное значение) не должен
+        // ронять окно на первой же попытке применить тему.
+        Theme = Core.ThemePref.Sanitize(Theme);
 
         static HotkeyConfig Fix(HotkeyConfig? h, HotkeyConfig fallback)
         {

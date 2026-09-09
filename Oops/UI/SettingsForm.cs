@@ -23,6 +23,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbAutoUpdate = new ToggleBox();
     private readonly CheckBox _cbCharByChar = new ToggleBox();
     private readonly CheckBox _cbVoiceLive = new ToggleBox();
+    private readonly SegmentedControl _theme = new();
     private readonly SegmentedControl _language = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
@@ -52,18 +53,32 @@ public sealed class SettingsForm : ThemedForm
     /// </summary>
     private string _languagePref;
 
+    /// <summary>
+    /// Выбранная тема — отдельно от настроек по той же причине, что и язык:
+    /// в settings.Theme попадает только по «Сохранить», а сама тема применяется
+    /// сразу через <see cref="Theme.Apply"/>. Отмена окна возвращает и тему.
+    /// </summary>
+    private string _themePref;
+
     /// <summary>Вызывается, когда язык сменили: трей пересобирает своё меню.</summary>
     private readonly Action? _onLanguageChanged;
 
-    public SettingsForm(AppSettings settings, Action? onLanguageChanged = null)
+    /// <summary>Вызывается, когда тема сменилась: трей пересобирает меню в новой палитре.</summary>
+    private readonly Action? _onThemeChanged;
+
+    public SettingsForm(AppSettings settings,
+        Action? onLanguageChanged = null,
+        Action? onThemeChanged = null)
     {
         _settings = settings;
         _onLanguageChanged = onLanguageChanged;
+        _onThemeChanged = onThemeChanged;
         _convertHotkey = Clone(settings.ConvertHotkey);
         _caseHotkey = Clone(settings.ChangeCaseHotkey);
         _translateHotkey = Clone(settings.TranslateHotkey);
         _voiceHotkey = Clone(settings.VoiceHotkey);
         _languagePref = settings.Language;
+        _themePref = settings.Theme;
 
         Text = "oops";
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -304,9 +319,33 @@ public sealed class SettingsForm : ThemedForm
         AddAutoRow(rows, CheckRow(_cbAutoUpdate, L10n.T("settings.autoupdate"),
             L10n.T("settings.autoupdate.hint")));
         AddAutoRow(rows, Divider());
+        // Внешний вид — выше языка: тема ближе к «как оно выглядит», язык — к
+        // «что на нём написано». Порядок совпадает с системными «Параметрами»
+        // Windows и macOS: сначала оформление, потом языки.
+        AddAutoRow(rows, ThemeRow());
+        AddAutoRow(rows, Divider());
         AddAutoRow(rows, LanguageRow());
         return card;
     }
+
+    /// <summary>
+    /// Выбор темы оформления. Тот же сегментированный переключатель, что и у
+    /// языка, — секции обязаны выглядеть одинаково, иначе воспринимаются как
+    /// два разных подхода к одному классу настроек. Тема применяется мгновенно
+    /// через <see cref="Theme.Apply"/>, в settings.Theme значение попадает
+    /// только по «Сохранить» — как у языка.
+    /// </summary>
+    private Control ThemeRow()
+    {
+        _theme.SetItems(
+            L10n.T("settings.theme.auto"),
+            L10n.T("settings.theme.light"),
+            L10n.T("settings.theme.dark"));
+        return Row(L10n.T("settings.theme"), L10n.T("settings.theme.hint"), _theme);
+    }
+
+    /// <summary>Порядок пунктов темы — он же порядок значений настройки.</summary>
+    private static readonly string[] ThemeValues = { ThemePref.Auto, ThemePref.Light, ThemePref.Dark };
 
     /// <summary>
     /// Выбор языка интерфейса. Сегментированный переключатель, а не системный
@@ -585,9 +624,18 @@ public sealed class SettingsForm : ThemedForm
         if (tallest <= 0) return;
 
         // Всё, что в окне кроме страницы: шапка, вкладки, кнопки, отступы.
-        // Считаем ДО правки высоты страницы, иначе величина уедет вместе с ней.
         int chrome = Height - ClientSize.Height;                 // рамка и заголовок
-        int aroundPage = ClientSize.Height - _page.Height;
+
+        // aroundPage считаем через PreferredSize корневой таблицы, а не через
+        // ClientSize.Height − _page.Height. Формула через ClientSize верна лишь
+        // на первом вызове (форма ещё AutoSize=true, ClientSize подогнан под
+        // root). При пересборке (смена темы, смена языка) AutoSize у формы
+        // уже false, ClientSize остаётся от прежнего показа, а _page.Height
+        // снова временный из BuildLayout (Px(200)) — разность выходила вдвое
+        // больше правды, страница обрезалась либо окно раздувалось.
+        var root = _page.Parent!;
+        root.PerformLayout();
+        int aroundPage = root.PreferredSize.Height - _page.Height;
 
         // Окно следует за содержимым в обе стороны. AutoSize формы выключаем:
         // иначе следующий проход раскладки вернёт её к прежнему размеру, и
@@ -870,6 +918,66 @@ public sealed class SettingsForm : ThemedForm
     // ------------------------------------------------------------------ data
 
     /// <summary>
+    /// Смена темы применяется сразу через <see cref="Theme.Apply"/>: пересборку
+    /// окна и перекраску заголовка сделает наш же обработчик события
+    /// <see cref="Theme.ThemeChanged"/> — переопределённый ApplyThemeToSelf.
+    /// В settings.Theme значение попадает только по «Сохранить», как язык.
+    /// </summary>
+    private void OnThemePicked()
+    {
+        var picked = ThemeValues[_theme.SelectedIndex];
+        if (picked == _themePref) return;
+        _themePref = picked;
+
+        Theme.Apply(picked);       // событие ThemeChanged пересоберёт окно
+        _onThemeChanged?.Invoke(); // трей перекрасит меню
+    }
+
+    /// <summary>
+    /// Тема меняется двумя путями: пользователь выбрал в настройках, или пришло
+    /// событие от системы (переключил тему Windows при <c>Auto</c>). В обоих
+    /// случаях полностью пересобираем окно — контейнеры (карточки, панели)
+    /// держат BackColor из палитры, и одной перекраски корня им мало.
+    /// Механизм совпадает со сменой языка: единый рабочий путь для двух причин.
+    /// </summary>
+    protected override void ApplyThemeToSelf()
+    {
+        if (_pages[0] == null)
+        {
+            // Первый Apply приходит из OnHandleCreated ThemedForm — окно ещё
+            // не построено, пересобирать нечего. Достаточно базового поведения.
+            base.ApplyThemeToSelf();
+            return;
+        }
+
+        RebuildContent();
+        base.ApplyThemeToSelf();
+    }
+
+    /// <summary>
+    /// Полностью пересобирает содержимое окна и подгоняет размеры.
+    ///
+    /// Общий путь для смены темы и смены языка: оба меняют содержимое (цвета
+    /// у контейнеров или тексты у контролов), пересобирают дерево через
+    /// Controls.Clear + BuildLayout и обязаны заново замерить высоту — иначе
+    /// _page.Height остаётся временной величиной из BuildLayout (Px(200)) и
+    /// нижняя часть страницы обрезается. Настоящий замер делает FitPages, но
+    /// он привязан к OnLoad и без явного вызова здесь не срабатывает.
+    /// </summary>
+    private void RebuildContent()
+    {
+        int tab = _tabIndex;
+        SuspendLayout();
+        Controls.Clear();
+        BuildLayout();
+        Populate();
+        _tabs.SelectedIndex = tab;
+        ShowPage(tab);
+        ResumeLayout(true);
+        FitPages();
+    }
+
+    /// <summary>
     /// Смена языка применяется сразу: перезагружаем словарь и пересобираем окно,
     /// а не ждём сохранения и перезапуска. Настройка при этом всё равно
     /// записывается только по «Сохранить», как и остальные.
@@ -895,14 +1003,7 @@ public sealed class SettingsForm : ThemedForm
         // Dispose здесь недопустим, потому что вместе с панелями он уничтожил
         // бы общие контролы формы (галочки, степперы, поля хоткеев), и окно
         // упало бы при следующем показе. Отвязанные панели соберёт GC.
-        int tab = _tabIndex;
-        SuspendLayout();
-        Controls.Clear();
-        BuildLayout();
-        Populate();
-        _tabs.SelectedIndex = tab;
-        ShowPage(tab);
-        ResumeLayout(true);
+        RebuildContent();
     }
 
     private int _tabIndex;
@@ -918,6 +1019,9 @@ public sealed class SettingsForm : ThemedForm
         _cbVoiceLive.Checked = _settings.VoiceLiveText;
         // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
         // запустит пересборку окна по кругу.
+        _theme.SelectedIndexChanged -= ThemeChangedHandler;
+        _theme.SelectedIndex = Math.Max(0, Array.IndexOf(ThemeValues, _themePref));
+        _theme.SelectedIndexChanged += ThemeChangedHandler;
         _language.SelectedIndexChanged -= LanguageChangedHandler;
         _language.SelectedIndex = Math.Max(0, Array.IndexOf(LanguageValues, _languagePref));
         _language.SelectedIndexChanged += LanguageChangedHandler;
@@ -951,6 +1055,7 @@ public sealed class SettingsForm : ThemedForm
     }
 
     private void LanguageChangedHandler(object? sender, EventArgs e) => OnLanguagePicked();
+    private void ThemeChangedHandler(object? sender, EventArgs e) => OnThemePicked();
 
     private static HotkeyConfig Clone(HotkeyConfig h) => new()
     {
@@ -979,6 +1084,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.CharByCharTyping = _cbCharByChar.Checked;
         _settings.VoiceLiveText = _cbVoiceLive.Checked;
         _settings.Language = _languagePref;
+        _settings.Theme = _themePref;
         _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
         _settings.ExpandWindowSeconds = _nudExpand.Value;
         _settings.ConvertHotkey = _convertHotkey;
