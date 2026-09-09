@@ -144,7 +144,9 @@ public sealed class TrayContext : ApplicationContext
         _app.HotkeysSuspended = true;
         try
         {
-            using var form = new SettingsForm(_app.Settings, onLanguageChanged: BuildMenu);
+            using var form = new SettingsForm(_app.Settings,
+                onLanguageChanged: BuildMenu,
+                onThemeChanged: BuildMenu);
             if (form.ShowDialog() == DialogResult.OK)
             {
                 // Автозапуск форма записывает в реестр сама: держать его копию в

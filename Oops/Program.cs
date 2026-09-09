@@ -45,6 +45,7 @@ internal static class Program
 
         var settings = AppSettings.Load();
         L10n.Init(settings.Language);
+        Theme.Init(settings.Theme);
 
         // Файл настроек был, но не прочитался. Молча вернуть дефолты — значит
         // отобрать настроенные хоткеи без единого слова, и человек решит, что

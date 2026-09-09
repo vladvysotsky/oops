@@ -4,32 +4,61 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using Oops.Core;
 
 namespace Oops.UI;
 
 /// <summary>
 /// Дизайн-система приложения: палитра, типографика, сетка отступов, радиусы.
 ///
-/// Палитра — свойства, а не константы: она подстраивается под систему.
-///   - тёмная тема Windows (AppsUseLightTheme = 0) даёт тёмный набор цветов;
+/// Палитра — свойства, а не константы: она подстраивается под систему и под
+/// пользовательский выбор в настройках.
+///   - тёмная тема Windows (AppsUseLightTheme = 0) даёт тёмный набор цветов
+///     в режиме «Авто»; явные «Светлая»/«Тёмная» перекрывают системный выбор;
 ///   - режим высокой контрастности отдаёт цвета системе целиком, иначе наши
 ///     мягкие серые превращают окно в нечитаемое пятно ровно для тех, кому
 ///     контраст и нужен.
-/// Значения читаются один раз при старте: WinForms всё равно не перерисует
-/// уже созданные контролы, а смена темы на лету — не тот случай, ради которого
-/// стоит городить перерисовку всего дерева.
+///
+/// Раньше палитра фиксировалась один раз при старте («смена темы на лету —
+/// не тот случай, ради которого стоит городить перерисовку»). Теперь она
+/// меняется вместе с выбором в настройках: <see cref="Apply"/> оповещает
+/// подписчиков через <see cref="ThemeChanged"/>, окно настроек пересобирает
+/// себя, остальные <see cref="ThemedForm"/> перекрашивают корневые атрибуты
+/// и просят перерисоваться — контролы читают палитру на каждом OnPaint.
 ///
 /// Контраст текста к фону — не ниже WCAG AA (4.5:1) в обоих наборах.
 /// </summary>
 internal static class Theme
 {
-    private static readonly bool Dark = DetectDarkMode();
+    /// <summary>
+    /// Что выбрал пользователь: <see cref="ThemePref.Auto"/> / Light / Dark.
+    /// В режиме Auto <see cref="Dark"/> читается из реестра Windows.
+    /// </summary>
+    public static string Preference { get; private set; } = ThemePref.Auto;
+
+    /// <summary>
+    /// Высокий контраст — системный переключатель Windows. В настройки его не
+    /// выносим: если человек включил его в системе, наша палитра и наши
+    /// «Светлая/Тёмная» ему одинаково не подходят — цвета отдаёт система.
+    /// </summary>
     private static readonly bool Contrast = SystemInformation.HighContrast;
 
     /// <summary>Приложение рисует себя в тёмном наборе цветов.</summary>
     public static bool IsDark => Dark && !Contrast;
 
-    private static bool DetectDarkMode()
+    /// <summary>
+    /// «Тёмный набор нужен сейчас» с учётом настройки и системы. В режиме Auto
+    /// перечитывается на каждый вызов — иначе смена системной темы не долетела
+    /// бы до нас без перезапуска.
+    /// </summary>
+    private static bool Dark => Preference switch
+    {
+        ThemePref.Light => false,
+        ThemePref.Dark => true,
+        _ => DetectSystemDark(),
+    };
+
+    private static bool DetectSystemDark()
     {
         try
         {
@@ -38,6 +67,69 @@ internal static class Theme
             return key?.GetValue("AppsUseLightTheme") is int v && v == 0;
         }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// Оповещение о смене темы: подписываются <see cref="ThemedForm"/>, окно
+    /// настроек и всё, что рисуется вне обычного цикла OnPaint (например,
+    /// меню в трее — его цвета выставляются императивно в
+    /// <see cref="ApplyMenuChrome"/>). Событие статическое: сама тема — тоже.
+    /// </summary>
+    public static event EventHandler? ThemeChanged;
+
+    /// <summary>
+    /// Ставит выбранное предпочтение до создания первого окна — на старте
+    /// приложения, после <see cref="L10n.Init"/>. Не рейзит событие: подписчиков
+    /// ещё нет, а рассылка «первого» изменения провоцирует лишнюю пересборку.
+    /// Заодно подписывается на смену системной темы: в режиме Auto её надо
+    /// ловить без перезапуска.
+    /// </summary>
+    public static void Init(string? preference)
+    {
+        Preference = ThemePref.Sanitize(preference);
+        if (!_systemHooked)
+        {
+            SystemEvents.UserPreferenceChanged += OnSystemPreferenceChanged;
+            _systemHooked = true;
+        }
+    }
+
+    private static bool _systemHooked;
+
+    /// <summary>
+    /// Меняет тему из настроек. Рассылает <see cref="ThemeChanged"/> — окно
+    /// настроек пересобирает разметку, остальные окна перекрашиваются на месте.
+    /// Повторный вызов с прежним значением молчит: пересобирать нечего.
+    /// </summary>
+    public static void Apply(string? preference)
+    {
+        var next = ThemePref.Sanitize(preference);
+        if (next == Preference) return;
+        Preference = next;
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Пользователь переключил тему Windows, а у нас стоит «Авто» — надо
+    /// подхватить, иначе окно осталось бы в прежнем наборе цветов до
+    /// перезапуска. При явно выбранной «Светлой»/«Тёмной» этот сигнал нам
+    /// безразличен: наш выбор перекрывает системный.
+    /// </summary>
+    private static void OnSystemPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (Preference != ThemePref.Auto) return;
+        if (e.Category != UserPreferenceCategory.General
+            && e.Category != UserPreferenceCategory.VisualStyle
+            && e.Category != UserPreferenceCategory.Color) return;
+        RaiseChanged();
+    }
+
+    private static void RaiseChanged()
+    {
+        // ThemeChanged может дойти из фонового потока (SystemEvents шлёт из
+        // своего) — синхронизировать доставку с UI-потоком должны сами
+        // подписчики: у ThemedForm обработчик знает про Handle и умеет BeginInvoke.
+        ThemeChanged?.Invoke(null, EventArgs.Empty);
     }
 
     /// <summary>Выбор цвета: высокая контрастность → системный, иначе наш светлый/тёмный.</summary>
@@ -248,17 +340,20 @@ internal static class Theme
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
     /// <summary>
-    /// Красит заголовок окна в тёмный. Без этого в тёмной теме Windows окно
+    /// Красит заголовок окна в тон темы. Без этого в тёмной теме Windows окно
     /// выглядит склеенным из двух половин: светлая рамка над тёмным содержимым.
     /// Атрибут 20 — DWMWA_USE_IMMERSIVE_DARK_MODE (Windows 10 2004+); на более
     /// старых сборках вызов просто вернёт ошибку, и мы её игнорируем.
+    ///
+    /// Вызывается и при смене темы «на лету» — поэтому ставим значение и в
+    /// светлом варианте (0), а не только в тёмном: иначе прежний тёмный
+    /// заголовок остался бы висеть после переключения на светлую.
     /// </summary>
     public static void ApplyWindowChrome(Form form)
     {
-        if (!IsDark) return;
         try
         {
-            int on = 1;
+            int on = IsDark ? 1 : 0;
             DwmSetWindowAttribute(form.Handle, 20, ref on, sizeof(int));
         }
         catch { }
@@ -323,11 +418,52 @@ public class ThemedForm : Form
     /// </summary>
     private bool _centerOnScreen;
 
+    /// <summary>Обработчик события, чтобы его можно было отписать при закрытии формы.</summary>
+    private EventHandler? _themeHandler;
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
         _centerOnScreen = StartPosition == FormStartPosition.CenterScreen;
         Theme.ApplyWindowChrome(this);
+        // Смена темы приходит из настроек (UI-поток) или из SystemEvents
+        // (фоновый поток при переключении темы Windows). Второй случай обязан
+        // прыгнуть в UI-поток — иначе BackColor и ApplyWindowChrome полезут
+        // трогать Handle из чужого потока и упадут в Debug и в Release случайно.
+        _themeHandler = OnThemeChangedFromEvent;
+        Theme.ThemeChanged += _themeHandler;
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        if (_themeHandler != null)
+        {
+            Theme.ThemeChanged -= _themeHandler;
+            _themeHandler = null;
+        }
+        base.OnHandleDestroyed(e);
+    }
+
+    private void OnThemeChangedFromEvent(object? sender, EventArgs e)
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        if (InvokeRequired) { BeginInvoke(new Action(ApplyThemeToSelf)); return; }
+        ApplyThemeToSelf();
+    }
+
+    /// <summary>
+    /// Перекрашивает корневые атрибуты формы и просит перерисоваться. Наши
+    /// контролы читают палитру через свойства <see cref="Theme"/> в момент
+    /// OnPaint, поэтому Invalidate(true) достаточно, чтобы «промотать» весь
+    /// цвет по дереву. Формы, у которых свои контейнеры красятся сложнее
+    /// (окно настроек), переопределяют этот метод и пересобирают разметку.
+    /// </summary>
+    protected virtual void ApplyThemeToSelf()
+    {
+        BackColor = Theme.Canvas;
+        ForeColor = Theme.Text;
+        Theme.ApplyWindowChrome(this);
+        Invalidate(true);
     }
 
     /// <summary>
