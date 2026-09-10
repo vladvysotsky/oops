@@ -12,28 +12,40 @@ namespace Oops.UI;
 /// о новой функции только случайно, а хоткей, о котором он не знает, ничем не
 /// отличается от отсутствующего.
 ///
-/// Поэтому каждый пункт отвечает не «что сделано», а «как этим пользоваться»,
-/// и рядом стоит ФАКТИЧЕСКОЕ сочетание из настроек — человек мог поменять его,
-/// и показывать ему чужое было бы худшим способом объяснить функцию.
+/// Слева — все версии от первой, справа — что появилось в выбранной. Каждый
+/// пункт отвечает не «что сделано», а «как этим пользоваться», и рядом стоит
+/// ФАКТИЧЕСКОЕ сочетание из настроек: человек мог его поменять, и показывать
+/// ему чужое было бы худшим способом объяснить функцию.
 /// </summary>
 internal sealed class WhatsNewForm : ThemedForm
 {
-    private static readonly int ContentWidth = Theme.Px(620);
-    private static readonly int CardInnerWidth = ContentWidth - Theme.S3 * 2;
+    private static readonly int SidebarWidth = Theme.Px(150);
+    private static readonly int DetailWidth = Theme.Px(520);
+    private static readonly int ContentWidth = SidebarWidth + Theme.S3 + DetailWidth;
+
+    /// <summary>
+    /// Высота рабочей области окна. Фиксированная НАМЕРЕННО: у версий разное
+    /// число пунктов, и подгонка под выбранную заставляла бы окно прыгать при
+    /// каждом клике по списку. Не поместилось — прокручивается, как в любом
+    /// читалке списка изменений.
+    /// </summary>
+    private static readonly int BodyHeight = Theme.Px(420);
 
     private readonly AppSettings _settings;
-    private readonly Panel _scroller;
-    private readonly TableLayoutPanel _stack;
+    private readonly Panel _detail = new();
+    private readonly List<FlatButton> _tabs = new();
+    private readonly IReadOnlyList<ChangeSet> _sets;
 
-    private WhatsNewForm(AppSettings settings, IReadOnlyList<ChangeSet> sets, bool afterUpdate)
+    private WhatsNewForm(AppSettings settings, bool afterUpdate)
     {
         _settings = settings;
+        _sets = Changelog.All;
 
         Text = L10n.T("news.window.title");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ShowInTaskbar = true;      // окно самостоятельное, не диалог поверх другого
+        ShowInTaskbar = true;      // окно самостоятельное, а не диалог поверх другого
         StartPosition = FormStartPosition.CenterScreen;
 
         var root = new TableLayoutPanel
@@ -67,45 +79,11 @@ internal sealed class WhatsNewForm : ThemedForm
             ForeColor = Theme.TextMuted,
             AutoSize = true,
             MaximumSize = new Size(ContentWidth, 0),
-            Margin = new Padding(0, 0, 0, Theme.S2),
+            Margin = new Padding(0, 0, 0, Theme.S3),
             BackColor = Color.Transparent,
         });
 
-        // Список версий — в прокручиваемой панели: «что нового» за несколько
-        // версий не обязано помещаться на экран, а окно выше экрана хуже
-        // прокрутки во всех отношениях.
-        var scroller = new Panel
-        {
-            AutoScroll = true,
-            BackColor = Theme.Canvas,
-            Width = ContentWidth,
-            Margin = new Padding(0),
-        };
-        var stack = new TableLayoutPanel
-        {
-            ColumnCount = 1,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Theme.Canvas,
-            Margin = new Padding(0),
-            // Минус ширина полосы прокрутки: иначе содержимое уезжает под неё
-            // и появляется ещё и горизонтальная.
-            Width = ContentWidth - SystemInformation.VerticalScrollBarWidth,
-        };
-        stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-
-        // Поля заполняем ДО сборки карточек: они считают свою ширину от _stack,
-        // а к моменту цикла он должен быть уже на месте.
-        _scroller = scroller;
-        _stack = stack;
-
-        foreach (var set in sets)
-        {
-            Add(stack, Section("oops " + set.Version.ToString(3)));
-            Add(stack, VersionCard(set));
-        }
-        scroller.Controls.Add(stack);
-        Add(root, scroller);
+        Add(root, Body());
 
         var ok = new FlatButton
         {
@@ -122,34 +100,16 @@ internal sealed class WhatsNewForm : ThemedForm
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         AcceptButton = ok;
         CancelButton = ok;
-    }
 
-    protected override void OnLoad(EventArgs e)
-    {
-        base.OnLoad(e);
-
-        // Высоту прокручиваемой области считаем ПОСЛЕ раскладки: до неё
-        // переносы строк не известны и любое число здесь — выдумка
-        // (см. CLAUDE.md про FitPages).
-        _stack.PerformLayout();
-        int wanted = _stack.PreferredSize.Height;
-
-        int chrome = Height - ClientSize.Height;
-        int aroundScroller = ClientSize.Height - _scroller.Height;
-        int maxScroller = Screen.FromControl(this).WorkingArea.Height - chrome - aroundScroller;
-
-        AutoSize = false;
-        _scroller.Height = Math.Min(wanted, Math.Max(Theme.Px(200), maxScroller));
-        ClientSize = new Size(ClientSize.Width, aroundScroller + _scroller.Height);
-        CenterOnWorkArea();
+        Select(0);      // свежая версия сверху и открыта по умолчанию
     }
 
     // ------------------------------------------------------------------ API
 
-    /// <summary>Показывает окно целиком, по всем версиям — из меню трея.</summary>
+    /// <summary>Открывает окно по требованию — из меню трея.</summary>
     public static void ShowAll(AppSettings settings)
     {
-        using var form = new WhatsNewForm(settings, Changelog.All, afterUpdate: false);
+        using var form = new WhatsNewForm(settings, afterUpdate: false);
         form.ShowDialog();
     }
 
@@ -171,19 +131,120 @@ internal sealed class WhatsNewForm : ThemedForm
         settings.LastSeenVersion = current.ToString();
         settings.Save();
 
-        if (seen == null) return;                       // первая установка
-        var sets = Changelog.Since(seen);
-        if (sets.Count == 0) return;
+        if (seen == null) return;                        // первая установка
+        if (Changelog.Since(seen).Count == 0) return;    // обновления не было
 
-        using var form = new WhatsNewForm(settings, sets, afterUpdate: true);
+        using var form = new WhatsNewForm(settings, afterUpdate: true);
         form.ShowDialog();
     }
 
     // -------------------------------------------------------------- вёрстка
 
-    private Control VersionCard(ChangeSet set)
+    private Control Body()
     {
-        var card = new Card { Margin = new Padding(0), Width = _stack.Width };
+        var body = new TableLayoutPanel
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = false,
+            Width = ContentWidth,
+            Height = BodyHeight,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, SidebarWidth + Theme.S3));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, DetailWidth));
+        body.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        body.Controls.Add(Sidebar(), 0, 0);
+
+        _detail.AutoScroll = true;
+        _detail.BackColor = Theme.Canvas;
+        _detail.Dock = DockStyle.Fill;
+        _detail.Margin = new Padding(0);
+        body.Controls.Add(_detail, 1, 0);
+
+        return body;
+    }
+
+    private Control Sidebar()
+    {
+        var host = new Panel
+        {
+            AutoScroll = true,
+            BackColor = Theme.Canvas,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, Theme.S3, 0),
+        };
+
+        var stack = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Theme.Canvas,
+            Margin = new Padding(0),
+            Width = SidebarWidth,
+        };
+        stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        for (int i = 0; i < _sets.Count; i++)
+        {
+            int index = i;
+            // Кнопка, а не свой контрол списка: выделение уже умеет рисовать
+            // FlatButton заливкой акцентом, и проверять новый контрол на всех
+            // масштабах экрана пришлось бы заново.
+            var tab = new FlatButton
+            {
+                Text = _sets[i].Version.ToString(3),
+                AutoSize = false,
+                Width = SidebarWidth,
+                Height = Theme.TextRowHeight,
+                Margin = new Padding(0, 0, 0, Theme.S1),
+            };
+            tab.Click += (_, _) => Select(index);
+            _tabs.Add(tab);
+            Add(stack, tab);
+        }
+
+        host.Controls.Add(stack);
+        return host;
+    }
+
+    /// <summary>Показывает выбранную версию и подсвечивает её в списке.</summary>
+    private void Select(int index)
+    {
+        for (int i = 0; i < _tabs.Count; i++) _tabs[i].Primary = i == index;
+
+        _detail.SuspendLayout();
+        // Прежнее содержимое именно уничтожаем: оставленные контролы копились
+        // бы при каждом переключении и рисовались друг под другом — ровно то,
+        // на чём уже погорели вкладки настроек.
+        foreach (Control old in _detail.Controls.Cast<Control>().ToList()) old.Dispose();
+        _detail.Controls.Clear();
+
+        int inner = DetailWidth - SystemInformation.VerticalScrollBarWidth;
+        var stack = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Theme.Canvas,
+            Margin = new Padding(0),
+            Width = inner,
+        };
+        stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        foreach (var entry in _sets[index].Entries) Add(stack, EntryCard(entry, inner));
+
+        _detail.Controls.Add(stack);
+        _detail.AutoScrollPosition = Point.Empty;   // новая версия читается с начала
+        _detail.ResumeLayout(true);
+    }
+
+    private Control EntryCard(ChangeEntry entry, int width)
+    {
+        var card = new Card { Margin = new Padding(0, 0, 0, Theme.S2), Width = width };
         var rows = new TableLayoutPanel
         {
             ColumnCount = 1,
@@ -198,30 +259,7 @@ internal sealed class WhatsNewForm : ThemedForm
         rows.SizeChanged += (_, _) => card.Height = rows.Height + card.Padding.Vertical;
         card.Height = rows.Height + card.Padding.Vertical;
 
-        bool first = true;
-        foreach (var entry in set.Entries)
-        {
-            if (!first) Add(rows, Divider());
-            first = false;
-            Add(rows, Entry(entry));
-        }
-        return card;
-    }
-
-    private Control Entry(ChangeEntry entry)
-    {
-        int inner = _stack.Width - Theme.S3 * 2;
-
-        var rows = new TableLayoutPanel
-        {
-            ColumnCount = 1,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0, Theme.S2, 0, Theme.S2),
-            Width = inner,
-        };
-        rows.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        int inner = width - Theme.S3 * 2;
 
         Add(rows, new Label
         {
@@ -243,7 +281,7 @@ internal sealed class WhatsNewForm : ThemedForm
                 Margin = new Padding(0, 0, 0, Theme.S1),
             };
             keys.SetCombo(combo);
-            Add(rows, keys);
+            Add(rows, keys, stretch: false);
         }
 
         Add(rows, new Label
@@ -256,7 +294,7 @@ internal sealed class WhatsNewForm : ThemedForm
             Margin = new Padding(0),
             BackColor = Color.Transparent,
         });
-        return rows;
+        return card;
     }
 
     /// <summary>Фактическое сочетание из настроек, а не умолчание.</summary>
@@ -270,26 +308,13 @@ internal sealed class WhatsNewForm : ThemedForm
         _ => null,
     };
 
-    private static Control Section(string text) => new Label
+    /// <param name="stretch">
+    /// Растянуть на ширину колонки. Для «клавиш» хоткея — нет: у них своя
+    /// ширина, и растянутые они превращаются в полосу во всю карточку.
+    /// </param>
+    private static void Add(TableLayoutPanel host, Control child, bool stretch = true)
     {
-        Text = text,
-        Font = Theme.SectionLabel,
-        ForeColor = Theme.TextMuted,
-        AutoSize = true,
-        Margin = new Padding(Theme.S1, Theme.S3, 0, Theme.S2),
-        BackColor = Color.Transparent,
-    };
-
-    private static Control Divider() => new Panel
-    {
-        Height = 1,
-        BackColor = Theme.Border,
-        Margin = new Padding(0),
-    };
-
-    private static void Add(TableLayoutPanel host, Control child)
-    {
-        if (child.Anchor == (AnchorStyles.Top | AnchorStyles.Left))
+        if (stretch && child.Anchor == (AnchorStyles.Top | AnchorStyles.Left))
             child.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         host.Controls.Add(child, 0, host.RowCount);

@@ -43,6 +43,41 @@ public static class Changelog
             new ChangeEntry("news.2_0.language.title", "news.2_0.language.body"),
             new ChangeEntry("news.2_0.models.title", "news.2_0.models.body"),
         }),
+        new ChangeSet(new Version(1, 3, 0), new[]
+        {
+            new ChangeEntry("news.1_3.feedback.title", "news.1_3.feedback.body"),
+            new ChangeEntry("news.1_3.layout.title", "news.1_3.layout.body"),
+        }),
+        new ChangeSet(new Version(1, 2, 3), new[]
+        {
+            new ChangeEntry("news.1_2_3.notes.title", "news.1_2_3.notes.body"),
+        }),
+        new ChangeSet(new Version(1, 2, 2), new[]
+        {
+            new ChangeEntry("news.1_2_2.hotkeyField.title", "news.1_2_2.hotkeyField.body"),
+        }),
+        new ChangeSet(new Version(1, 2, 1), new[]
+        {
+            new ChangeEntry("news.1_2_1.releaseNotes.title", "news.1_2_1.releaseNotes.body"),
+        }),
+        new ChangeSet(new Version(1, 2, 0), new[]
+        {
+            new ChangeEntry("news.1_2.fastTyping.title", "news.1_2.fastTyping.body"),
+            new ChangeEntry("news.1_2.errors.title", "news.1_2.errors.body"),
+            new ChangeEntry("news.1_2.checksum.title", "news.1_2.checksum.body"),
+        }),
+        new ChangeSet(new Version(1, 1, 0), new[]
+        {
+            new ChangeEntry("news.1_1.welcome.title", "news.1_1.welcome.body"),
+            new ChangeEntry("news.1_1.darkTheme.title", "news.1_1.darkTheme.body"),
+            new ChangeEntry("news.1_1.caseHotkey.title", "news.1_1.caseHotkey.body", HotkeyRef.Case),
+        }),
+        new ChangeSet(new Version(1, 0, 0), new[]
+        {
+            new ChangeEntry("news.1_0.layout.title", "news.1_0.layout.body", HotkeyRef.Convert),
+            new ChangeEntry("news.1_0.case.title", "news.1_0.case.body", HotkeyRef.Case),
+            new ChangeEntry("news.1_0.selection.title", "news.1_0.selection.body"),
+        }),
     };
 
     /// <summary>
