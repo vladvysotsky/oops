@@ -29,6 +29,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _translateKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _voiceKeys = new() { Interactive = true };
+    private readonly HotkeyDisplay _replaceKeys = new() { Interactive = true };
     private readonly Stepper _nudIdle = new();
     private readonly Stepper _nudExpand = new();
 
@@ -44,6 +45,7 @@ public sealed class SettingsForm : ThemedForm
     private HotkeyConfig _caseHotkey;
     private HotkeyConfig _translateHotkey;
     private HotkeyConfig _voiceHotkey;
+    private HotkeyConfig _replaceHotkey;
 
     /// <summary>
     /// Выбранный язык — отдельно от настроек. В settings.Language он попадает
@@ -77,6 +79,7 @@ public sealed class SettingsForm : ThemedForm
         _caseHotkey = Clone(settings.ChangeCaseHotkey);
         _translateHotkey = Clone(settings.TranslateHotkey);
         _voiceHotkey = Clone(settings.VoiceHotkey);
+        _replaceHotkey = Clone(settings.ReplaceHotkey);
         _languagePref = settings.Language;
         _themePref = settings.Theme;
 
@@ -383,6 +386,10 @@ public sealed class SettingsForm : ThemedForm
         AddAutoRow(rows, HotkeyRow(
             L10n.T("hotkey.voice"), L10n.T("hotkey.voice.hint"),
             _voiceKeys, () => RecordInto(ref _voiceHotkey, _voiceKeys)));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, HotkeyRow(
+            L10n.T("hotkey.replace"), L10n.T("hotkey.replace.hint"),
+            _replaceKeys, () => RecordInto(ref _replaceHotkey, _replaceKeys)));
         return card;
     }
 
@@ -681,10 +688,12 @@ public sealed class SettingsForm : ThemedForm
             && _translateHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
         bool isVoice = !isConvert && !isCase && !isTranslate
             && _voiceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
+        bool isReplace = !isConvert && !isCase && !isTranslate && !isVoice
+            && _replaceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
 
         // Совпавшее сочетание глотаем: иначе Win откроет «Пуск» прямо из окна
         // настроек. Всё остальное пропускаем — окном надо пользоваться.
-        if (isConvert || isCase || isTranslate || isVoice) e.Handled = true;
+        if (isConvert || isCase || isTranslate || isVoice || isReplace) e.Handled = true;
 
         var seen = new HotkeyConfig
         {
@@ -711,6 +720,11 @@ public sealed class SettingsForm : ThemedForm
         else if (isVoice)
         {
             _probeStatus.Text = L10n.T("probe.matchVoice");
+            _probeStatus.ForeColor = Theme.Accent;
+        }
+        else if (isReplace)
+        {
+            _probeStatus.Text = L10n.T("probe.matchReplace");
             _probeStatus.ForeColor = Theme.Accent;
         }
         else
@@ -1031,6 +1045,7 @@ public sealed class SettingsForm : ThemedForm
         _caseKeys.SetCombo(_caseHotkey.ToString());
         _translateKeys.SetCombo(_translateHotkey.ToString());
         _voiceKeys.SetCombo(_voiceHotkey.ToString());
+        _replaceKeys.SetCombo(_replaceHotkey.ToString());
     }
 
     private void RecordInto(ref HotkeyConfig target, HotkeyDisplay display)
@@ -1072,7 +1087,11 @@ public sealed class SettingsForm : ThemedForm
             || _translateHotkey.SameCombo(_caseHotkey)
             || _voiceHotkey.SameCombo(_convertHotkey)
             || _voiceHotkey.SameCombo(_caseHotkey)
-            || _voiceHotkey.SameCombo(_translateHotkey))
+            || _voiceHotkey.SameCombo(_translateHotkey)
+            || _replaceHotkey.SameCombo(_convertHotkey)
+            || _replaceHotkey.SameCombo(_caseHotkey)
+            || _replaceHotkey.SameCombo(_translateHotkey)
+            || _replaceHotkey.SameCombo(_voiceHotkey))
         {
             Notice.Warn(this, L10n.T("hotkey.clash.title"),
                 L10n.T("hotkey.clash.body"), L10n.T("hotkey.clash.hint"));
@@ -1091,6 +1110,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.ChangeCaseHotkey = _caseHotkey;
         _settings.TranslateHotkey = _translateHotkey;
         _settings.VoiceHotkey = _voiceHotkey;
+        _settings.ReplaceHotkey = _replaceHotkey;
         _settings.TranslationEnabled = Translator.IsReady;
 
         // Реестр — единственный источник правды для автозапуска.
