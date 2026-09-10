@@ -107,6 +107,9 @@ public sealed class TrayContext : ApplicationContext
         var miFeedback = new ToolStripMenuItem(L10n.T("tray.feedback"));
         miFeedback.Click += (_, _) => FeedbackForm.ShowDialogFor();
 
+        var miNews = new ToolStripMenuItem(L10n.T("tray.news"));
+        miNews.Click += (_, _) => WhatsNewForm.ShowAll(_app.Settings);
+
         var miAbout = new ToolStripMenuItem(L10n.T("tray.about"));
         miAbout.Click += (_, _) => Notice.Info(null,
             $"oops {UpdateService.CurrentVersion}",
@@ -121,6 +124,7 @@ public sealed class TrayContext : ApplicationContext
             new ToolStripSeparator(),
             miSettings,
             _miUpdate,
+            miNews,
             miFeedback,
             miAbout,
             new ToolStripSeparator(),
