@@ -47,6 +47,15 @@ public class ChangelogTests
     }
 
     [Fact]
+    public void HistoryGoesBackToTheFirstRelease()
+    {
+        // Боковой список показывает все версии от первой: человек, поставивший
+        // программу сегодня, должен видеть, из чего она выросла.
+        Assert.Contains(Changelog.All, c => c.Version == new Version(1, 0, 0));
+        Assert.All(Changelog.All, c => Assert.NotEmpty(c.Entries));
+    }
+
+    [Fact]
     public void NothingNewAfterTheLatestVersion()
     {
         var newest = Changelog.All.Max(c => c.Version)!;
