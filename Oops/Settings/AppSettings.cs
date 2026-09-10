@@ -45,6 +45,14 @@ public sealed class AppSettings
     /// </summary>
     public bool CharByCharTyping { get; set; } = false;
 
+    /// <summary>
+    /// Версия, о которой человеку уже рассказали в окне «Что нового».
+    ///
+    /// Пусто — программу поставили только что: тогда окно не показываем, там
+    /// своё дело делает мастер первого запуска.
+    /// </summary>
+    public string LastSeenVersion { get; set; } = string.Empty;
+
     /// <summary>Проверять обновления на GitHub при запуске (не чаще раза в сутки).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 

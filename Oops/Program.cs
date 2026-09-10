@@ -76,6 +76,11 @@ internal static class Program
         // Application.Run ещё не нужен.
         WelcomeForm.ShowIfFirstRun(app);
 
+        // «Что нового» — сразу после мастера и до трея: обновление проходит
+        // молча, и без этого окна о новой функции узнают случайно, а хоткей,
+        // о котором не знают, ничем не отличается от отсутствующего.
+        WhatsNewForm.ShowIfUpdated(settings);
+
         var ctx = new TrayContext(app);
         Application.Run(ctx);
     }
