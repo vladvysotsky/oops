@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Oops.Core;
 using Oops.Hooks;
@@ -71,6 +72,22 @@ public sealed class App : IDisposable
 
     /// <summary>Меньше секунды звука распознавать бессмысленно — только шум.</summary>
     private const int MinVoiceBytes = 44 + Recorder.SampleRate * 2;
+
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>Окно, в котором лежит выделение, — на время показа диалога замены.</summary>
+    private IntPtr _replaceTarget;
+
+    /// <summary>
+    /// Нажали хоткей замены при живом выделении: нужно показать диалог.
+    /// Текст выделения приходит в аргументе, ответ — через
+    /// <see cref="ApplyReplacement"/>.
+    /// </summary>
+    public event EventHandler<string>? ReplaceRequested;
+
+    /// <summary>Нажали хоткей замены, а ничего не выделено.</summary>
+    public event EventHandler? ReplaceNeedsSelection;
 
     /// <summary>Нажали хоткей голосового ввода, а модели на диске нет.</summary>
     public event EventHandler? VoiceModelMissing;
@@ -176,6 +193,15 @@ public sealed class App : IDisposable
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
             _uiContext.Post(_ => ToggleVoice(), null);
+            return;
+        }
+
+        if (Settings.ReplaceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
+        {
+            e.Handled = true;
+            if (e.IsRepeat) return;
+            Sender.CancelMenuActivation();
+            _uiContext.Post(_ => RunReplace(), null);
             return;
         }
 
@@ -489,6 +515,52 @@ public sealed class App : IDisposable
                 VoiceFinished?.Invoke(this, EventArgs.Empty);
             }, null);
         });
+    }
+
+    /// <summary>
+    /// Замена в выделенном тексте. Выделение читаем ДО показа диалога: окно
+    /// заберёт фокус, и вторая попытка прочитать выделение уже ничего не даст.
+    /// </summary>
+    private void RunReplace()
+    {
+        Sender.WaitForModifiersReleased();
+        Sender.ReleaseHotkeyModifiers();
+
+        var selection = SelectionReader.TryRead();
+        if (string.IsNullOrEmpty(selection))
+        {
+            ReplaceNeedsSelection?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        // Запоминаем, куда возвращаться: диалог заберёт фокус себе, а печатать
+        // результат надо в то окно, где лежит выделение, а не в последнее
+        // активное — им к моменту закрытия может оказаться что угодно.
+        _replaceTarget = GetForegroundWindow();
+        ReplaceRequested?.Invoke(this, selection);
+    }
+
+    /// <summary>
+    /// Печатает результат замены поверх выделения. null — человек передумал
+    /// или менять оказалось нечего.
+    /// </summary>
+    public void ApplyReplacement(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        if (_replaceTarget != IntPtr.Zero)
+        {
+            SetForegroundWindow(_replaceTarget);
+            // Возврат фокуса не мгновенный: без паузы первые символы уходят
+            // ещё закрывающемуся диалогу и пропадают.
+            Thread.Sleep(120);
+        }
+        _replaceTarget = IntPtr.Zero;
+
+        Sender.WaitForModifiersReleased();
+        // Выделение всё ещё активно — ввод перетирает его сам, стирать нечего.
+        Sender.SendUnicode(text!);
+        ResetAll();
     }
 
     /// <summary>

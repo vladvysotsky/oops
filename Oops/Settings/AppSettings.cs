@@ -70,6 +70,12 @@ public sealed class AppSettings
     /// </summary>
     public HotkeyConfig VoiceHotkey { get; set; } = HotkeyConfig.VoiceDefault;
 
+    /// <summary>
+    /// Замена в выделенном тексте: открывает диалог поиска и замены, в том
+    /// числе по регулярному выражению.
+    /// </summary>
+    public HotkeyConfig ReplaceHotkey { get; set; } = HotkeyConfig.ReplaceDefault;
+
     /// <summary>Максимальная длина одной записи, секунд.</summary>
     public int VoiceMaxSeconds { get; set; } = 120;
 
@@ -127,6 +133,7 @@ public sealed class AppSettings
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);
         TranslateHotkey = Fix(TranslateHotkey, HotkeyConfig.TranslateDefault);
         VoiceHotkey = Fix(VoiceHotkey, HotkeyConfig.VoiceDefault);
+        ReplaceHotkey = Fix(ReplaceHotkey, HotkeyConfig.ReplaceDefault);
 
         // Совпавшие сочетания = второй хоткей мёртв: App проверяет их по
         // порядку и до второго сравнения не доходит вообще — «никакой
@@ -142,6 +149,9 @@ public sealed class AppSettings
         if (VoiceHotkey.SameCombo(ConvertHotkey) || VoiceHotkey.SameCombo(ChangeCaseHotkey)
             || VoiceHotkey.SameCombo(TranslateHotkey))
             VoiceHotkey = HotkeyConfig.VoiceDefault;
+        if (ReplaceHotkey.SameCombo(ConvertHotkey) || ReplaceHotkey.SameCombo(ChangeCaseHotkey)
+            || ReplaceHotkey.SameCombo(TranslateHotkey) || ReplaceHotkey.SameCombo(VoiceHotkey))
+            ReplaceHotkey = HotkeyConfig.ReplaceDefault;
 
         if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
         if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;

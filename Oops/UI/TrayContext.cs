@@ -47,6 +47,20 @@ public sealed class TrayContext : ApplicationContext
         _app.VoiceRecognising += (_, _) => VoiceOverlay.Recognising();
         _app.VoiceFinished += (_, _) => VoiceOverlay.Hide();
 
+        // Диалог замены открывает трей, а не App: App не знает про окна, и
+        // это единственное, что удерживает его от превращения в UI-класс.
+        _app.ReplaceRequested += (_, selection) =>
+        {
+            _app.HotkeysSuspended = true;
+            try { _app.ApplyReplacement(ReplaceForm.Ask(selection)); }
+            finally { _app.HotkeysSuspended = false; }
+        };
+
+        _app.ReplaceNeedsSelection += (_, _) => Notice.Info(null,
+            L10n.T("replace.noSelection.title"),
+            L10n.T("replace.noSelection.body"),
+            L10n.T("replace.noSelection.hint"));
+
         _app.VoiceModelMissing += (_, _) => Notice.Info(null,
             L10n.T("voice.models.title"),
             L10n.T("voice.models.body", ModelCatalog.VoiceMegabytes),
