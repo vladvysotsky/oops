@@ -76,6 +76,18 @@ public sealed class App : IDisposable
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    /// <summary>
+    /// Сторож хука. Windows молча снимает низкоуровневый хук, если обработчик
+    /// не ответил за LowLevelHooksTimeout (по умолчанию 300 мс), а обработчик
+    /// живёт в UI-потоке — том самом, который мы занимаем ожиданием отпускания
+    /// модификаторов и печатью длинного текста. Снаружи это ровно то, на что
+    /// жалуется человек: «в какой-то момент перестала работать».
+    /// </summary>
+    private readonly System.Windows.Forms.Timer _hookWatchdog = new() { Interval = 20_000 };
+
+    /// <summary>Хук пришлось восстанавливать — трею есть о чём сказать в логе.</summary>
+    public event EventHandler? HookRevived;
+
     /// <summary>Окно, в котором лежит выделение, — на время показа диалога замены.</summary>
     private IntPtr _replaceTarget;
 
@@ -125,6 +137,10 @@ public sealed class App : IDisposable
         _kbHook.Install();
         _mouseHook.Install();
         _fgWatcher.Install();
+
+        _hookWatchdog.Tick += OnHookWatchdog;
+        _hookWatchdog.Start();
+        Log.Write("хуки установлены, сторож запущен");
     }
 
     public void ApplySettings()
@@ -135,6 +151,37 @@ public sealed class App : IDisposable
         _recorder.MaxDuration = TimeSpan.FromSeconds(Settings.VoiceMaxSeconds);
     }
 
+    /// <summary>
+    /// Переставляет хук, если система его сняла. Момент выбираем спокойный:
+    /// переустановка обнуляет список зажатых клавиш, и сделать это посреди
+    /// аккорда значило бы сломать сочетание прямо под пальцами.
+    /// </summary>
+    private void OnHookWatchdog(object? sender, EventArgs e)
+    {
+        // Сначала — залипшие клавиши: их отпускание могло не дойти (запрос UAC,
+        // смена сеанса, лишний Ctrl от клавиши Pause), и тогда модификатор
+        // числится зажатым навсегда, а сочетания молчат.
+        var stuck = _kbHook.DropStuckKeys(TimeSpan.FromMinutes(1));
+        if (stuck.Count > 0)
+            Log.Write("сброшены залипшие клавиши: "
+                      + string.Join(", ", stuck.Select(v => $"VK 0x{v:X2}")));
+
+        if (_kbHook.AnyKeyDown || _translating || _transcribing || _recorder.IsRecording) return;
+
+        try
+        {
+            if (_kbHook.Revive())
+            {
+                Log.Write("ХУК БЫЛ СНЯТ СИСТЕМОЙ — восстановлен");
+                HookRevived?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write("не удалось восстановить хук: " + ex.Message);
+        }
+    }
+
     private void ResetAll()
     {
         _buffer.Clear();
@@ -143,7 +190,15 @@ public sealed class App : IDisposable
 
     private void OnKeyDown(object? sender, KeyboardHook.KeyEvent e)
     {
-        if (!Settings.Enabled || HotkeysSuspended) return;
+        // Клавиша пишется КОДОМ, без символа: этого хватает, чтобы понять,
+        // доходит ли сочетание, и лог не становится записью всего ввода.
+        Log.Key("нажатие", (int)e.VirtualKey, e.Ctrl, e.Alt, e.Shift, e.Win, e.IsRepeat);
+
+        if (!Settings.Enabled || HotkeysSuspended)
+        {
+            Log.Write(Settings.Enabled ? "  пропущено: открыты настройки" : "  пропущено: выключено");
+            return;
+        }
 
         // Пользователь сам сменил раскладку (Alt+Shift, Win+Space) — дальнейшие
         // нажатия дают другие буквы, наша лента больше не соответствует экрану.
@@ -165,6 +220,7 @@ public sealed class App : IDisposable
             if (e.IsRepeat) return;
             // Пока Alt ещё зажат — гасим активацию строки меню, иначе уедет фокус.
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: раскладка");
             _uiContext.Post(_ => RunStep(layout: true, pressedAtUtc), null);
             return;
         }
@@ -174,6 +230,7 @@ public sealed class App : IDisposable
             e.Handled = true;
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: регистр");
             _uiContext.Post(_ => RunStep(layout: false, pressedAtUtc), null);
             return;
         }
@@ -183,6 +240,7 @@ public sealed class App : IDisposable
             e.Handled = true;
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: перевод");
             _uiContext.Post(_ => RunTranslate(), null);
             return;
         }
@@ -192,6 +250,7 @@ public sealed class App : IDisposable
             e.Handled = true;
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: голосовой ввод");
             _uiContext.Post(_ => ToggleVoice(), null);
             return;
         }
@@ -201,6 +260,7 @@ public sealed class App : IDisposable
             e.Handled = true;
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: замена");
             _uiContext.Post(_ => RunReplace(), null);
             return;
         }
@@ -580,6 +640,8 @@ public sealed class App : IDisposable
 
     public void Dispose()
     {
+        _hookWatchdog.Stop();
+        _hookWatchdog.Dispose();
         _voiceTick.Stop();
         _voiceTick.Dispose();
         _voiceCts?.Cancel();

@@ -53,6 +53,13 @@ public sealed class AppSettings
     /// </summary>
     public string LastSeenVersion { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Подробный лог в %AppData%\Oops\logs. Выключен по умолчанию: нужен
+    /// только для разбора «перестало работать». Набранный текст в него не
+    /// попадает — клавиши пишутся кодами.
+    /// </summary>
+    public bool VerboseLog { get; set; } = false;
+
     /// <summary>Проверять обновления на GitHub при запуске (не чаще раза в сутки).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 
