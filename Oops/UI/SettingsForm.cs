@@ -23,6 +23,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbAutoUpdate = new ToggleBox();
     private readonly CheckBox _cbCharByChar = new ToggleBox();
     private readonly CheckBox _cbVoiceLive = new ToggleBox();
+    private readonly CheckBox _cbVerboseLog = new ToggleBox();
     private readonly SegmentedControl _theme = new();
     private readonly SegmentedControl _language = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
@@ -213,6 +214,8 @@ public sealed class SettingsForm : ThemedForm
                 AddAutoRow(stack, Note(L10n.T("welcome.note.altShift")));
                 AddAutoRow(stack, SectionLabel(L10n.T("settings.section.probe")));
                 AddAutoRow(stack, ProbeCard());
+                AddAutoRow(stack, SectionLabel(L10n.T("settings.log.title")));
+                AddAutoRow(stack, LogCard());
                 break;
             default:
                 AddAutoRow(stack, BehaviourCard());
@@ -391,6 +394,62 @@ public sealed class SettingsForm : ThemedForm
             L10n.T("hotkey.replace"), L10n.T("hotkey.replace.hint"),
             _replaceKeys, () => RecordInto(ref _replaceHotkey, _replaceKeys)));
         return card;
+    }
+
+    /// <summary>
+    /// Подробный лог: включается здесь же, рядом с проверкой сочетаний — это
+    /// вторая ступень того же разбора «почему ничего не происходит».
+    /// </summary>
+    private Control LogCard()
+    {
+        var card = NewCard(out var rows);
+
+        AddAutoRow(rows, new Label
+        {
+            Text = L10n.T("settings.log.body"),
+            Font = Theme.Caption,
+            ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            MaximumSize = new Size(CardInnerWidth, 0),
+            Margin = new Padding(0, 0, 0, Theme.S2),
+            BackColor = Color.Transparent,
+        });
+
+        AddAutoRow(rows, CheckRow(_cbVerboseLog, L10n.T("settings.log.enable"),
+            L10n.T("settings.log.enable.hint")));
+        AddAutoRow(rows, Divider());
+
+        var open = new FlatButton
+        {
+            Text = L10n.T("settings.log.open"),
+            AutoSize = true,
+            MinimumSize = new Size(Theme.Px(180), 0),
+        };
+        open.Click += (_, _) => OpenLogFolder();
+        AddAutoRow(rows, ButtonBar.Create(CardInnerWidth, new Padding(0, Theme.S2, 0, 0), open));
+
+        return card;
+    }
+
+    private void OpenLogFolder()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Log.Directory);
+            // Только папка логов и только она: Process.Start с UseShellExecute
+            // запускает что угодно, и путь сюда обязан быть нашим собственным.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Log.Directory,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Notice.Error(this, L10n.T("settings.log.openFailed.title"),
+                L10n.T("settings.log.openFailed.body", Log.Directory),
+                L10n.T("settings.log.openFailed.hint"), ex.ToString());
+        }
     }
 
     private Control BehaviourCard()
@@ -1031,6 +1090,7 @@ public sealed class SettingsForm : ThemedForm
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
         _cbVoiceLive.Checked = _settings.VoiceLiveText;
+        _cbVerboseLog.Checked = _settings.VerboseLog;
         // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
         // запустит пересборку окна по кругу.
         _theme.SelectedIndexChanged -= ThemeChangedHandler;
@@ -1102,6 +1162,11 @@ public sealed class SettingsForm : ThemedForm
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
         _settings.VoiceLiveText = _cbVoiceLive.Checked;
+
+        // Лог включаем и выключаем сразу: человек жмёт «Сохранить» ровно
+        // затем, чтобы следующее же нажатие хоткея попало в файл.
+        _settings.VerboseLog = _cbVerboseLog.Checked;
+        if (_settings.VerboseLog) Log.Start(); else Log.Stop();
         _settings.Language = _languagePref;
         _settings.Theme = _themePref;
         _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
