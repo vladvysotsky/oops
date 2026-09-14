@@ -41,20 +41,29 @@ try {
     if (git tag --list $tag) { throw "Тег $tag уже существует локально" }
     if (git ls-remote --tags origin $tag) { throw "Тег $tag уже есть на origin" }
 
-    # 2. ГЛАВНАЯ ПРОВЕРКА: всё из ветки разработки доехало в main.
-    #    Именно её отсутствие трижды и стоило нам релиза.
-    git merge-base --is-ancestor "origin/$Branch" origin/main
-    if ($LASTEXITCODE -ne 0) {
-        $behind = (git log --oneline "origin/main..origin/$Branch" | Measure-Object -Line).Lines
-        throw "origin/main НЕ содержит origin/$Branch (отстаёт на $behind коммит(ов)). " +
-              "Сначала влейте pull request, потом ставьте тег."
+    # 2. ГЛАВНАЯ ПРОВЕРКА: версия в csproj на origin/main совпадает с тегом.
+    #    Она и ловит ту самую ошибку — тег до мержа: на невлитом main лежит
+    #    версия прошлого релиза, и совпасть она не может по построению.
+    #
+    #    git show отдаёт МАССИВ строк, а -notmatch на массиве не булев ответ,
+    #    а фильтр: возвращает все не совпавшие строки, и непустой список в if
+    #    всегда истина. Склеиваем в одну строку — иначе проверка врёт всегда.
+    $csproj = (git show "origin/main:Oops/Oops.csproj") -join "`n"
+    if ($csproj -notmatch "<Version>$([regex]::Escape($Version))</Version>") {
+        $actual = if ($csproj -match '<Version>([^<]+)</Version>') { $Matches[1] } else { "не найдена" }
+        throw "На origin/main версия $actual, а тег просят $Version. " +
+              "Похоже, pull request ещё не влит."
     }
 
-    # 3. Версия в csproj совпадает с тегом — иначе локальные сборки будут
-    #    называть себя не тем, чем их назвал релиз.
-    $csproj = git show "origin/main:Oops/Oops.csproj"
-    if ($csproj -notmatch "<Version>$([regex]::Escape($Version))</Version>") {
-        throw "В Oops.csproj на origin/main версия не $Version"
+    # 3. Ветка разработки доехала в main — ПРЕДУПРЕЖДЕНИЕ, а не отказ.
+    #    Отказ здесь загонял в тупик: любая правка самого этого скрипта уводит
+    #    prerelease вперёд, и выпустить релиз становится нельзя, пока не влит
+    #    ещё один pull request — про сам инструмент выпуска.
+    git merge-base --is-ancestor "origin/$Branch" origin/main
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`nВНИМАНИЕ: origin/main не содержит эти коммиты из origin/${Branch}:" -ForegroundColor Yellow
+        git log --oneline "origin/main..origin/$Branch"
+        Write-Host "В релиз они не попадут.`n" -ForegroundColor Yellow
     }
 
     # 4. Описание релиза на месте — иначе в релизе останется одна строка
