@@ -39,6 +39,12 @@ have just typed, on a hotkey. Works globally, in every application.
 - Development branch: `prerelease` — all work goes there. The user's local
   checkout is on it too. `claude/amazing-bardeen-ZvoqL` is the old branch, its
   PR #1 has been merged.
+- **Do not add `Co-Authored-By` trailers to commits.** The repository is public,
+  and the contributor list is the author's. Commit messages describe the change
+  and why, and nothing else.
+- README lives in two files: `README.md` (English, what GitHub shows by default)
+  and `README.ru.md`. They are cross-linked at the top; a change to one belongs
+  in the other in the same commit.
 - The user builds and tests on Windows themselves. If a bug "doesn't
   reproduce", first check that they built the latest commit
   (`git log --oneline -1`).
