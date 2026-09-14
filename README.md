@@ -1,122 +1,141 @@
 # oops
 
+**English** · [Русский](README.ru.md)
+
 [![CI](https://github.com/vladvysotsky/oops/actions/workflows/ci.yml/badge.svg)](https://github.com/vladvysotsky/oops/actions/workflows/ci.yml)
-[![Релиз](https://img.shields.io/github/v/release/vladvysotsky/oops?label=релиз)](https://github.com/vladvysotsky/oops/releases/latest)
-[![Лицензия](https://img.shields.io/badge/лицензия-MIT-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/vladvysotsky/oops?label=release)](https://github.com/vladvysotsky/oops/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 > `ghjdthrf njuj rfr 'nj hf,jnftn` → **oops** → `проверка того как это работает`
 
-Набрали абзац и только потом заметили, что раскладка была не та? Нажмите хоткей —
-и текст встанет на место. Названо по тому самому моменту.
+Typed a whole paragraph and only then noticed the layout was wrong? Press the
+hotkey and the text falls into place. Named after that very moment.
 
-Работает во всех приложениях Windows: браузер, мессенджеры, IDE, терминал.
+Works in every Windows application: browsers, messengers, IDEs, the terminal.
 
-<sub>Fixes text typed in the wrong keyboard layout (RU ↔ EN) and toggles case,
-anywhere in Windows. You define the boundary: first press fixes the last word,
-second fixes everything you typed. Interface and docs are in Russian.</sub>
+## 🧼 What it does
 
-## 🧼 Что делает
+- **Fixes the keyboard layout** RU ↔ EN on text you have just typed.
+- **Switches case** — UPPER ↔ lower, by the same logic.
+- **Converts a selection** as a whole, if something is selected with the mouse.
+- **Translates** RU ↔ EN right in the input field — *beta*.
+- **Types what you dictate** — *beta*.
+- **Finds and replaces** inside a selection, regular expressions included — *beta*.
 
-- **Правит раскладку** RU ↔ EN у только что набранного текста.
-- **Меняет регистр** — ВЕРХНИЙ ↔ нижний, по той же логике.
-- **Конвертирует выделенное** целиком, если что-то выделено мышью.
-- **Переводит** RU ↔ EN прямо в поле ввода — *бета*.
-- **Печатает под диктовку** — *бета*.
+Translation and speech recognition run **on your machine**: neither the text nor
+the audio is sent anywhere. The models are downloaded once and need no internet
+afterwards.
 
-Перевод и распознавание речи работают **на вашей машине**: ни текст, ни звук
-никуда не отправляются. Модели скачиваются один раз, из настроек, и дальше
-интернет не нужен.
+## ⏪ You set the boundary
 
-## ⏪ Границу задаёте вы
+The program does not guess where you slipped. It does exactly what you asked for
+with the number of presses:
 
-Программа не угадывает, где вы сбились. Она делает ровно то, что вы указали
-количеством нажатий:
-
-| Нажатие | Что захватывает |
+| Press | What it captures |
 |---|---|
-| 1-е | последнее слово |
-| 2-е | весь набранный текст |
+| 1st | the last word |
+| 2nd | everything you typed |
 
 ```
-набрали:   ghjdthrf njuj rfr 'nj hf,jnftn
-1-е        ghjdthrf njuj rfr 'nj работает
-2-е        проверка того как это работает
+typed:     ghjdthrf njuj rfr 'nj hf,jnftn
+1st        ghjdthrf njuj rfr 'nj работает
+2nd        проверка того как это работает
 ```
 
-Каждый шаг — преобразование 1-в-1 чётко очерченного куска. Текст за его
-пределами не трогается никогда. Не успели нажать второй раз за 2 секунды —
-начинается новая область, снова с последнего слова.
+Every step is a 1-to-1 transformation of a clearly delimited piece. Text outside
+it is never touched. Miss the second press within 2 seconds and a new scope
+begins, again from the last word.
 
-## ⌨️ Горячие клавиши
+## ⌨️ Hotkeys
 
-| Действие | По умолчанию |
+| Action | Default |
 |---|---|
-| Раскладка | `Ctrl` + `Win` |
-| Регистр | `Alt` + `Win` |
-| Перевод | `Ctrl` + `Alt` + `Win` |
-| Голосовой ввод | `Ctrl` + `Shift` + `Win` |
+| Layout | `Ctrl` + `Win` |
+| Case | `Alt` + `Win` |
+| Translate | `Ctrl` + `Alt` + `Win` |
+| Voice input | `Ctrl` + `Shift` + `Win` |
+| Replace in selection | `Alt` + `Shift` + `Win` |
 
-Обе комбинации меняются в настройках: правый клик по иконке в трее → Настройки.
+All of them can be changed in the settings: right-click the tray icon →
+Settings.
 
-`Alt` + `Shift` назначить нельзя — эту комбинацию Windows забирает себе под
-смену раскладки, до приложения она не доходит. Окно записи такое сочетание
-отклоняет.
+`Alt` + `Shift` cannot be assigned — Windows keeps that combination for
+switching layouts and it never reaches the application. The recording dialog
+rejects it.
 
-## 🌐 Перевод и голосовой ввод — бета
+## 🌐 Translation, voice input and replace — beta
 
-Обе функции появились в 2.0 и обкатаны меньше остального: возможны ошибки и
-промахи распознавания. Включаются в настройках, на вкладке «Поведение» —
-там же скачиваются модели.
+These arrived in 2.0 and 2.1 and have seen less mileage than the rest: expect
+mistakes and misses. They are switched on in the settings, on the "Behaviour"
+tab — the models are downloaded there too.
 
-- **Перевод** — движок [Bergamot](https://browser.mt/), тот же, что переводит
-  страницы в Firefox. Модели из официального реестра Mozilla, около 45 МБ.
-  Переводит набранный текст или выделение, направление выбирает по тексту.
-- **Голосовой ввод** — [whisper.cpp](https://github.com/ggerganov/whisper.cpp)
-  через Whisper.net, модель `small`, около 465 МБ. Нажали хоткей — говорите,
-  нажали ещё раз — запись закончена. Текст появляется по ходу речи и уточняется
-  на лету; если мельтешение мешает, в настройках это отключается.
+- **Translation** — the [Bergamot](https://browser.mt/) engine, the same one
+  that translates pages in Firefox. Models from Mozilla's official registry,
+  about 45 MB. Translates what you typed or the selection, and picks the
+  direction from the text itself.
+- **Voice input** — [whisper.cpp](https://github.com/ggerganov/whisper.cpp) via
+  Whisper.net, the `small` model, about 465 MB. Press the hotkey and speak;
+  press it again to finish. Text appears while you speak and is refined as it
+  goes; if the churn distracts you, turn that off in the settings.
+- **Replace in selection** — plain search and regular expressions, with a
+  preview and the number of replacements shown before anything is typed. The
+  wizard offers ready-made rules (collapse double spaces, strip HTML tags,
+  typographic quotes) and building blocks that go into the search field.
 
-Звук существует только в памяти и только до конца распознавания — на диск он
-не пишется никогда.
+The audio exists only in memory and only until recognition finishes — it is
+never written to disk.
 
-## 📋 Буфер обмена остаётся чистым
+## 📋 The clipboard stays clean
 
-Исправленный текст печатается эмуляцией клавиатуры и в буфер обмена не
-попадает — история `Win` + `V` не засоряется.
+Corrected text is typed through keyboard emulation and never reaches the
+clipboard, so your `Win` + `V` history is not polluted.
 
-Буфер читается только чтобы узнать выделенный текст: другого универсального
-способа Windows не даёт. Прежнее содержимое возвращается сразу же.
+The clipboard is read only to learn the current selection: Windows offers no
+other universal way. The previous content is restored immediately.
 
-## 📦 Установка
+## 📦 Installation
 
-Скачайте со [страницы релизов](https://github.com/vladvysotsky/oops/releases):
+Download from the [releases page](https://github.com/vladvysotsky/oops/releases):
 
-- **`oops-Setup-*.exe`** — обычная установка с ярлыками и автозапуском.
-- **`oops-portable-*.zip`** — просто распакуйте и запустите, без установки.
+- **`oops-Setup-*.exe`** — a normal installation with shortcuts and autostart.
+- **`oops-portable-*.zip`** — just unpack and run, no installation.
 
-При первом запуске откроется мастер: он показывает, как работает модель, и
-предлагает выбрать сочетания клавиш. Дальше программа живёт в трее — двойной
-клик по иконке открывает настройки.
+On the first run a wizard opens: it shows how the model works and offers to pick
+your hotkeys. After that the program lives in the tray — double-click the icon
+to open the settings.
 
-При первом запуске Windows покажет предупреждение SmartScreen — сборки не
-подписаны сертификатом. «Подробнее» → «Выполнить в любом случае».
+Windows will show a SmartScreen warning on first run: the builds are not signed
+with a certificate. "More info" → "Run anyway".
 
-Проверить, что скачали именно то, что собрал CI, можно по `SHA256SUMS.txt`
-из того же релиза:
+To check that you downloaded exactly what CI built, use the `SHA256SUMS.txt`
+from the same release:
 
 ```powershell
-Get-FileHash .\oops-Setup-1.0.0.exe -Algorithm SHA256
+Get-FileHash .\oops-Setup-2.1.1.exe -Algorithm SHA256
 ```
 
-## 🔄 Обновления
+## 🔄 Updates
 
-Приложение раз в сутки проверяет релизы и предлагает поставить новую версию:
-скачивает установщик и запускает его. Отключается галкой в настройках, запустить
-вручную — пункт «Проверить обновления» в меню трея.
+Once a day the application checks the releases and offers to install a new
+version: it downloads the installer and runs it. The downloaded file is verified
+against the published SHA-256 before it is launched. Turn the check off with a
+checkbox in the settings; run it by hand from "Check for updates" in the tray
+menu.
 
-## 🔨 Сборка из исходников
+## 🩺 When a hotkey goes silent
 
-Нужен [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). Только Windows.
+Settings → "Hotkeys" → the **PROBE** card shows what actually reached the
+program and whether it matched. That immediately separates "Windows kept the
+combination for itself" from "the program did not recognise it".
+
+Right below it is **DIAGNOSTICS**: a detailed log for the case where the program
+stops responding after a while. Keys are written as codes, not as characters —
+what you type never reaches the log.
+
+## 🔨 Building from source
+
+You need the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+Windows only.
 
 ```powershell
 git clone https://github.com/vladvysotsky/oops.git
@@ -126,64 +145,59 @@ dotnet test
 dotnet run --project Oops
 ```
 
-Готовый exe одним файлом:
+A single-file exe:
 
 ```powershell
 dotnet publish Oops -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
-Всё это разом — обновить ветку, прогнать тесты, собрать и запустить —
-делает `dev.ps1` (нужен PowerShell 7):
+All of it at once — update the branch, run the tests, build and launch — is what
+`dev.ps1` does (PowerShell 7 required):
 
 ```powershell
 pwsh -ExecutionPolicy Bypass -File dev.ps1
 ```
 
-Ключи: `-NoPull`, `-NoTest`, `-NoRun`, `-Branch <имя>`. Скрипт сам закрывает
-запущенную копию: она держит `oops.exe` открытым, и сборка иначе падает.
+Switches: `-NoPull`, `-NoTest`, `-NoRun`, `-Branch <name>`. The script closes a
+running copy itself: it holds `oops.exe` open and the build fails otherwise.
 
-Установщик — понадобится ещё [Inno Setup 6](https://jrsoftware.org/isinfo.php)
-и PowerShell 7:
+For the installer you also need [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+and PowerShell 7:
 
 ```powershell
 pwsh -ExecutionPolicy Bypass -File installer\build.ps1
 ```
 
-Результат появится в `dist\`. Релизы собираются автоматически: пуш тега `vX.Y.Z`
-запускает CI, который прогоняет тесты, собирает установщик с портативным архивом
-и публикует их.
+The result lands in `dist\`. Releases are built automatically: pushing a
+`vX.Y.Z` tag starts CI, which runs the tests, builds the installer and the
+portable archive, and publishes them.
 
-## ⚠️ Ограничения
+## ⚠️ Limitations
 
-- Только Windows 10 и 11.
-- В окнах, запущенных от имени администратора (RegEdit, диспетчер задач),
-  эмуляция ввода не работает, если само приложение запущено без прав админа.
-  Запуск «от имени администратора» это чинит, но ломает автозапуск: Windows
-  игнорирует записи elevated-приложений в `HKCU\...\Run`.
-- При отладке из-под отладчика Windows отключает клавиатурный хук по таймауту —
-  проверяйте через **Ctrl+F5** или собранный exe.
+- Windows 10 and 11 only.
+- In windows running as administrator (RegEdit, Task Manager) input emulation
+  does not work unless the application itself runs elevated. Running it "as
+  administrator" fixes that but breaks autostart: Windows ignores `HKCU\...\Run`
+  entries for elevated applications.
+- Under a debugger Windows disables the keyboard hook on timeout — test with
+  **Ctrl+F5** or the published exe.
 
-## 🤝 Как помочь
+## 🤝 Contributing
 
-Нашли ошибку — [заведите issue](https://github.com/vladvysotsky/oops/issues/new/choose).
-Программа умеет это сама: в окне ошибки есть кнопка «Сообщить об ошибке», она
-открывает форму с уже заполненной версией и подробностями.
+Found a bug — [open an issue](https://github.com/vladvysotsky/oops/issues/new/choose).
+The program can do it for you: the error window has a "Report a problem" button
+that opens a form with the version and the details already filled in.
 
-Если хоткей молчит, посмотрите сначала карточку **ПРОВЕРКА** в настройках: она
-показывает, что реально дошло до программы и совпало ли с назначенным. Это сразу
-отделяет «Windows забрала сочетание себе» от «программа его не узнала».
+Before making changes, read [CLAUDE.md](CLAUDE.md) — it explains the
+"expanding scope" model and collects the Win32 traps we have already stepped in:
+why `GetAsyncKeyState` lies about our own modifiers, why `SendUnicode` must
+clear Alt before every character, why the Win key cannot be recorded through
+WinForms events. Most of that list is fixed bugs, not speculation.
 
-Перед правками загляните в [CLAUDE.md](CLAUDE.md) — там разобрана модель
-«расширяющейся области» и собраны грабли Win32, на которые мы уже наступили:
-почему `GetAsyncKeyState` врёт про собственные модификаторы, почему `SendUnicode`
-обязан снимать Alt перед каждым символом, почему клавишу Win нельзя записать
-через события WinForms. Большая часть этого списка — исправленные баги, а не
-предположения.
-
-## Автор
+## Author
 
 [vladvysotsky](https://github.com/vladvysotsky)
 
-## Лицензия
+## License
 
-MIT — см. [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
