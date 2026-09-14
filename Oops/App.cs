@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Oops.Core;
 using Oops.Hooks;
@@ -72,6 +73,34 @@ public sealed class App : IDisposable
     /// <summary>Меньше секунды звука распознавать бессмысленно — только шум.</summary>
     private const int MinVoiceBytes = 44 + Recorder.SampleRate * 2;
 
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>
+    /// Сторож хука. Windows молча снимает низкоуровневый хук, если обработчик
+    /// не ответил за LowLevelHooksTimeout (по умолчанию 300 мс), а обработчик
+    /// живёт в UI-потоке — том самом, который мы занимаем ожиданием отпускания
+    /// модификаторов и печатью длинного текста. Снаружи это ровно то, на что
+    /// жалуется человек: «в какой-то момент перестала работать».
+    /// </summary>
+    private readonly System.Windows.Forms.Timer _hookWatchdog = new() { Interval = 20_000 };
+
+    /// <summary>Хук пришлось восстанавливать — трею есть о чём сказать в логе.</summary>
+    public event EventHandler? HookRevived;
+
+    /// <summary>Окно, в котором лежит выделение, — на время показа диалога замены.</summary>
+    private IntPtr _replaceTarget;
+
+    /// <summary>
+    /// Нажали хоткей замены при живом выделении: нужно показать диалог.
+    /// Текст выделения приходит в аргументе, ответ — через
+    /// <see cref="ApplyReplacement"/>.
+    /// </summary>
+    public event EventHandler<string>? ReplaceRequested;
+
+    /// <summary>Нажали хоткей замены, а ничего не выделено.</summary>
+    public event EventHandler? ReplaceNeedsSelection;
+
     /// <summary>Нажали хоткей голосового ввода, а модели на диске нет.</summary>
     public event EventHandler? VoiceModelMissing;
 
@@ -108,6 +137,10 @@ public sealed class App : IDisposable
         _kbHook.Install();
         _mouseHook.Install();
         _fgWatcher.Install();
+
+        _hookWatchdog.Tick += OnHookWatchdog;
+        _hookWatchdog.Start();
+        Log.Write("хуки установлены, сторож запущен");
     }
 
     public void ApplySettings()
@@ -118,6 +151,37 @@ public sealed class App : IDisposable
         _recorder.MaxDuration = TimeSpan.FromSeconds(Settings.VoiceMaxSeconds);
     }
 
+    /// <summary>
+    /// Переставляет хук, если система его сняла. Момент выбираем спокойный:
+    /// переустановка обнуляет список зажатых клавиш, и сделать это посреди
+    /// аккорда значило бы сломать сочетание прямо под пальцами.
+    /// </summary>
+    private void OnHookWatchdog(object? sender, EventArgs e)
+    {
+        // Сначала — залипшие клавиши: их отпускание могло не дойти (запрос UAC,
+        // смена сеанса, лишний Ctrl от клавиши Pause), и тогда модификатор
+        // числится зажатым навсегда, а сочетания молчат.
+        var stuck = _kbHook.DropStuckKeys(TimeSpan.FromMinutes(1));
+        if (stuck.Count > 0)
+            Log.Write("сброшены залипшие клавиши: "
+                      + string.Join(", ", stuck.Select(v => $"VK 0x{v:X2}")));
+
+        if (_kbHook.AnyKeyDown || _translating || _transcribing || _recorder.IsRecording) return;
+
+        try
+        {
+            if (_kbHook.Revive())
+            {
+                Log.Write("ХУК БЫЛ СНЯТ СИСТЕМОЙ — восстановлен");
+                HookRevived?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write("не удалось восстановить хук: " + ex.Message);
+        }
+    }
+
     private void ResetAll()
     {
         _buffer.Clear();
@@ -126,7 +190,15 @@ public sealed class App : IDisposable
 
     private void OnKeyDown(object? sender, KeyboardHook.KeyEvent e)
     {
-        if (!Settings.Enabled || HotkeysSuspended) return;
+        // Клавиша пишется КОДОМ, без символа: этого хватает, чтобы понять,
+        // доходит ли сочетание, и лог не становится записью всего ввода.
+        Log.Key("нажатие", (int)e.VirtualKey, e.Ctrl, e.Alt, e.Shift, e.Win, e.IsRepeat);
+
+        if (!Settings.Enabled || HotkeysSuspended)
+        {
+            Log.Write(Settings.Enabled ? "  пропущено: открыты настройки" : "  пропущено: выключено");
+            return;
+        }
 
         // Пользователь сам сменил раскладку (Alt+Shift, Win+Space) — дальнейшие
         // нажатия дают другие буквы, наша лента больше не соответствует экрану.
@@ -148,6 +220,7 @@ public sealed class App : IDisposable
             if (e.IsRepeat) return;
             // Пока Alt ещё зажат — гасим активацию строки меню, иначе уедет фокус.
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: раскладка");
             _uiContext.Post(_ => RunStep(layout: true, pressedAtUtc), null);
             return;
         }
@@ -157,6 +230,7 @@ public sealed class App : IDisposable
             e.Handled = true;
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: регистр");
             _uiContext.Post(_ => RunStep(layout: false, pressedAtUtc), null);
             return;
         }
@@ -166,6 +240,7 @@ public sealed class App : IDisposable
             e.Handled = true;
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: перевод");
             _uiContext.Post(_ => RunTranslate(), null);
             return;
         }
@@ -175,7 +250,18 @@ public sealed class App : IDisposable
             e.Handled = true;
             if (e.IsRepeat) return;
             Sender.CancelMenuActivation();
+            Log.Write("  совпало: голосовой ввод");
             _uiContext.Post(_ => ToggleVoice(), null);
+            return;
+        }
+
+        if (Settings.ReplaceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
+        {
+            e.Handled = true;
+            if (e.IsRepeat) return;
+            Sender.CancelMenuActivation();
+            Log.Write("  совпало: замена");
+            _uiContext.Post(_ => RunReplace(), null);
             return;
         }
 
@@ -492,6 +578,52 @@ public sealed class App : IDisposable
     }
 
     /// <summary>
+    /// Замена в выделенном тексте. Выделение читаем ДО показа диалога: окно
+    /// заберёт фокус, и вторая попытка прочитать выделение уже ничего не даст.
+    /// </summary>
+    private void RunReplace()
+    {
+        Sender.WaitForModifiersReleased();
+        Sender.ReleaseHotkeyModifiers();
+
+        var selection = SelectionReader.TryRead();
+        if (string.IsNullOrEmpty(selection))
+        {
+            ReplaceNeedsSelection?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        // Запоминаем, куда возвращаться: диалог заберёт фокус себе, а печатать
+        // результат надо в то окно, где лежит выделение, а не в последнее
+        // активное — им к моменту закрытия может оказаться что угодно.
+        _replaceTarget = GetForegroundWindow();
+        ReplaceRequested?.Invoke(this, selection);
+    }
+
+    /// <summary>
+    /// Печатает результат замены поверх выделения. null — человек передумал
+    /// или менять оказалось нечего.
+    /// </summary>
+    public void ApplyReplacement(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        if (_replaceTarget != IntPtr.Zero)
+        {
+            SetForegroundWindow(_replaceTarget);
+            // Возврат фокуса не мгновенный: без паузы первые символы уходят
+            // ещё закрывающемуся диалогу и пропадают.
+            Thread.Sleep(120);
+        }
+        _replaceTarget = IntPtr.Zero;
+
+        Sender.WaitForModifiersReleased();
+        // Выделение всё ещё активно — ввод перетирает его сам, стирать нечего.
+        Sender.SendUnicode(text!);
+        ResetAll();
+    }
+
+    /// <summary>
     /// Переключает системную раскладку и помечает смену как нашу, чтобы
     /// LayoutTracker не принял её за ручное переключение пользователем
     /// и не сбросил ленту — иначе следующее нажатие хоткея не смогло бы
@@ -508,6 +640,8 @@ public sealed class App : IDisposable
 
     public void Dispose()
     {
+        _hookWatchdog.Stop();
+        _hookWatchdog.Dispose();
         _voiceTick.Stop();
         _voiceTick.Dispose();
         _voiceCts?.Cancel();

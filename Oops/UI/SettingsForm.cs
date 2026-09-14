@@ -23,12 +23,14 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbAutoUpdate = new ToggleBox();
     private readonly CheckBox _cbCharByChar = new ToggleBox();
     private readonly CheckBox _cbVoiceLive = new ToggleBox();
+    private readonly CheckBox _cbVerboseLog = new ToggleBox();
     private readonly SegmentedControl _theme = new();
     private readonly SegmentedControl _language = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _translateKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _voiceKeys = new() { Interactive = true };
+    private readonly HotkeyDisplay _replaceKeys = new() { Interactive = true };
     private readonly Stepper _nudIdle = new();
     private readonly Stepper _nudExpand = new();
 
@@ -44,6 +46,7 @@ public sealed class SettingsForm : ThemedForm
     private HotkeyConfig _caseHotkey;
     private HotkeyConfig _translateHotkey;
     private HotkeyConfig _voiceHotkey;
+    private HotkeyConfig _replaceHotkey;
 
     /// <summary>
     /// Выбранный язык — отдельно от настроек. В settings.Language он попадает
@@ -77,6 +80,7 @@ public sealed class SettingsForm : ThemedForm
         _caseHotkey = Clone(settings.ChangeCaseHotkey);
         _translateHotkey = Clone(settings.TranslateHotkey);
         _voiceHotkey = Clone(settings.VoiceHotkey);
+        _replaceHotkey = Clone(settings.ReplaceHotkey);
         _languagePref = settings.Language;
         _themePref = settings.Theme;
 
@@ -210,6 +214,8 @@ public sealed class SettingsForm : ThemedForm
                 AddAutoRow(stack, Note(L10n.T("welcome.note.altShift")));
                 AddAutoRow(stack, SectionLabel(L10n.T("settings.section.probe")));
                 AddAutoRow(stack, ProbeCard());
+                AddAutoRow(stack, SectionLabel(L10n.T("settings.log.title")));
+                AddAutoRow(stack, LogCard());
                 break;
             default:
                 AddAutoRow(stack, BehaviourCard());
@@ -383,7 +389,67 @@ public sealed class SettingsForm : ThemedForm
         AddAutoRow(rows, HotkeyRow(
             L10n.T("hotkey.voice"), L10n.T("hotkey.voice.hint"),
             _voiceKeys, () => RecordInto(ref _voiceHotkey, _voiceKeys)));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, HotkeyRow(
+            L10n.T("hotkey.replace"), L10n.T("hotkey.replace.hint"),
+            _replaceKeys, () => RecordInto(ref _replaceHotkey, _replaceKeys)));
         return card;
+    }
+
+    /// <summary>
+    /// Подробный лог: включается здесь же, рядом с проверкой сочетаний — это
+    /// вторая ступень того же разбора «почему ничего не происходит».
+    /// </summary>
+    private Control LogCard()
+    {
+        var card = NewCard(out var rows);
+
+        AddAutoRow(rows, new Label
+        {
+            Text = L10n.T("settings.log.body"),
+            Font = Theme.Caption,
+            ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            MaximumSize = new Size(CardInnerWidth, 0),
+            Margin = new Padding(0, 0, 0, Theme.S2),
+            BackColor = Color.Transparent,
+        });
+
+        AddAutoRow(rows, CheckRow(_cbVerboseLog, L10n.T("settings.log.enable"),
+            L10n.T("settings.log.enable.hint")));
+        AddAutoRow(rows, Divider());
+
+        var open = new FlatButton
+        {
+            Text = L10n.T("settings.log.open"),
+            AutoSize = true,
+            MinimumSize = new Size(Theme.Px(180), 0),
+        };
+        open.Click += (_, _) => OpenLogFolder();
+        AddAutoRow(rows, ButtonBar.Create(CardInnerWidth, new Padding(0, Theme.S2, 0, 0), open));
+
+        return card;
+    }
+
+    private void OpenLogFolder()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Log.Directory);
+            // Только папка логов и только она: Process.Start с UseShellExecute
+            // запускает что угодно, и путь сюда обязан быть нашим собственным.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Log.Directory,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Notice.Error(this, L10n.T("settings.log.openFailed.title"),
+                L10n.T("settings.log.openFailed.body", Log.Directory),
+                L10n.T("settings.log.openFailed.hint"), ex.ToString());
+        }
     }
 
     private Control BehaviourCard()
@@ -681,10 +747,12 @@ public sealed class SettingsForm : ThemedForm
             && _translateHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
         bool isVoice = !isConvert && !isCase && !isTranslate
             && _voiceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
+        bool isReplace = !isConvert && !isCase && !isTranslate && !isVoice
+            && _replaceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
 
         // Совпавшее сочетание глотаем: иначе Win откроет «Пуск» прямо из окна
         // настроек. Всё остальное пропускаем — окном надо пользоваться.
-        if (isConvert || isCase || isTranslate || isVoice) e.Handled = true;
+        if (isConvert || isCase || isTranslate || isVoice || isReplace) e.Handled = true;
 
         var seen = new HotkeyConfig
         {
@@ -711,6 +779,11 @@ public sealed class SettingsForm : ThemedForm
         else if (isVoice)
         {
             _probeStatus.Text = L10n.T("probe.matchVoice");
+            _probeStatus.ForeColor = Theme.Accent;
+        }
+        else if (isReplace)
+        {
+            _probeStatus.Text = L10n.T("probe.matchReplace");
             _probeStatus.ForeColor = Theme.Accent;
         }
         else
@@ -1017,6 +1090,7 @@ public sealed class SettingsForm : ThemedForm
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
         _cbVoiceLive.Checked = _settings.VoiceLiveText;
+        _cbVerboseLog.Checked = _settings.VerboseLog;
         // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
         // запустит пересборку окна по кругу.
         _theme.SelectedIndexChanged -= ThemeChangedHandler;
@@ -1031,6 +1105,7 @@ public sealed class SettingsForm : ThemedForm
         _caseKeys.SetCombo(_caseHotkey.ToString());
         _translateKeys.SetCombo(_translateHotkey.ToString());
         _voiceKeys.SetCombo(_voiceHotkey.ToString());
+        _replaceKeys.SetCombo(_replaceHotkey.ToString());
     }
 
     private void RecordInto(ref HotkeyConfig target, HotkeyDisplay display)
@@ -1072,7 +1147,11 @@ public sealed class SettingsForm : ThemedForm
             || _translateHotkey.SameCombo(_caseHotkey)
             || _voiceHotkey.SameCombo(_convertHotkey)
             || _voiceHotkey.SameCombo(_caseHotkey)
-            || _voiceHotkey.SameCombo(_translateHotkey))
+            || _voiceHotkey.SameCombo(_translateHotkey)
+            || _replaceHotkey.SameCombo(_convertHotkey)
+            || _replaceHotkey.SameCombo(_caseHotkey)
+            || _replaceHotkey.SameCombo(_translateHotkey)
+            || _replaceHotkey.SameCombo(_voiceHotkey))
         {
             Notice.Warn(this, L10n.T("hotkey.clash.title"),
                 L10n.T("hotkey.clash.body"), L10n.T("hotkey.clash.hint"));
@@ -1083,6 +1162,11 @@ public sealed class SettingsForm : ThemedForm
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
         _settings.VoiceLiveText = _cbVoiceLive.Checked;
+
+        // Лог включаем и выключаем сразу: человек жмёт «Сохранить» ровно
+        // затем, чтобы следующее же нажатие хоткея попало в файл.
+        _settings.VerboseLog = _cbVerboseLog.Checked;
+        if (_settings.VerboseLog) Log.Start(); else Log.Stop();
         _settings.Language = _languagePref;
         _settings.Theme = _themePref;
         _settings.BufferIdleTimeoutSeconds = _nudIdle.Value;
@@ -1091,6 +1175,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.ChangeCaseHotkey = _caseHotkey;
         _settings.TranslateHotkey = _translateHotkey;
         _settings.VoiceHotkey = _voiceHotkey;
+        _settings.ReplaceHotkey = _replaceHotkey;
         _settings.TranslationEnabled = Translator.IsReady;
 
         // Реестр — единственный источник правды для автозапуска.

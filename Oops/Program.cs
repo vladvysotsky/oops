@@ -44,6 +44,9 @@ internal static class Program
         _ = new Control(); // принудительно создаёт SyncContext в этом потоке
 
         var settings = AppSettings.Load();
+        // Лог включаем ДО всего остального: разбирать «не запускается» по логу,
+        // который начинается после запуска, бессмысленно.
+        if (settings.VerboseLog) Log.Start();
         L10n.Init(settings.Language);
         Theme.Init(settings.Theme);
 
@@ -75,6 +78,26 @@ internal static class Program
         // Показываем модально; ShowDialog крутит свой цикл сообщений, поэтому
         // Application.Run ещё не нужен.
         WelcomeForm.ShowIfFirstRun(app);
+
+        // «Что нового» — сразу после мастера и до трея: обновление проходит
+        // молча, и без этого окна о новой функции узнают случайно, а хоткей,
+        // о котором не знают, ничем не отличается от отсутствующего.
+        WhatsNewForm.ShowIfUpdated(settings);
+
+        // Занятое кем-то сочетание — вторая по частоте причина «ничего не
+        // происходит» после того, как программа просто не запущена.
+        var taken = HotkeyConflicts.Find(new[]
+        {
+            (L10n.T("hotkey.layout"), settings.ConvertHotkey),
+            (L10n.T("hotkey.case"), settings.ChangeCaseHotkey),
+            (L10n.T("hotkey.translate"), settings.TranslateHotkey),
+            (L10n.T("hotkey.voice"), settings.VoiceHotkey),
+            (L10n.T("hotkey.replace"), settings.ReplaceHotkey),
+        });
+        if (taken.Count > 0)
+            Notice.Warn(null, L10n.T("conflict.title"),
+                L10n.T("conflict.body", string.Join("\n", taken)),
+                L10n.T("conflict.hint"));
 
         var ctx = new TrayContext(app);
         Application.Run(ctx);
