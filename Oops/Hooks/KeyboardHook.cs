@@ -75,6 +75,12 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     private readonly HashSet<uint> _physicallyDown = new();
 
+    /// <summary>
+    /// Когда клавиша попала в <see cref="_physicallyDown"/>. Нужно, чтобы
+    /// вычистить залипшую: отпускание до нас доходит не всегда.
+    /// </summary>
+    private readonly Dictionary<uint, DateTime> _downSince = new();
+
     public event EventHandler<KeyEvent>? KeyDown;
 
     /// <summary>
@@ -107,6 +113,7 @@ public sealed class KeyboardHook : IDisposable
         // вычтем из пустого множества. Начинаем с чистого листа, иначе застрявшая
         // клавиша заставила бы модификатор считаться зажатым навсегда.
         _physicallyDown.Clear();
+        _downSince.Clear();
         _proc = HookCallback;
         using var proc = Process.GetCurrentProcess();
         using var mod = proc.MainModule!;
@@ -124,6 +131,63 @@ public sealed class KeyboardHook : IDisposable
         }
     }
 
+    /// <summary>
+    /// Жив ли ещё наш хук, и если нет — поставить заново. Возвращает true,
+    /// если хук ПРИШЛОСЬ восстанавливать.
+    ///
+    /// Windows молча снимает низкоуровневый хук, если обработчик не успел
+    /// ответить за LowLevelHooksTimeout (по умолчанию 300 мс). Обработчик
+    /// вызывается в потоке, который хук поставил, — у нас это UI-поток, и
+    /// любая долгая работа на нём (ожидание отпускания модификаторов, печать
+    /// длинного текста, пауза перед возвратом фокуса) успевает съесть этот
+    /// лимит. Снаружи это выглядит как «программа в какой-то момент перестала
+    /// работать»: окна открываются, хоткеи молчат, и ничего в логах.
+    ///
+    /// Узнаём это по <c>UnhookWindowsHookEx</c>: если он вернул false, хука
+    /// уже не было — значит нас сняли.
+    /// </summary>
+    /// <summary>Сейчас зажата хоть одна клавиша — момент неподходящий для переустановки.</summary>
+    public bool AnyKeyDown => _physicallyDown.Count > 0;
+
+    /// <summary>
+    /// Выбрасывает клавиши, «зажатые» дольше разумного, и возвращает их коды.
+    ///
+    /// Отпускание доходит до хука не всегда: его съедает защищённый рабочий
+    /// стол (запрос UAC), переключение сеанса, удалённый рабочий стол, а у
+    /// некоторых клавиш — Pause в первую очередь — драйвер шлёт лишнее
+    /// нажатие Ctrl, парного отпускания которому не будет вовсе.
+    ///
+    /// Последствие ровно одно и очень неприятное: модификатор считается
+    /// зажатым НАВСЕГДА, и с этого момента ни одно сочетание больше не
+    /// совпадает. Программа при этом жива, окна открываются — снаружи это
+    /// «в какой-то момент перестала работать».
+    ///
+    /// Человек не держит клавишу минуту, поэтому такой порог безопасен: живой
+    /// аккорд под него не попадёт никогда.
+    /// </summary>
+    public IReadOnlyList<uint> DropStuckKeys(TimeSpan longerThan)
+    {
+        var now = DateTime.UtcNow;
+        var stuck = _downSince.Where(p => now - p.Value > longerThan)
+                              .Select(p => p.Key).ToList();
+        foreach (var vk in stuck)
+        {
+            _physicallyDown.Remove(vk);
+            _downSince.Remove(vk);
+        }
+        return stuck;
+    }
+
+    public bool Revive()
+    {
+        if (_hook == IntPtr.Zero) { Install(); return true; }
+
+        bool wasAlive = UnhookWindowsHookEx(_hook);
+        _hook = IntPtr.Zero;
+        Install();
+        return !wasAlive;
+    }
+
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode < 0) return CallNextHookEx(_hook, nCode, wParam, lParam);
@@ -138,6 +202,7 @@ public sealed class KeyboardHook : IDisposable
                 return CallNextHookEx(_hook, nCode, wParam, lParam);
 
             _physicallyDown.Remove(up.vkCode);
+            _downSince.Remove(up.vkCode);
 
             var upHandler = KeyUp;
             if (upHandler != null)
@@ -167,6 +232,7 @@ public sealed class KeyboardHook : IDisposable
 
             // Если клавиша уже была зажата — это автоповтор, а не новое нажатие.
             bool isRepeat = !_physicallyDown.Add(data.vkCode);
+            if (!isRepeat) _downSince[data.vkCode] = DateTime.UtcNow;
 
             var vk = (Keys)data.vkCode;
 

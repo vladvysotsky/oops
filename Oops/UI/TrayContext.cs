@@ -47,6 +47,20 @@ public sealed class TrayContext : ApplicationContext
         _app.VoiceRecognising += (_, _) => VoiceOverlay.Recognising();
         _app.VoiceFinished += (_, _) => VoiceOverlay.Hide();
 
+        // Диалог замены открывает трей, а не App: App не знает про окна, и
+        // это единственное, что удерживает его от превращения в UI-класс.
+        _app.ReplaceRequested += (_, selection) =>
+        {
+            _app.HotkeysSuspended = true;
+            try { _app.ApplyReplacement(ReplaceForm.Ask(selection)); }
+            finally { _app.HotkeysSuspended = false; }
+        };
+
+        _app.ReplaceNeedsSelection += (_, _) => Notice.Info(null,
+            L10n.T("replace.noSelection.title"),
+            L10n.T("replace.noSelection.body"),
+            L10n.T("replace.noSelection.hint"));
+
         _app.VoiceModelMissing += (_, _) => Notice.Info(null,
             L10n.T("voice.models.title"),
             L10n.T("voice.models.body", ModelCatalog.VoiceMegabytes),
@@ -93,6 +107,9 @@ public sealed class TrayContext : ApplicationContext
         var miFeedback = new ToolStripMenuItem(L10n.T("tray.feedback"));
         miFeedback.Click += (_, _) => FeedbackForm.ShowDialogFor();
 
+        var miNews = new ToolStripMenuItem(L10n.T("tray.news"));
+        miNews.Click += (_, _) => WhatsNewForm.ShowAll(_app.Settings);
+
         var miAbout = new ToolStripMenuItem(L10n.T("tray.about"));
         miAbout.Click += (_, _) => Notice.Info(null,
             $"oops {UpdateService.CurrentVersion}",
@@ -107,6 +124,7 @@ public sealed class TrayContext : ApplicationContext
             new ToolStripSeparator(),
             miSettings,
             _miUpdate,
+            miNews,
             miFeedback,
             miAbout,
             new ToolStripSeparator(),

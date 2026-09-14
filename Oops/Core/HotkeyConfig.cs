@@ -66,6 +66,19 @@ public sealed class HotkeyConfig
         Key = 0,
     };
 
+    /// <summary>
+    /// Замена в выделенном — Alt+Shift+Win по умолчанию (modifier-only).
+    /// Alt+Shift сам по себе запрещён (системная смена раскладки), но с Win
+    /// это уже другое сочетание, и система его себе не забирает.
+    /// </summary>
+    public static HotkeyConfig ReplaceDefault => new()
+    {
+        Alt = true,
+        Shift = true,
+        Win = true,
+        Key = 0,
+    };
+
     /// <summary>Одно и то же сочетание (без учёта ссылочного равенства).</summary>
     public bool SameCombo(HotkeyConfig other) =>
         other != null &&

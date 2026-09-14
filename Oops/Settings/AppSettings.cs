@@ -45,6 +45,21 @@ public sealed class AppSettings
     /// </summary>
     public bool CharByCharTyping { get; set; } = false;
 
+    /// <summary>
+    /// Версия, о которой человеку уже рассказали в окне «Что нового».
+    ///
+    /// Пусто — программу поставили только что: тогда окно не показываем, там
+    /// своё дело делает мастер первого запуска.
+    /// </summary>
+    public string LastSeenVersion { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Подробный лог в %AppData%\Oops\logs. Выключен по умолчанию: нужен
+    /// только для разбора «перестало работать». Набранный текст в него не
+    /// попадает — клавиши пишутся кодами.
+    /// </summary>
+    public bool VerboseLog { get; set; } = false;
+
     /// <summary>Проверять обновления на GitHub при запуске (не чаще раза в сутки).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 
@@ -69,6 +84,12 @@ public sealed class AppSettings
     /// Как и перевод, работает только со скачанной моделью.
     /// </summary>
     public HotkeyConfig VoiceHotkey { get; set; } = HotkeyConfig.VoiceDefault;
+
+    /// <summary>
+    /// Замена в выделенном тексте: открывает диалог поиска и замены, в том
+    /// числе по регулярному выражению.
+    /// </summary>
+    public HotkeyConfig ReplaceHotkey { get; set; } = HotkeyConfig.ReplaceDefault;
 
     /// <summary>Максимальная длина одной записи, секунд.</summary>
     public int VoiceMaxSeconds { get; set; } = 120;
@@ -127,6 +148,7 @@ public sealed class AppSettings
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);
         TranslateHotkey = Fix(TranslateHotkey, HotkeyConfig.TranslateDefault);
         VoiceHotkey = Fix(VoiceHotkey, HotkeyConfig.VoiceDefault);
+        ReplaceHotkey = Fix(ReplaceHotkey, HotkeyConfig.ReplaceDefault);
 
         // Совпавшие сочетания = второй хоткей мёртв: App проверяет их по
         // порядку и до второго сравнения не доходит вообще — «никакой
@@ -142,6 +164,9 @@ public sealed class AppSettings
         if (VoiceHotkey.SameCombo(ConvertHotkey) || VoiceHotkey.SameCombo(ChangeCaseHotkey)
             || VoiceHotkey.SameCombo(TranslateHotkey))
             VoiceHotkey = HotkeyConfig.VoiceDefault;
+        if (ReplaceHotkey.SameCombo(ConvertHotkey) || ReplaceHotkey.SameCombo(ChangeCaseHotkey)
+            || ReplaceHotkey.SameCombo(TranslateHotkey) || ReplaceHotkey.SameCombo(VoiceHotkey))
+            ReplaceHotkey = HotkeyConfig.ReplaceDefault;
 
         if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
         if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;

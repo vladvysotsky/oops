@@ -102,11 +102,32 @@ jobs:
             dist/*.zip
             dist/SHA256SUMS.txt
 
+      # Описание релиза пишем сами: автогенерация собирает его из смерженных
+      # pull request'ов, и при пуше прямо в main (или при теге на коммите без
+      # PR) в релизе оставалась одна строка «Full Changelog». Файл лежит
+      # рядом с кодом, правится в том же коммите и проходит ревью вместе с ним.
+      - name: Prepare release notes
+        shell: pwsh
+        run: |
+          $src = "docs/release-notes/v${{ steps.ver.outputs.version }}.md"
+          if (Test-Path $src) {
+            Write-Host "Беру описание из $src"
+            Copy-Item $src dist/RELEASE_NOTES.md
+          } else {
+            Write-Host "::warning::Нет $src — описание будет только автогенерированное"
+            # Пустой файл, а не пропуск шага: body_path должен существовать
+            # всегда, иначе публикация падает на несуществующем пути.
+            Set-Content dist/RELEASE_NOTES.md '' -Encoding utf8
+          }
+
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: oops ${{ steps.ver.outputs.version }}
+          # body_path идёт ПЕРЕД автогенерацией: action дописывает
+          # сгенерированный список изменений после нашего текста.
+          body_path: dist/RELEASE_NOTES.md
           generate_release_notes: true
           files: |
             dist/*.exe
