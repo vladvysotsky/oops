@@ -39,6 +39,11 @@ have just typed, on a hotkey. Works globally, in every application.
 - Development branch: `prerelease` — all work goes there. The user's local
   checkout is on it too. `claude/amazing-bardeen-ZvoqL` is the old branch, its
   PR #1 has been merged.
+- **Commit messages, pull request titles and pull request descriptions are
+  written in English.** The repository is public and the code is read by people
+  who do not speak Russian; a history they cannot read is a history that does
+  not help them. The rule that a message says *why*, not only *what*, stays —
+  it just holds in English now.
 - **Do not add `Co-Authored-By` trailers to commits.** The repository is public,
   and the contributor list is the author's. Commit messages describe the change
   and why, and nothing else.
