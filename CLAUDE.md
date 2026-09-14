@@ -1,14 +1,14 @@
 # CLAUDE.md — oops
 
-Утилита для Windows: правит раскладку (RU↔EN) и регистр только что набранного
-текста по горячей клавише. Работает глобально во всех приложениях.
+A Windows utility: fixes the keyboard layout (RU↔EN) and the case of text you
+have just typed, on a hotkey. Works globally, in every application.
 
-## Стек / сборка
+## Stack / build
 
 - **C# .NET 8 + WinForms** (`net8.0-windows`, `WinExe`, `UseWindowsForms=true`).
-- **Только Windows.** На Linux не собирается (нет `Microsoft.NET.Sdk.WindowsDesktop`)
-  — не пытаться, `dotnet build`/`dotnet test` там падают. Проверять на Windows.
-- Сборка и запуск (PowerShell 7 / cmd):
+- **Windows only.** It does not build on Linux (no `Microsoft.NET.Sdk.WindowsDesktop`)
+  — don't try, `dotnet build`/`dotnet test` fail there. Verify on Windows.
+- Build and run (PowerShell 7 / cmd):
   ```
   dotnet build -c Release
   dotnet run --project Oops
@@ -18,451 +18,493 @@
   ```
   dotnet publish Oops -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
   ```
-- Собрать и запустить одной командой: `pwsh -File dev.ps1` (pull → закрыть
-  запущенную копию → тесты → publish → запуск). Ключи `-NoPull`, `-NoTest`,
-  `-NoRun`, `-Branch`. Закрывать запущенный `oops.exe` обязательно: он держит
-  файл, и publish падает с MSB3027.
-- Инсталлятор: `installer\build.ps1` (нужен Inno Setup 6). Свои строки в
-  `Oops.iss` — только через `[CustomMessages]` с префиксами `russian.`/`english.`:
-  установщик двуязычный, и зашитый в `Description` русский текст вылезал в
-  английской установке.
-- `tools\model-hashes.ps1 <url>` печатает готовую строку `ModelFile` (SHA-256 и
-  размер) для `ModelCatalog`. Сумму нельзя выдумать или взять из того же ответа,
-  что и файл, — её снимают с реально опубликованного файла. Скрипт использует `?.`
-  — требует **PowerShell 7**, не 5.1.
-- Манифест — **asInvoker**. НЕ ставить `requireAdministrator`: Windows молча
-  игнорирует записи `HKCU\...\Run` для elevated-приложений, и автозапуск ломается.
+- Build and run in one command: `pwsh -File dev.ps1` (pull → close the running
+  copy → tests → publish → run). Switches: `-NoPull`, `-NoTest`, `-NoRun`,
+  `-Branch`. Closing a running `oops.exe` is mandatory: it holds the file and
+  publish fails with MSB3027.
+- Installer: `installer\build.ps1` (needs Inno Setup 6). Our own strings in
+  `Oops.iss` go through `[CustomMessages]` with the `russian.`/`english.`
+  prefixes and nowhere else: the installer is bilingual, and Russian text hard
+  coded into `Description` showed up in an English installation.
+- `tools\model-hashes.ps1 <url>` prints a ready-made `ModelFile` line (SHA-256
+  and size) for `ModelCatalog`. A checksum cannot be invented or taken from the
+  same response as the file — it is measured against the actually published
+  file. The script uses `?.`, so it needs **PowerShell 7**, not 5.1.
+- The manifest is **asInvoker**. Do NOT set `requireAdministrator`: Windows
+  silently ignores `HKCU\...\Run` entries for elevated applications, which
+  breaks autostart.
 
 ## Git
 
-- Ветка разработки: `prerelease` — вся работа идёт туда. Локально у пользователя
-  тоже она. `claude/amazing-bardeen-ZvoqL` — старая ветка, PR #1 из неё замержен.
-- Пользователь собирает и тестирует сам на Windows. Если баг «не воспроизводится» —
-  первым делом проверить, что у него собран последний коммит (`git log --oneline -1`).
+- Development branch: `prerelease` — all work goes there. The user's local
+  checkout is on it too. `claude/amazing-bardeen-ZvoqL` is the old branch, its
+  PR #1 has been merged.
+- The user builds and tests on Windows themselves. If a bug "doesn't
+  reproduce", first check that they built the latest commit
+  (`git log --oneline -1`).
 
-### Релиз
+### Release
 
-Порядок, и срезать углы нельзя — на этом уже сгорели два тега подряд:
+The order matters and corners cannot be cut — three tags in a row have already
+burned on this:
 
-1. работа в `prerelease`, пуш туда;
-2. **pull request `prerelease` → `main`**, дождаться зелёного CI;
-3. влить PR;
-4. описание релиза — в `docs/release-notes/vX.Y.Z.md`;
-5. тег — **только `pwsh -File tools\release.ps1 X.Y.Z`**, руками не ставить.
+1. work in `prerelease`, push there;
+2. **pull request `prerelease` → `main`**, wait for green CI;
+3. merge the PR;
+4. the release description goes into `docs/release-notes/vX.Y.Z.md`;
+5. the tag — **only via `pwsh -File tools\release.ps1 X.Y.Z`**, never by hand.
 
-Скрипт отказывается вешать тег, пока `origin/main` не содержит
-`origin/prerelease`, версия в csproj не совпадает с тегом или нет файла
-заметок. **Три тега подряд уехали на старый коммит** ровно потому, что
-`git tag origin/main` выполняли ДО того, как влили pull request: тег встаёт
-молча, CI бодро собирает прошлую версию и публикует её под новым номером.
+The script refuses to create the tag unless the version in csproj on
+`origin/main` matches the tag and the release-notes file is there; it warns
+when `origin/main` does not yet contain `origin/prerelease`. **Three tags in a
+row landed on an old commit** precisely because `git tag origin/main` was run
+BEFORE the pull request was merged: the tag lands silently, CI cheerfully
+builds the previous version and publishes it under the new number.
 
-Переставить уже опубликованный тег нельзя: у тех, кто успел обновиться, номер
-совпадёт и обновление больше не придёт никогда. Испорченный номер сжигается,
-релиз выходит следующим (так 2.1.0 стала 2.1.1).
+A published tag cannot be moved: for anyone who already updated, the number
+matches and the update will never arrive again. A spoiled number is burned and
+the release goes out as the next one (that is how 2.1.0 became 2.1.1).
 
-Почему именно так:
-- `ci.yml` запускается на pull request в `main`. Тег на непроверенном коммите
-  публикует сломанную сборку — так v2.0.0 уехала на коммит двухнедельной
-  давности, а тесты словили это уже в релизном прогоне.
-- Тег ставится на `origin/main`, а не на локальную ветку: локальная `main`
-  дважды оказывалась не тем, чем её считали.
-- Заметки к релизу автогенерация собирает **из смерженных PR**. Пуш прямо в
-  `main` оставляет в релизе одну строку «Full Changelog» — отсюда файл
-  `docs/release-notes/`, который CI подставляет в описание.
+Why exactly this way:
+- `ci.yml` runs on pull requests into `main`. A tag on an unverified commit
+  publishes a broken build — that is how v2.0.0 ended up on a two-week-old
+  commit, and the tests caught it only during the release run.
+- The tag goes on `origin/main`, not on a local branch: the local `main` turned
+  out twice not to be what it was assumed to be.
+- Release notes are auto-generated **from merged PRs**. Pushing straight into
+  `main` leaves a single "Full Changelog" line in the release — hence the
+  `docs/release-notes/` file, which CI substitutes into the description.
 
-## ГЛАВНОЕ: модель «расширяющейся области»
+## THE CORE IDEA: the "expanding scope" model
 
-Программа **не угадывает**, где началась неправильная раскладка. Границу задаёт
-пользователь повторными нажатиями хоткея:
+The program **never guesses** where the wrong layout began. The user sets the
+boundary with repeated hotkey presses:
 
-- 1-е нажатие — последнее слово,
-- 2-е (в пределах окна расширения) — весь набранный текст.
+- 1st press — the last word,
+- 2nd press (within the expansion window) — everything typed.
 
-Именно два шага, а не рост по одному слову: на фразе из пяти слов пословное
-расширение требовало пяти нажатий. Портится почти всегда либо последнее слово,
-либо всё сразу.
+Two steps, not one word at a time: on a five-word phrase, word-by-word
+expansion needed five presses. What gets mangled is almost always either the
+last word or the whole thing.
 
-Каждый шаг — преобразование **1-в-1** чётко очерченного куска. Корректный текст
-вне области не трогается никогда.
+Every step is a **1-to-1** transformation of a clearly delimited piece. Correct
+text outside the scope is never touched.
 
-Текст переписывается через Backspace × N + `SendInput` с `KEYEVENTF_UNICODE`.
-Результат в буфер обмена **никогда не пишется**.
+Text is rewritten with Backspace × N + `SendInput` with `KEYEVENTF_UNICODE`.
+The result is **never** written to the clipboard.
 
-### Выделение
+### Selection
 
-Если лента пуста, хоткей пробует выделенный текст и конвертирует его целиком
-1-в-1 (без расширения области — границу пользователь уже задал сам).
+If the typing buffer is empty, the hotkey tries the selected text and converts
+it whole, 1-to-1 (no expansion — the user has already set the boundary).
 
-Порядок «сначала лента, потом выделение» не компромисс, а следствие: выделить
-можно только мышью или Shift+стрелками, а оба действия ленту очищают. Значит
-«есть выделение» ⇒ «лента пуста». Обратный порядок ломался бы в новом Notepad
-(UWP), где Ctrl+C без выделения копирует всю текущую строку.
+The order "buffer first, selection second" is not a compromise but a
+consequence: text can only be selected with the mouse or Shift+arrows, and both
+clear the buffer. So "there is a selection" ⇒ "the buffer is empty". The
+reverse order would break in the new Notepad (UWP), where Ctrl+C with no
+selection copies the entire current line.
 
-`Core/SelectionReader.cs` — единственное место, которое трогает буфер обмена,
-и только на чтение: другого универсального способа узнать выделение Windows не
-даёт. Факт копирования детектится по `GetClipboardSequenceNumber` (растёт только
-при реальной записи), прежнее содержимое сразу восстанавливается через
-`ClipboardSafe` с форматами исключения из истории Win+V.
+`Core/SelectionReader.cs` is the only place that touches the clipboard, and
+only to read: Windows offers no other universal way to learn the selection. The
+fact that a copy happened is detected via `GetClipboardSequenceNumber` (it only
+grows on a real write), and the previous content is restored immediately
+through `ClipboardSafe`, using the formats that exclude it from the Win+V
+history.
 
-### Что НЕ возвращать
+### What NOT to bring back
 
-Всё это было и вызывало постоянные жалобы — удалено намеренно:
-словари (`WordDictionary`, `words_ru/en.txt`), угадывание раскладки
-(`AutoDetector`), автокоррекция при печати, типографика (`Typography`),
-пословная конверсия (`AutoConvertPerWord`), whole-buffer fallback,
-работа с выделением через Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
+All of this existed and caused constant complaints — removed deliberately:
+dictionaries (`WordDictionary`, `words_ru/en.txt`), layout guessing
+(`AutoDetector`), auto-correction while typing, typography (`Typography`),
+word-by-word conversion (`AutoConvertPerWord`), the whole-buffer fallback,
+selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
 `ClipboardSafe`), `NeverFixList`.
 
-## Архитектура
+## Architecture
 
-- `Program.cs` — точка входа, single-instance mutex, UI SyncContext.
-- `App.cs` — координатор. Ставит хуки, ведёт `TypingBuffer`, матчит четыре хоткея,
-  дёргает `ScopeEditor` и применяет результат через `Sender`.
-- `Core/ScopeEditor.cs` — **сердце модели**. Держит замороженный `_original` и
-  счётчик слов в области; на каждое нажатие расширяет область на слово и отдаёт
-  `Edit(EraseCount, Text, Direction, NewBufferContent)`.
-  Инвариант, на котором всё держится: **преобразования сохраняют длину**, поэтому
-  «сколько символов на экране от начала области до каретки» = `Original.Length - scopeStart`
-  независимо от числа предыдущих перезаписей. Есть явная проверка длины на случай
-  экзотического Unicode. Потокобезопасен (хук и UI-поток).
-- `Core/TypingBuffer.cs` — лента набранных символов + статические
-  `StartOfLastWords` / `CountWords`. Без курсора и навигации — намеренно.
-- `Core/LayoutConverter.cs` — таблица JCUKEN↔QWERTY (`PairsLower`/`PairsUpper`,
-  Shift-символы `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё``). `ToRussian`/`ToEnglish` —
-  1-в-1; `AutoConvertWithDirection` выбирает сторону по большинству символов.
-- `Core/Sender.cs` — SendInput: `SendBackspaces`, `SendUnicode` (по одному символу
-  с задержкой — Electron/React теряют batched-события), `WaitForModifiersReleased`,
+- `Program.cs` — entry point, single-instance mutex, UI SyncContext.
+- `App.cs` — the coordinator. Installs the hooks, maintains `TypingBuffer`,
+  matches the hotkeys, drives `ScopeEditor` and applies the result via `Sender`.
+- `Core/ScopeEditor.cs` — **the heart of the model**. Holds a frozen `_original`
+  and the word count in the scope; on every press it expands the scope by a word
+  and returns `Edit(EraseCount, Text, Direction, NewBufferContent)`.
+  The invariant everything rests on: **transformations preserve length**, so
+  "how many characters are on screen between the start of the scope and the
+  caret" equals `Original.Length - scopeStart` regardless of how many rewrites
+  came before. There is an explicit length check for exotic Unicode. Thread-safe
+  (the hook and the UI thread).
+- `Core/TypingBuffer.cs` — the ribbon of typed characters plus the static
+  `StartOfLastWords` / `CountWords`. No cursor and no navigation — deliberately.
+- `Core/LayoutConverter.cs` — the JCUKEN↔QWERTY table (`PairsLower`/`PairsUpper`,
+  Shift symbols `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё``). `ToRussian`/`ToEnglish`
+  are 1-to-1; `AutoConvertWithDirection` picks the side by the majority of
+  characters.
+- `Core/Sender.cs` — SendInput: `SendBackspaces`, `SendUnicode` (in small
+  batches — Electron/React lose batched events), `WaitForModifiersReleased`,
   `ReleaseHotkeyModifiers`, `CancelMenuActivation`.
-- `Core/ModelStore.cs` — общее хранилище моделей перевода и голосового ввода в
-  `%AppData%\Oops\models\<пакет>`. `ModelPackage` = набор `ModelFile`
-  (имя, URL, SHA-256, размер, флаг `.gz`); `EnsureAsync` докачивает только
-  недостающие файлы. Сумма в `ModelFile` — от файла **в опубликованном виде**
-  (для `.gz` — от архива): докачку нечем проверять по распакованным данным,
-  которых на диске ещё нет.
-- `Core/Translator.cs` + `Core/ModelCatalog.cs` — локальный перевод RU↔EN
-  движком Bergamot (`BergamotTranslatorSharp`, MPL-2.0 — тот же движок, что
-  переводит страницы в Firefox). Текст **не уходит в сеть**: это условие, при
-  котором функцию вообще можно держать в программе, которая видит весь ввод.
-  Модели — из реестра Mozilla, суммы SHA-256 сняты с опубликованных архивов и
-  зашиты в `ModelCatalog` (реестр приходит с того же хоста, что и файлы, и
-  подтверждать ими друг друга бессмысленно). Конфиг движка пишется при каждом
-  создании: рассинхрон имён файлов с конфигом даёт «Failed to create translator
-  instance» без объяснений. Расширения области у перевода НЕТ — он не сохраняет
-  длину и не обратим, второе нажатие переводило бы уже переведённое.
-  В csproj обязателен `IncludeNativeLibrariesForSelfExtract`: без него нативная
-  `bergamot.dll` ложится файлом рядом с exe и портативный архив из одного файла
-  теряет перевод. **Вместе с ним обязателен `IncludeAllContentForSelfExtract`** —
-  см. «Грабли».
-- `Core/Recorder.cs` + `Core/VoiceInput.cs` — голосовой ввод: NAudio снимает
-  звук, `Whisper.net` (whisper.cpp) распознаёт. Формат записи 16 кГц/моно/16 бит
-  прибит гвоздями — другого whisper.cpp не принимает. Звук живёт только в
-  памяти: программа и так видит весь ввод, писать ещё и речь на диск нельзя.
-  `WhisperFactory` создаётся один раз и живёт до выхода — модель весит полгига,
-  пересоздание отняло бы секунды перед каждой фразой. `LimitReached` в
-  `Recorder` поднимается ВНЕ замка: подписчик зовёт `Stop()`, который берёт тот
-  же замок, и внутри вышла бы взаимная блокировка на потоке звукового драйвера.
-  Распознавание **потоковое**: раз в секунду `App.OnVoiceTick` прогоняет всё
-  записанное с начала фразы и дописывает разницу. Whisper не умеет
-  «продолжать» — он каждый раз разбирает кусок целиком и может передумать
-  насчёт уже сказанного, поэтому напечатанное сравнивается с новым по общему
-  началу: расходящийся хвост стирается и печатается заново. Такт пропускается,
-  если предыдущий проход ещё считает, — очередь проходов только отстала бы от
-  речи. Отключается настройкой `VoiceLiveText`.
-  `VoiceInput.CleanText` обязателен: не-речь Whisper обозначает текстом в
-  квадратных скобках (`[BLANK_AUDIO]`, `[MUSIC]`), и на тишине это уезжало
-  прямо в поле ввода вместо фразы.
-- `UI/VoiceOverlay.cs` — плашка «слушаю» внизу экрана с живой расшифровкой.
-  Окно обязано быть НЕАКТИВИРУЕМЫМ (`ShowWithoutActivation` + `WS_EX_NOACTIVATE`):
-  забрав фокус, оно отобрало бы у текста поле, в которое его печатают.
-- `Core/TextReplacer.cs` + `UI/ReplaceForm.cs` — поиск и замена в выделенном
-  тексте, обычная и по регулярному выражению, с мастером (готовые правила +
-  кирпичики, вставляемые в поле поиска). У поиска **обязателен таймаут**:
-  выражение пишет пользователь, а `(a+)+$` на длинной строке уходит в перебор
-  на часы и повесил бы приложение вместе с клавиатурным хуком — то есть ввод
-  во всей системе. Ошибка разбора не бросается наружу: незакрытая скобка —
-  обычное состояние поля, пока его дописывают. Границы слова ставятся вокруг
-  всего выражения (`\b(?:…)\b`), иначе `\bкот|пёс\b` значит не то.
-  Предпросмотр считается от ИСХОДНОГО текста, поэтому «применить дважды»
-  невозможно по построению.
-- `Core/Log.cs` — подробный лог в `%AppData%\Oops\logs`, выключен по умолчанию
-  (`AppSettings.VerboseLog`). **Набранный текст в лог не попадает никогда**:
-  клавиши пишутся кодами (`VK 0x41`), а не символами. Программа видит весь
-  ввод, и единственное, что делает её пригодной к использованию, — что она его
-  никуда не девает; лог исключением быть не может. Потолок файла 8 МБ, хранится
-  пять последних.
-- `Core/HotkeyConflicts.cs` — проверка при запуске, не занято ли сочетание
-  другой программой (`RegisterHotKey` + `ERROR_HOTKEY_ALREADY_REGISTERED`).
-  Ловит только тех, кто регистрируется тем же способом; программы со своим
-  низкоуровневым хуком так не обнаруживаются в принципе. Отсутствие конфликта
-  здесь не гарантия, наличие — точный ответ.
-- `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` активному окну.
-- `Core/LayoutTracker.cs` — детект ручной смены раскладки → сброс буфера.
-- `Hooks/KeyboardHook.cs` — `WH_KEYBOARD_LL`. Символ через `ToUnicodeEx` (флаг 0x4
-  «не менять состояние»), модификаторы через `GetAsyncKeyState`, игнорирует свои
-  инжектированные события (`LLKHF_INJECTED`). Если нажатая клавиша сама модификатор —
-  флаг ставится сразу (иначе Ctrl+Win не матчился из-за тайминга).
-- `Hooks/MouseHook.cs`, `Hooks/ForegroundWatcher.cs` — сброс буфера на клике и
-  смене окна.
-- `UI/Theme.cs` — дизайн-система: палитра, типографика, 8px-сетка, `ThemedForm`,
-  `Card`, `FlatButton`, `HotkeyDisplay` (рисует сочетание «клавишами»).
-  Палитра — **свойства, а не константы**: читает тёмную тему Windows
-  (`AppsUseLightTheme`) и `SystemInformation.HighContrast`, значения фиксируются
-  один раз при старте. Все окна наследуют `ThemedForm` (фон, шрифт, DPI и тёмный
-  заголовок через `DwmSetWindowAttribute(20)`), меню трея — `ApplyMenuChrome`.
-- Интерфейс прогнан по `emil-design-eng` и `apple-design` из `emilkowalski/skills`.
-  Сами скиллы в репозитории НЕ лежат (чужой код, `.agents/` и `.claude/` в
-  gitignore) — ставятся одной командой `npx skills add emilkowalski/skills`,
-  состав зафиксирован в `skills-lock.json`.
-- `UI/SettingsForm.cs` — окно настроек. **Три вкладки** (общие / хоткеи +
-  проверка / поведение) на том же `SegmentedControl`, что и переключатель языка.
-  Проверка живёт рядом с хоткеями: она нужна ровно тогда, когда сочетание
-  молчит и его меняют. Высота страницы считается заранее по самой высокой
-  вкладке (`TallestPageHeight`) — прокрутки нет намеренно, она прятала бы часть
-  настроек, и окно не прыгает при переключении. Корень — `TableLayoutPanel` с
-  четырьмя строками, НЕ Dock.Fill+Dock.Bottom: порядок докинга в WinForms
-  зависит от z-order.
-  Смена языка применяется на лету: `L10n.Init` + пересборка окна и меню трея
-  (`TrayContext.BuildMenu`), потому что тексты сидят в уже созданных контролах.
-- `UI/WelcomeForm.cs` — мастер первого запуска (две страницы: как работает модель /
-  выбор хоткеев + автозапуск). Показывается из `Program.Main` до создания трея,
-  один раз — по флагу `AppSettings.FirstRunCompleted`. Программа с виду ничего не
-  делает, и без объяснения модели её принимают за сломанную.
-- `UI/Notice.cs` — окна сообщений вместо `MessageBox`: метка по типу (инфо /
-  предупреждение / ошибка), отдельная строка «что делать», сворачиваемые
-  подробности с кнопкой «Скопировать» и «Сообщить об ошибке» (открывает issue с
-  уже заполненным телом). `Notice.Crash` подцеплен к `Application.ThreadException`
-  и `AppDomain.UnhandledException` в `Program.Main`. **Новые сообщения писать
-  только через него** — `MessageBox` игнорирует тёмную тему и не умеет ни
-  подсказки, ни подробностей.
-- `UI/WhatsNewForm.cs` + `Core/Changelog.cs` — «Что нового»: слева список всех
-  версий начиная с 1.0.0, справа — что появилось в выбранной. Показывается один
-  раз после обновления (`AppSettings.LastSeenVersion`) и по пункту меню трея.
-  Высота рабочей области **фиксированная**: у версий разное число пунктов, и
-  подгонка под выбранную заставляла бы окно прыгать при каждом клике по списку.
-  При переключении версии прежние карточки уничтожаются, а не просто
-  открепляются, — иначе они копятся и рисуются друг под другом (на этом уже
-  погорели вкладки настроек).
-  Программа обновляется молча, и без этого окна о новой функции узнают
-  случайно — а хоткей, о котором не знают, ничем не отличается от
-  отсутствующего. Поэтому каждый пункт отвечает «как этим пользоваться», а не
-  «что сделано», и сочетание берётся ИЗ НАСТРОЕК, а не из умолчаний: человек
-  мог его поменять. Версия запоминается при каждом запуске, даже если окно не
-  показали, — иначе оно всплывало бы снова и снова. На свежей установке окна
-  нет: там своё дело делает мастер первого запуска.
-- `UI/TrayContext.cs` — NotifyIcon и меню.
-- `Core/L10n.cs` + `Resources/lang_{ru,en}.json` — строки интерфейса. **Только
-  встроенные ресурсы, не `.resx` с сателлитами**: при `PublishSingleFile`
-  сателлитные сборки не попадают внутрь exe, а раскладываются в подпапки культур
-  рядом с ним — портативный архив собирается из одного файла и потерял бы
-  переводы. Неизвестный ключ возвращается как есть (виден на экране, но не
-  роняет окно); пропуск в английском подменяется русским. `L10nTests` проверяет
-  совпадение наборов ключей и плейсхолдеров — забытый перевод ловится без
-  запуска. Язык: `AppSettings.Language` = `auto`/`ru`/`en`, `auto` берётся из
-  `CultureInfo.CurrentUICulture`, значение фиксируется при старте.
-  **Новые строки заводить только через `L10n.T`** — и сразу в оба словаря.
-  **Подчёркивание в имени файла обязательно.** При `lang.ru.json` MSBuild видит
-  `.ru.` и считает файл ресурсом культуры — словарь уезжает в сателлитную сборку
-  `ru\`, а из главной пропадает, и приложение падает на старте. В csproj стоит
-  ещё и `WithCulture="false"` как вторая страховка.
-- `Settings/AppSettings.cs` — JSON в `%AppData%\Oops\settings.json`. `Save()`
-  возвращает текст ошибки, `Load()` заполняет `LoadError` — оба отказа
-  показываются пользователю. Молчаливый `catch {}` тут недопустим: отказ записи
-  означал, что человек закрыл окно в уверенности, что хоткеи переназначены, а
-  после перезапуска получал прежние.
-  `Sanitize()` чинит настройки из старых файлов (null → дефолт, Alt+Shift → дефолт,
-  два одинаковых хоткея → дефолт).
-- `Settings/Autostart.cs` — реестр `HKCU\...\Run`. **Единственный источник правды
-  для автозапуска**; в `settings.json` его копии нет и быть не должно.
+- `Core/ModelStore.cs` — the shared store for translation and voice models in
+  `%AppData%\Oops\models\<package>`. A `ModelPackage` is a set of `ModelFile`
+  (name, URL, SHA-256, size, `.gz` flag); `EnsureAsync` downloads only the
+  missing files. The checksum in `ModelFile` is of the file **as published**
+  (for `.gz` — of the archive): a resumed download cannot be verified against
+  uncompressed data that is not on disk yet.
+- `Core/Translator.cs` + `Core/ModelCatalog.cs` — local RU↔EN translation with
+  the Bergamot engine (`BergamotTranslatorSharp`, MPL-2.0 — the same engine that
+  translates pages in Firefox). The text **never goes to the network**: that is
+  the condition under which such a feature can exist at all in a program that
+  sees everything you type. The models come from Mozilla's registry; the SHA-256
+  checksums were measured against the published archives and are baked into
+  `ModelCatalog` (the registry arrives from the same host as the files, so
+  having them vouch for each other is meaningless). The engine config is written
+  on every creation: names in the config drifting from the files in the folder
+  gives "Failed to create translator instance" with no explanation. Translation
+  has NO expanding scope — it does not preserve length and is not reversible, so
+  a second press would translate the already translated text.
+  In csproj `IncludeNativeLibrariesForSelfExtract` is mandatory: without it the
+  native `bergamot.dll` ends up as a file next to the exe and the single-file
+  portable archive loses translation. **`IncludeAllContentForSelfExtract` is
+  mandatory alongside it** — see "Traps".
+- `Core/Recorder.cs` + `Core/VoiceInput.cs` — voice input: NAudio captures the
+  audio, `Whisper.net` (whisper.cpp) recognises it. The recording format,
+  16 kHz/mono/16-bit, is nailed down — whisper.cpp accepts nothing else. The
+  audio lives in memory only: the program already sees every keystroke, writing
+  speech to disk on top of that is out of the question.
+  `WhisperFactory` is created once and lives until exit — the model weighs half
+  a gigabyte, and recreating it would cost seconds before every phrase.
+  `LimitReached` in `Recorder` is raised OUTSIDE the lock: the subscriber calls
+  `Stop()`, which takes the same lock, and inside it that would deadlock on the
+  audio driver's thread.
+  Recognition is **streaming**: once a second `App.OnVoiceTick` runs everything
+  recorded since the start of the phrase and types the difference. Whisper
+  cannot "continue" — it re-parses the whole chunk every time and may change its
+  mind about what was already said, so what has been typed is compared with the
+  new text by common prefix: the diverging tail is erased and retyped. A tick is
+  skipped while the previous pass is still running — a queue of passes would only
+  fall further behind the speech. Turned off by the `VoiceLiveText` setting.
+  `VoiceInput.CleanText` is mandatory: Whisper marks non-speech with text in
+  square brackets (`[BLANK_AUDIO]`, `[MUSIC]`), and on silence that went
+  straight into the input field instead of the phrase.
+- `UI/VoiceOverlay.cs` — the "listening" panel at the bottom of the screen with
+  the live transcript. The window MUST be non-activating (`ShowWithoutActivation`
+  + `WS_EX_NOACTIVATE`): by taking focus it would take away the very field the
+  text is being typed into.
+- `Core/TextReplacer.cs` + `UI/ReplaceForm.cs` — find and replace in the selected
+  text, plain and by regular expression, with a wizard (ready-made rules +
+  building blocks inserted into the search field). The search **must** have a
+  timeout: the expression is written by the user, and `(a+)+$` on a long line
+  backtracks for hours and would hang the application together with the keyboard
+  hook — that is, input across the whole system. A parse error is not thrown
+  outwards: an unclosed bracket is the normal state of the field while it is
+  being typed. Word boundaries go around the whole expression (`\b(?:…)\b`),
+  otherwise `\bcat|dog\b` does not mean what was asked. The preview is computed
+  from the ORIGINAL text, which makes "apply twice" impossible by construction.
+- `Core/Log.cs` — the detailed log in `%AppData%\Oops\logs`, off by default
+  (`AppSettings.VerboseLog`). **Typed text never reaches the log**: keys are
+  written as codes (`VK 0x41`), not as characters. The program sees everything
+  you type, and the only thing that makes it usable is that it keeps none of it;
+  the log cannot be an exception. The file is capped at 8 MB, the last five are
+  kept.
+- `Core/HotkeyConflicts.cs` — a check at startup for whether a shortcut is
+  already taken by another program (`RegisterHotKey` +
+  `ERROR_HOTKEY_ALREADY_REGISTERED`). It only catches those who register the
+  same way; programs with their own low-level hook cannot be detected this way
+  at all. The absence of a conflict here is not a guarantee — its presence is a
+  definite answer.
+- `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` to the active window.
+- `Core/LayoutTracker.cs` — detects a manual layout change → clears the buffer.
+- `Hooks/KeyboardHook.cs` — `WH_KEYBOARD_LL`. The character comes from
+  `ToUnicodeEx` (flag 0x4, "do not change the state"), modifiers from
+  `GetAsyncKeyState`, and it ignores our own injected events (`LLKHF_INJECTED`).
+  If the pressed key is itself a modifier, the flag is set immediately
+  (otherwise Ctrl+Win did not match because of timing).
+- `Hooks/MouseHook.cs`, `Hooks/ForegroundWatcher.cs` — clear the buffer on a
+  click and on a window change.
+- `UI/Theme.cs` — the design system: palette, typography, 8px grid, `ThemedForm`,
+  `Card`, `FlatButton`, `HotkeyDisplay` (draws a shortcut as "keycaps").
+  The palette consists of **properties, not constants**: it reads the Windows
+  dark theme (`AppsUseLightTheme`) and `SystemInformation.HighContrast`, and the
+  values are fixed once at startup. Every window inherits `ThemedForm`
+  (background, font, DPI and the dark title bar via `DwmSetWindowAttribute(20)`);
+  the tray menu goes through `ApplyMenuChrome`.
+- The interface was reviewed with `emil-design-eng` and `apple-design` from
+  `emilkowalski/skills`. The skills themselves are NOT in the repository
+  (third-party code, `.agents/` and `.claude/` are gitignored) — install them
+  with a single `npx skills add emilkowalski/skills`; the exact set is pinned in
+  `skills-lock.json`.
+- `UI/SettingsForm.cs` — the settings window. **Three tabs** (general / hotkeys +
+  probe / behaviour) on the same `SegmentedControl` as the language switch.
+  The probe lives next to the hotkeys: it is needed exactly when a shortcut is
+  silent and is being changed. The page height is measured after layout
+  (`FitPages`) — there is no scrolling on purpose, it would hide part of the
+  settings, and the window does not jump when switching tabs. The root is a
+  `TableLayoutPanel` with four rows, NOT Dock.Fill+Dock.Bottom: docking order in
+  WinForms depends on z-order.
+  A language change is applied on the fly: `L10n.Init` plus rebuilding the
+  window and the tray menu (`TrayContext.BuildMenu`), because the texts live
+  inside already-created controls.
+- `UI/WelcomeForm.cs` — the first-run wizard (two pages: how the model works /
+  choosing shortcuts + autostart). Shown from `Program.Main` before the tray is
+  created, once, guarded by `AppSettings.FirstRunCompleted`. The program appears
+  to do nothing, and without an explanation of the model it is taken for broken.
+- `UI/Notice.cs` — message windows instead of `MessageBox`: a badge by kind
+  (info / warning / error), a separate "what to do" line, collapsible details
+  with a "Copy" button and "Report a problem" (opens an issue with the body
+  pre-filled). `Notice.Crash` is wired to `Application.ThreadException` and
+  `AppDomain.UnhandledException` in `Program.Main`. **Write new messages only
+  through it** — `MessageBox` ignores the dark theme and can offer neither a
+  hint nor details.
+- `UI/WhatsNewForm.cs` + `Core/Changelog.cs` — "What's new": on the left, every
+  version starting from 1.0.0; on the right, what appeared in the selected one.
+  Shown once after an update (`AppSettings.LastSeenVersion`) and from the tray
+  menu. The body height is **fixed**: versions have different numbers of items,
+  and fitting the window to the selected one would make it jump on every click
+  in the list. When switching versions the old cards are disposed, not merely
+  detached — otherwise they pile up and paint on top of each other (the settings
+  tabs already burned on this).
+  The program updates silently, and without this window people learn about a new
+  feature by accident — and a shortcut nobody knows about is no different from
+  one that does not exist. So every item answers "how to use this", not "what was
+  done", and the shortcut is taken FROM THE SETTINGS rather than from the
+  defaults: the user may have changed it. The version is remembered on every
+  start, even when the window was not shown — otherwise it would pop up again
+  and again. On a fresh install there is no window: the first-run wizard does
+  that job.
+- `UI/TrayContext.cs` — NotifyIcon and the menu.
+- `Core/L10n.cs` + `Resources/lang_{ru,en}.json` — the interface strings.
+  **Embedded resources only, not `.resx` with satellites**: under
+  `PublishSingleFile` satellite assemblies do not go inside the exe but are laid
+  out in culture subfolders next to it — the portable archive is a single file
+  and would lose the translations. An unknown key is returned as-is (visible on
+  screen, but it does not bring the window down); a gap in English falls back to
+  Russian. `L10nTests` checks that the key sets and the placeholders match — a
+  forgotten translation is caught without running the app. Language:
+  `AppSettings.Language` = `auto`/`ru`/`en`; `auto` comes from
+  `CultureInfo.CurrentUICulture` and the value is fixed at startup.
+  **Add new strings only through `L10n.T`** — and into both dictionaries at once.
+  **The underscore in the file name is mandatory.** With `lang.ru.json` MSBuild
+  sees `.ru.` and treats the file as a culture resource — the dictionary moves
+  into the `ru\` satellite assembly and disappears from the main one, and the
+  application crashes at startup. csproj also carries `WithCulture="false"` as a
+  second guard.
+- `Settings/AppSettings.cs` — JSON in `%AppData%\Oops\settings.json`. `Save()`
+  returns the error text, `Load()` fills `LoadError` — both failures are shown to
+  the user. A silent `catch {}` is unacceptable here: a failed write meant the
+  person closed the window believing their shortcuts had been reassigned, and
+  got the old ones back after a restart.
+  `Sanitize()` repairs settings from old files (null → default, Alt+Shift →
+  default, two identical shortcuts → default).
+- `Settings/Autostart.cs` — the `HKCU\...\Run` registry key. **The single source
+  of truth for autostart**; there is no copy of it in `settings.json` and there
+  must not be one.
 
-## Хоткеи по умолчанию
+## Default hotkeys
 
-- Раскладка: **Ctrl+Win** (modifier-only).
-- Регистр: **Alt+Win** (modifier-only).
-- Перевод: **Ctrl+Alt+Win** (modifier-only). Не Shift+Win — на нём Win+Shift+S
-  (снимок области), а хоткей глотает клавишу, замкнувшую сочетание.
-- Голосовой ввод: **Ctrl+Shift+Win** (modifier-only). Переключатель, а не
-  удержание: диктовать фразу, держа три клавиши, физически нельзя.
-- Замена в выделенном: **Alt+Shift+Win** (modifier-only). Alt+Shift сам по себе
-  запрещён (системная смена раскладки), но с Win это уже другое сочетание.
-- **Alt+Shift ставить нельзя** — системный шорткат смены раскладки Windows,
-  до нас в рабочем виде не доходит. Диалог записи это отклоняет, `Sanitize()`
-  сбрасывает такие сохранённые значения.
+- Layout: **Ctrl+Win** (modifier-only).
+- Case: **Alt+Win** (modifier-only).
+- Translate: **Ctrl+Alt+Win** (modifier-only). Not Shift+Win — that is Win+Shift+S
+  (screen snip), and the hotkey swallows the key that completes the chord.
+- Voice input: **Ctrl+Shift+Win** (modifier-only). A toggle, not a hold:
+  dictating a phrase while holding three keys is physically impossible.
+- Replace in selection: **Alt+Shift+Win** (modifier-only). Alt+Shift on its own
+  is forbidden (the system layout switch), but with Win it is a different chord.
+- **Alt+Shift must not be assigned** — it is the Windows system shortcut for
+  switching layouts and never reaches us in a usable form. The recording dialog
+  rejects it and `Sanitize()` resets such saved values.
 
-## Безопасность
+## Security
 
-Единственное место, где данные из сети превращаются в исполняемый код, —
-автообновление. Инварианты, которые нельзя ослаблять:
-- URL инсталлятора и SHA256SUMS.txt принимаются **только с github.com** /
-  `*.githubusercontent.com` по HTTPS (`IsTrustedDownloadUrl`);
-- скачанный exe **сверяется по SHA-256** с SHA256SUMS.txt релиза до запуска,
-  при несовпадении удаляется; имя файла в Temp со случайным суффиксом;
-- `Process.Start(url, UseShellExecute)` запускает что угодно, не только
-  браузер (file://, UNC) — любой URL из внешних данных проверяется на https.
+The only place where data from the network turns into executable code is the
+auto-update. Invariants that must not be weakened:
+- the installer and SHA256SUMS.txt URLs are accepted **only from github.com** /
+  `*.githubusercontent.com` over HTTPS (`IsTrustedDownloadUrl`);
+- the downloaded exe is **verified by SHA-256** against the release's
+  SHA256SUMS.txt before it runs, and deleted on a mismatch; the file name in
+  Temp carries a random suffix;
+- `Process.Start(url, UseShellExecute)` launches anything, not just a browser
+  (file://, UNC) — every URL coming from external data is checked for https.
 
-Второе место, где внешние данные попадают на диск, — загрузка моделей
-(`Core/ModelStore.cs`). Правила те же: хост из закрытого списка по HTTPS
-(`IsTrustedUrl`), обязательная сверка SHA-256 **до** распаковки и до того,
-как файл получит своё имя (пишем в `.part`), имя файла берётся из описания
-пакета, а не из ответа сервера, и прогоняется через `Path.GetFileName`,
-потолок размера. Модель не исполняется, но её разбирает нативная библиотека —
-битый или подложенный файл там даёт ровно то же, что и подменённый exe.
-Загрузка возобновляемая (Range): если сервер не отдал 206, `.part`
-выбрасывается и качается заново — иначе к остатку припишется начало.
+The second place where external data reaches the disk is the model download
+(`Core/ModelStore.cs`). The rules are the same: a host from a closed list over
+HTTPS (`IsTrustedUrl`), a mandatory SHA-256 check **before** decompression and
+before the file gets its real name (we write to `.part`), the file name taken
+from the package description rather than from the server's response and passed
+through `Path.GetFileName`, and a size cap. A model is not executed, but a
+native library parses it — a corrupted or substituted file there gives exactly
+what a substituted exe would. The download is resumable (Range): if the server
+did not answer with 206, the `.part` is thrown away and fetched again —
+otherwise the beginning would be appended to the remainder.
 
-Набранный текст живёт только в памяти (`TypingBuffer`) — не логируется, не
-пишется на диск, не отправляется в сеть. На диск идёт только settings.json.
-Mutex — `Local\`, не `Global\`: глобальный давал бы соседнему пользователю
-возможность заблокировать запуск программы навсегда.
+Typed text lives in memory only (`TypingBuffer`) — it is not logged, not written
+to disk, not sent anywhere. The only thing that goes to disk is settings.json.
+The mutex is `Local\`, not `Global\`: a global name would let a neighbouring
+user block the program from starting forever.
 
-## Грабли
+## Traps
 
-- LL keyboard hook отключается Windows при отладке (F5) по таймауту — тестировать
-  через **Ctrl+F5** или опубликованный exe.
-- **«Программа в какой-то момент перестала работать» — два известных механизма,
-  и оба чинятся сторожем в `App.OnHookWatchdog` (раз в 20 с).**
-  1. *Хук снят системой.* Windows молча снимает WH_KEYBOARD_LL, если
-     обработчик не ответил за `LowLevelHooksTimeout` (300 мс). Обработчик
-     живёт в потоке, который хук ставил, — у нас это UI-поток, и он же ждёт
-     отпускания модификаторов (до секунды), печатает длинный текст и спит
-     перед возвратом фокуса. `KeyboardHook.Revive()` узнаёт об этом по
-     `UnhookWindowsHookEx`: вернул false — значит хука уже не было.
-  2. *Залипший модификатор.* Отпускание доходит не всегда: его съедает
-     защищённый рабочий стол (UAC), смена сеанса, RDP, а у клавиши **Pause**
-     драйвер шлёт лишнее нажатие Ctrl, парного отпускания которому не будет.
-     Модификатор числится зажатым навсегда, и ни одно сочетание больше не
-     совпадает. `KeyboardHook.DropStuckKeys` выбрасывает всё, что «зажато»
-     дольше минуты: живой аккорд под такой порог не попадёт никогда.
-  Переустановку хука сторож делает только в спокойный момент — она обнуляет
-  список зажатых клавиш, и посреди аккорда сломала бы сочетание под пальцами.
-- Хоткей обязан игнорировать автоповтор (`KeyEvent.IsRepeat`): Windows шлёт поток
-  WM_KEYDOWN, пока клавишу держат, и modifier-only сочетание иначе срабатывает
-  десятки раз за одно удержание. Хук ведёт список зажатых клавиш по KEYUP.
-- `SendBackspaces` снимает модификаторы перед КАЖДЫМ Backspace, а не один раз
-  перед циклом: зажатая клавиша возвращает состояние обратно автоповтором, и
-  Backspace уходит как Win+Backspace (ничего не делает) или Ctrl+Backspace
-  (удаляет слово целиком).
-- Наши собственные переключения раскладки помечаются `LayoutTracker.NoteSelfSwitch()`,
-  иначе трекер примет их за ручные и сбросит ленту — расширение сломается.
-- Любое сочетание с Ctrl/Alt (кроме голых модификаторов) обязано сбрасывать ленту:
-  это команда приложению, которая может изменить текст как угодно. Особенно
-  `Ctrl+A` — без сброса лента остаётся непустой, идёт режим области, и первый же
-  Backspace съедает всё выделение. Голые модификаторы сбрасывать нельзя: хоткеи
-  modifier-only срабатывают именно на них.
-- **Ряд кнопок — только через `ButtonBar`, и ширина ему передаётся явно.**
-  Ни `Anchor`, ни `Dock` не годятся: оба зависят от того, как родитель считает
-  свою ширину, и на разных окнах давали разный результат — правый край кнопок
-  оказывался то за границей, то вплотную к ней. `ButtonBar.Create` принимает
-  `contentWidth` окна, высоту берёт от шрифта (`Theme.TextRowHeight`), и от
-  родителя не зависит вовсе. На этом сожжено шесть заходов.
-- **Высота вкладок меряется ПОСЛЕ раскладки (`FitPages` из `OnLoad`), а не при
-  сборке.** До раскладки ширина карточек не известна, абзацы переносятся не
-  там, где будут, и высота выходит выдуманной: окно однажды растянулось вдвое
-  выше экрана, а между карточками зияли дыры. Невидимую вкладку WinForms не
-  раскладывает вовсе — в замере каждую на миг показываем. Карточке (`Card`)
-  ширина при этом задаётся сразу при создании: с дефолтными 200 px ряды внутри
-  переносят абзацы по двадцать раз. Высота окна упирается в рабочую область
-  экрана; упёрлись — прокручивается страница, а не окно, шапка и кнопки
-  остаются на месте. Проявилось, когда на вкладку «Поведение» добавились
-  карточки с длинными абзацами.
-- **`IncludeNativeLibrariesForSelfExtract` без `IncludeAllContentForSelfExtract`
-  ломает голосовой ввод.** Как только single-file exe что-нибудь распаковывает,
-  `AppContext.BaseDirectory` указывает на папку распаковки, а не на папку с exe.
-  Whisper.net ищет свои библиотеки строго в `<BaseDirectory>\runtimes\win-x64`
-  и кладётся туда ОБЫЧНЫМИ файлами (`None` с `TargetPath`), а не нативными
-  ресурсами NuGet — первый флаг их не забирает, они остаются рядом с exe, и
-  распознавание падает с «Native Library not found in default paths». Нужны оба
-  флага: тогда распаковывается всё вместе с путями.
-- **Каждый наш `GetPreferredSize` обязан возвращать не меньше `MinimumSize`
-  (`Theme.AtLeastMinimum`).** Родитель раскладывает ряд по названному размеру,
-  а фактическую ширину контрол потом всё равно доводит до `MinimumSize` в
-  `SetBoundsCore`. Названный размер меньше минимума — контрол вылезает за
-  выделенную ему ячейку, и его обрезает РОДИТЕЛЬ. Снаружи это выглядит как
-  «кнопка обрезана», хотя сама кнопка ровно того размера, что нужно, и все
-  отступы на месте. Так была обрезана «Понятно»: по тексту она просила 98 px,
-  `MinimumSize` держал 168, ряд разложили по 98, нарисовали 168, лишние 70
-  срезал край панели. Шесть заходов правили отступы и ширины окна — то есть
-  не то место.
-- **НАС НИКТО НЕ МАСШТАБИРУЕТ ПО DPI — любое число в пикселях идёт через
-  `Theme.Px()`.** Формы стоят на `AutoScaleMode.Dpi`, но `AutoScaleDimensions`
-  у рукописных окон пуст (его проставляет дизайнер Visual Studio, а у нас его
-  нет). При пустом значении WinForms считает коэффициент равным единице и не
-  трогает ни один размер: ни `Size`, ни `MinimumSize`, ни абсолютные колонки
-  `TableLayoutPanel`. Шрифт при этом задан в пунктах и на 125% рисуется крупнее
-  сам собой — текст растёт, коробка нет. Отсюда ВЕСЬ класс «обрезанных»
-  дефектов: кнопка не помещается в ряд шириной 420, значок 24×24 не попадает
-  в свою колонку. На 100% расхождения нет вовсе — поэтому по скриншотам с
-  масштабом причина шесть раз читалась как ошибка вёрстки.
-- **Любая наша отрисовка фона — только через `Theme.EffectiveBackColor(this)`,
-  никогда `Parent.BackColor`.** У прозрачного родителя `BackColor` возвращает
-  `Color.Transparent`, а `Graphics.Clear(Color.Transparent)` заливает
-  ARGB(0,255,255,255) — то есть белым. В тёмной теме это видно там, где контрол
-  не закрывает свой прямоугольник: светлые уголки за скруглением карточек,
-  светлая полоса снизу на месте тени, белый квадрат под круглым значком в
-  `Notice`. Ловилось трижды — у кнопки, у значка и у карточки.
-- Страховка размера окна в `ThemedForm.OnShown` меряет содержимое ВНУТРИ
-  корневой панели, а не саму панель (её правый край и есть текущая ширина —
-  сравнение с самим собой плюс отступ растило окно на каждом показе), и при
-  доращивании выключает `AutoSize`: иначе следующий проход раскладки вернёт
-  форму к её же заниженному preferred size, и правка не доживёт до отрисовки.
-- **Никаких зашитых высот у контролов с текстом.** `Theme.TextRowHeight` и
-  `KeyRowHeight` считаются от шрифта: при 125–150% масштабирования Windows
-  строка выше 30–34 пикселей, и константа обрезает текст. На этом трижды
-  погорели переключатель языка, степперы и ряд кнопок (`ButtonBar` задавал
-  себе высоту 34 и резал кнопки). Высоту диктует `GetPreferredSize`, ширину —
-  колонка разметки; `MinimumSize` у кнопок держит только ширину.
-- В `SettingsForm` подписи строк обязаны иметь `MaximumSize` по ширине: AutoSize-
-  лейбл без лимита требует полную ширину и выталкивает правый контрол за границу
-  карточки.
-- Одиночный тап Alt активирует строку меню, одиночный тап Win открывает «Пуск» —
-  и то и другое уводит фокус → перед работой вызывается
-  `Sender.CancelMenuActivation()` (Ctrl-тап, пока модификатор зажат). Win проверять
-  обязательно: глотаем мы только клавишу, замкнувшую сочетание, и если Win нажали
-  первой, её нажатие ушло в систему целым.
-- **`GetAsyncKeyState` врёт про наши же модификаторы — это главный источник
-  «хоткей не собирается в аккорд».** Состояние клавиши в системе не обновляется
-  после `Handled = true` (проглоченное нажатие система не видела), а
-  `ReleaseHotkeyModifiers`/`CancelMenuActivation` инжектируют отпускание Alt/Win —
-  и после этого система считает клавишу отпущенной до конца удержания. Симптом:
-  «Alt, потом Win» распадался на два отдельных нажатия, а «Win, потом Alt»
-  собирался. Поэтому модификаторы в `KeyboardHook` считаются по `_physicallyDown`
-  (собран из самого потока событий), `GetAsyncKeyState` оставлен подстраховкой
-  через «или». По той же причине `HotkeyRecordDialog` ведёт список зажатых сам.
-- Хук отдаёт **конкретные L/R-варианты** модификаторов (`0xA4`/`0xA5` для Alt),
-  общий `VK_MENU` в него не приходит — проверять надо оба кода.
-- Перед Backspace обязательно `WaitForModifiersReleased()`: зажатый Ctrl превратит
-  Backspace в Ctrl+Backspace (удаление слова целиком).
-- SendInput большими пачками теряется в Electron/React. Теряются именно БОЛЬШИЕ —
-  когда вся строка уходит одним вызовом; `Sender.ChunkSize` (8) шлёт десяток за
-  раз, и фраза переписывается за десятки миллисекунд вместо секунды. Посылка
-  обязана оставаться короткой ещё и потому, что снятие модификаторов повторяется
-  в каждой: между двумя очистками не должно проходить больше интервала
-  автоповтора (~30 мс), иначе зажатый Alt вернётся. Настройка «Печатать медленно,
-  по одному символу» возвращает прежнее поведение (`ChunkSize = 1`).
-- **`SendUnicode` обязан снимать Alt перед КАЖДЫМ символом.** Windows выбирает
-  WM_CHAR или WM_SYSCHAR по состоянию именно Alt: под зажатым Alt символ уходит
-  как WM_SYSCHAR, поля ввода его игнорируют, и текст просто не появляется. Ctrl
-  на KEYEVENTF_UNICODE не влияет. Отсюда была разница «Ctrl+Win работает, Alt+Win
-  нет»: `WaitForModifiersReleased` ждёт не дольше секунды, а аккорд держат дольше.
-- Клавишу **Win форме WinForms не отдают** — её забирает оболочка, KeyDown не
-  приходит. Поэтому `HotkeyRecordDialog` слушает свой `KeyboardHook`, а не события
-  формы: иначе сочетание, заканчивающееся на Win, записывалось огрызком без Win
-  и потом молча не совпадало ни с одним нажатием. Заодно записывается ровно то,
-  что увидит `HotkeyConfig.Matches` — тот же vk и те же флаги.
-- В настройках есть карточка «ПРОВЕРКА» со своим хуком: показывает, что реально
-  дошло до программы и совпало ли. Молчащий хоткей неотличим от сломанной
-  программы — без такого окошка причину приходилось угадывать.
-- Автозапуск НЕ дублировать в `settings.json`. Инсталлятор пишет `HKCU\...\Run` сам
-  (задача `autostart`), а сохранение настроек с полем-копией (дефолт `false`)
-  затирало эту запись при первом же открытии окна — первый пользователь получил
-  «галочка в установщике ничего не делает». Окно читает `Autostart.IsEnabled()`
-  и пишет `Autostart.Set(...)` — больше нигде.
-- Хоткеи не должны совпадать: `App.OnKeyDown` проверяет раскладку первой и
-  до второго сравнения не доходит — второй хоткей молчит без единого признака.
-  Отсекается в `Sanitize()` и при сохранении настроек.
-- Диалог замены забирает фокус, поэтому выделение читается ДО его показа, а
-  окно, в котором оно лежит, запоминается через `GetForegroundWindow` и
-  возвращается через `SetForegroundWindow` перед печатью. Без паузы после
-  возврата первые символы уходят ещё закрывающемуся диалогу и пропадают.
-- Пустой шаг области (`ScopeEditor`, «расширять некуда») НЕ обновляет
-  `_lastPressUtc`. Иначе частые нажатия бесконечно продлевают окно расширения:
-  человек жмёт хоткей раз в секунду и не видит вообще ничего.
+- The LL keyboard hook is disabled by Windows on timeout while debugging (F5) —
+  test with **Ctrl+F5** or the published exe.
+- **"The program stopped working at some point" — two known mechanisms, and both
+  are handled by the watchdog in `App.OnHookWatchdog` (every 20 s).**
+  1. *The hook was removed by the system.* Windows silently removes
+     WH_KEYBOARD_LL if the callback did not answer within
+     `LowLevelHooksTimeout` (300 ms). The callback lives on the thread that
+     installed the hook — for us that is the UI thread, and the same thread
+     waits for modifiers to be released (up to a second), types long text and
+     sleeps before restoring focus. `KeyboardHook.Revive()` learns about it from
+     `UnhookWindowsHookEx`: it returned false, so the hook was already gone.
+  2. *A stuck modifier.* The key-up does not always arrive: it is eaten by the
+     secure desktop (a UAC prompt), a session switch, RDP — and for the **Pause**
+     key the driver sends an extra Ctrl press that will never get its matching
+     release. The modifier is then considered held forever and no chord matches
+     any more. `KeyboardHook.DropStuckKeys` throws away anything "held" for
+     longer than a minute: a live chord can never fall under such a threshold.
+  The watchdog reinstalls the hook only at a quiet moment — reinstalling clears
+  the set of held keys, and doing it mid-chord would break the shortcut under
+  the user's fingers.
+- A hotkey must ignore auto-repeat (`KeyEvent.IsRepeat`): Windows sends a stream
+  of WM_KEYDOWN while a key is held, and a modifier-only chord would otherwise
+  fire dozens of times per hold. The hook keeps a list of held keys via KEYUP.
+- `SendBackspaces` clears the modifiers before EVERY Backspace, not once before
+  the loop: a held key restores the state through auto-repeat, and the Backspace
+  goes out as Win+Backspace (does nothing) or Ctrl+Backspace (deletes the whole
+  word).
+- Our own layout switches are marked with `LayoutTracker.NoteSelfSwitch()`,
+  otherwise the tracker takes them for manual ones and clears the buffer —
+  breaking expansion.
+- Any chord with Ctrl/Alt (other than bare modifiers) must clear the buffer: it
+  is a command to the application, and it may change the text in any way.
+  `Ctrl+A` especially — without a reset the buffer stays non-empty, the scope
+  path is taken, and the very first Backspace eats the whole selection. Bare
+  modifiers must NOT clear it: modifier-only hotkeys fire on exactly those.
+- **A row of buttons goes only through `ButtonBar`, and the width is passed to it
+  explicitly.** Neither `Anchor` nor `Dock` will do: both depend on how the
+  parent computes its own width, and gave different results in different
+  windows — the right edge of the buttons ended up either past the border or
+  flush against it. `ButtonBar.Create` takes the window's `contentWidth`, gets
+  its height from the font (`Theme.TextRowHeight`) and does not depend on the
+  parent at all. Six attempts were burned on this.
+- **Tab height is measured AFTER layout (`FitPages` from `OnLoad`), not while
+  building.** Before layout the card widths are unknown, paragraphs wrap
+  somewhere other than where they will, and the height comes out invented: the
+  window once stretched to twice the screen height with gaping holes between the
+  cards. WinForms does not lay out an invisible tab at all — during the
+  measurement each one is shown for an instant. The `Card` is given its width
+  right at construction: with the default 200 px the rows inside wrap paragraphs
+  twenty times over. The window height is capped by the screen's working area;
+  once capped, the page scrolls rather than the window, and the header and
+  buttons stay put. This surfaced when cards with long paragraphs were added to
+  the "Behaviour" tab.
+- **`IncludeNativeLibrariesForSelfExtract` without
+  `IncludeAllContentForSelfExtract` breaks voice input.** As soon as a
+  single-file exe extracts anything, `AppContext.BaseDirectory` points at the
+  extraction folder rather than at the folder with the exe. Whisper.net looks
+  for its libraries strictly in `<BaseDirectory>\runtimes\win-x64` and ships
+  them there as ORDINARY files (`None` with `TargetPath`), not as NuGet native
+  assets — so the first flag does not pick them up, they stay next to the exe,
+  and recognition fails with "Native Library not found in default paths". Both
+  flags are required: then everything is extracted with its paths intact.
+- **Every `GetPreferredSize` of ours must return no less than `MinimumSize`
+  (`Theme.AtLeastMinimum`).** The parent lays the row out by the size the
+  control names, and the control then brings its actual width up to
+  `MinimumSize` in `SetBoundsCore` anyway. Name a size smaller than the minimum
+  and the control spills out of the cell allotted to it, and the PARENT clips
+  it. From the outside this looks like "the button is cut off", even though the
+  button is exactly the size it needs and every padding is in place. That is how
+  "Got it" was clipped: by its text it asked for 98 px, `MinimumSize` held 168,
+  the row was laid out at 98, it was drawn at 168, and the extra 70 were cut off
+  by the edge of the panel. Six attempts adjusted paddings and window widths —
+  that is, the wrong place.
+- **NOTHING SCALES US BY DPI — every pixel number goes through `Theme.Px()`.**
+  The forms use `AutoScaleMode.Dpi`, but `AutoScaleDimensions` is empty on
+  hand-written windows (the Visual Studio designer fills it in, and we have
+  none). With an empty value WinForms treats the factor as one and touches no
+  size at all: not `Size`, not `MinimumSize`, not absolute `TableLayoutPanel`
+  columns. The font meanwhile is specified in points and is drawn larger at 125%
+  on its own — the text grows, the box does not. Hence the WHOLE class of
+  "clipped" defects: a button does not fit a 420-wide row, a 24×24 badge does
+  not fit its column. At 100% there is no discrepancy at all — which is why, on
+  screenshots taken with scaling, the cause read as a layout mistake six times
+  over.
+- **Any background we paint goes through `Theme.EffectiveBackColor(this)`, never
+  `Parent.BackColor`.** On a transparent parent `BackColor` returns
+  `Color.Transparent`, and `Graphics.Clear(Color.Transparent)` fills with
+  ARGB(0,255,255,255) — that is, white. In the dark theme this shows wherever a
+  control does not cover its own rectangle: light corners behind the rounded
+  cards, a light strip at the bottom where the shadow is, a white square under
+  the round badge in `Notice`. Caught three times — on the button, on the badge
+  and on the card.
+- The window-size safety net in `ThemedForm.OnShown` measures the content INSIDE
+  the root panel, not the panel itself (its right edge IS the current width —
+  comparing it with itself plus a padding grew the window on every show), and
+  when it does grow the window it turns `AutoSize` off: otherwise the next
+  layout pass returns the form to its own undersized preferred size and the fix
+  does not survive to be painted.
+- **No hard-coded heights on controls with text.** `Theme.TextRowHeight` and
+  `KeyRowHeight` are computed from the font: at 125–150% Windows scaling a line
+  is taller than 30–34 pixels and a constant clips the text. Three things burned
+  on this: the language switch, the steppers and the button row (`ButtonBar`
+  used to set its own height to 34 and cut the buttons). Height is dictated by
+  `GetPreferredSize`, width by the layout column; `MinimumSize` on buttons holds
+  the width only.
+- In `SettingsForm` row labels must have a `MaximumSize` width: an AutoSize
+  label without a limit demands the full width and pushes the right-hand control
+  past the card's edge.
+- A single tap of Alt activates the menu bar, a single tap of Win opens the
+  Start menu — both steal focus, so `Sender.CancelMenuActivation()` (a Ctrl tap
+  while the modifier is held) is called before any work. Win must be checked
+  too: we only swallow the key that completed the chord, and if Win was pressed
+  first, its key-down went to the system intact.
+- **`GetAsyncKeyState` lies about our own modifiers — this is the main source of
+  "the hotkey does not come together as a chord".** The key state in the system
+  is not updated after `Handled = true` (the system never saw the swallowed
+  press), and `ReleaseHotkeyModifiers`/`CancelMenuActivation` inject Alt/Win
+  key-ups — after which the system considers the key released for the rest of
+  the hold. The symptom: "Alt, then Win" fell apart into two separate presses
+  while "Win, then Alt" came together. That is why modifiers in `KeyboardHook`
+  are computed from `_physicallyDown` (built from the event stream itself), with
+  `GetAsyncKeyState` left as a fallback behind an "or". For the same reason
+  `HotkeyRecordDialog` keeps its own list of held keys.
+- The hook delivers the **specific L/R variants** of the modifiers (`0xA4`/`0xA5`
+  for Alt); the generic `VK_MENU` never arrives — both codes must be checked.
+- `WaitForModifiersReleased()` is mandatory before Backspace: a held Ctrl turns
+  Backspace into Ctrl+Backspace (deleting the whole word).
+- SendInput in large batches gets lost in Electron/React. It is precisely the
+  LARGE ones that are lost — when the whole string goes out in a single call;
+  `Sender.ChunkSize` (8) sends ten at a time and a phrase is rewritten in tens
+  of milliseconds instead of a second. The batch must also stay short because
+  clearing the modifiers is repeated in each one: no more than the auto-repeat
+  interval (~30 ms) may pass between two clears, or a held Alt comes back. The
+  "Type slowly, one character at a time" setting restores the old behaviour
+  (`ChunkSize = 1`).
+- **`SendUnicode` must clear Alt before EVERY character.** Windows chooses
+  WM_CHAR or WM_SYSCHAR by the state of Alt specifically: under a held Alt the
+  character goes out as WM_SYSCHAR, input fields ignore it, and the text simply
+  never appears. Ctrl does not affect KEYEVENTF_UNICODE. Hence the difference
+  "Ctrl+Win works, Alt+Win does not": `WaitForModifiersReleased` waits no longer
+  than a second, and a chord is held longer than that.
+- **The Win key is not delivered to a WinForms form** — the shell takes it, and
+  KeyDown never arrives. That is why `HotkeyRecordDialog` listens to its own
+  `KeyboardHook` rather than to form events: otherwise a chord ending in Win was
+  recorded as a stump without Win and then silently matched nothing. As a bonus,
+  exactly what `HotkeyConfig.Matches` will see is recorded — the same vk and the
+  same flags.
+- The settings have a "PROBE" card with its own hook: it shows what actually
+  reached the program and whether it matched. A silent hotkey is
+  indistinguishable from a broken program — without that little window the cause
+  had to be guessed.
+- Autostart must NOT be duplicated in `settings.json`. The installer writes
+  `HKCU\...\Run` itself (the `autostart` task), and saving settings with a copy
+  of the field (default `false`) wiped that entry the first time the window was
+  opened — the first user got "the checkbox in the installer does nothing". The
+  window reads `Autostart.IsEnabled()` and writes `Autostart.Set(...)`, and
+  nowhere else.
+- Hotkeys must not coincide: `App.OnKeyDown` checks layout first and never
+  reaches the second comparison — the second hotkey stays silent without a
+  single sign. Filtered out in `Sanitize()` and when saving the settings.
+- The replace dialog takes focus, so the selection is read BEFORE it is shown,
+  and the window the selection lives in is remembered via `GetForegroundWindow`
+  and restored via `SetForegroundWindow` before typing. Without a pause after
+  the restore the first characters go to the still-closing dialog and vanish.
+- An empty scope step (`ScopeEditor`, "nothing left to expand") does NOT update
+  `_lastPressUtc`. Otherwise frequent presses extend the expansion window
+  forever: a person presses the hotkey once a second and sees nothing at all.
