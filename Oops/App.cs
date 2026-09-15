@@ -350,7 +350,10 @@ public sealed class App : IDisposable
 
         string converted;
         var dir = LayoutConverter.Direction.None;
-        if (layout) (converted, dir) = LayoutConverter.AutoConvertWithDirection(selection);
+        // literal: выделение конвертируется целиком, без модели языка. Человек
+        // уже показал границу руками, а второго нажатия здесь нет — оно прочтёт
+        // то же выделение и примет то же решение.
+        if (layout) (converted, dir) = LayoutConverter.AutoConvertWithDirection(selection, literal: true);
         else converted = ScopeEditor.ToggleCase(selection);
 
         if (converted != selection)

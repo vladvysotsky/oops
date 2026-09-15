@@ -119,6 +119,16 @@ The result is **never** written to the clipboard.
 If the typing buffer is empty, the hotkey tries the selected text and converts
 it whole, 1-to-1 (no expansion — the user has already set the boundary).
 
+**A selection is converted LITERALLY: every word, without asking the language
+model** (`literal: true`). The margin that protects real words rests entirely on
+a refusal being recoverable — the word can be forced with another press. For a
+selection it is not: the next press reads the same selection and reaches the
+same verdict. That left "я думаю надо предусмотреть такую inere? потомму" with
+no way at all to fix it, because a bigram model cannot separate "inere" as
+English (4.6) from "штуку" as Russian (6.7). The price is accepted and is the
+exact mirror of the typed case: a real foreign word inside a selection is
+converted too. The direction is still chosen per word, so mixed text survives.
+
 The order "buffer first, selection second" is not a compromise but a
 consequence: text can only be selected with the mouse or Shift+arrows, and both
 clear the buffer. So "there is a selection" ⇒ "the buffer is empty". The
@@ -186,7 +196,9 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   was added to remove — and a lone press on "rfr" did nothing at all. Dropping
   the margin is safe because everything real measures negative: "appconfig" −3.9,
   "config.json" −2.7, "README.md" −1.9, "tot" −1.3, "CI/CD" −0.6,
-  "https://example.com" −0.4, "get" −0.2. Switched off by
+  "https://example.com" −0.4, "get" −0.2. None of this applies to a selection —
+  see "Selection": there the conversion is literal, because a refusal there
+  cannot be undone. Switched off by
   `AppSettings.SmartWordSelection` when the model gets it wrong and the hotkey
   falls silent.
 - `Core/LanguageModel.cs` — how much a piece looks like a word of a given

@@ -50,6 +50,10 @@ word is left alone — `appconfig` inside a Russian phrase stays `appconfig`
 instead of turning into `фззсщташп`. No dictionary is involved: the check is
 letter-pair statistics, under 2 KB, so `nginx` and `useState` pass too.
 
+A **selection** is different: it is converted literally, every word. You drew
+the boundary yourself, and there is no second press that could change the
+verdict — so the program does not argue with you.
+
 Type anything after a fix and the next press starts a new scope, again from the
 last word. As long as you have not typed, the presses keep expanding the same
 one — however long you spend looking at the result.
