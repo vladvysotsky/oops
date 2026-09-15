@@ -119,44 +119,65 @@ public static class LayoutConverter
     {
         if (string.IsNullOrEmpty(text)) return (text, Direction.None);
 
+        var runs = Split(text);
+
+        // Первый проход: каждое слово судится само по себе, со полным запасом.
+        foreach (var run in runs)
+        {
+            if (run.IsSpace) continue;
+            run.Dir = DirectionOf(run.Text);
+            run.Converted = run.Dir switch
+            {
+                Direction.ToRu => ToRussian(run.Text),
+                Direction.ToEn => ToEnglish(run.Text),
+                _ => run.Text,
+            };
+            if (run.Dir == Direction.None) continue;
+            run.Gain = PlausibilityGain(run.Text, run.Converted, run.Dir);
+            run.Convert = !SmartWordSelection || run.Gain > PlausibilityMargin;
+        }
+
+        // Второй проход: короткое слово посреди явно сломанной фразы.
+        //
+        // «rfr» между «ghbdtn» и «ltkf» — та же беда, набранная той же рукой,
+        // но в трёх буквах слишком мало пар, чтобы набрать полный запас: у
+        // соседей выигрыш 2.8, у него 0.35, и «привет rfr дела» оставалось
+        // ровно тем месивом, ради которого всё затевалось.
+        //
+        // Поэтому у слова с подтверждением соседа запас снимается — но не
+        // порог: выигрыш всё равно должен быть положительным. Настоящее слово
+        // в любой окрестности уходит в минус («appconfig» −3.9, «tot» −1.3,
+        // «get» −0.2), так что соседи не могут его вытащить.
+        if (SmartWordSelection)
+            foreach (var run in runs)
+                if (!run.IsSpace && run.Dir != Direction.None && !run.Convert
+                    && run.Gain > 0 && HasConvertedNeighbour(runs, run))
+                    run.Convert = true;
+
         var sb = new StringBuilder(text.Length);
         var lastDir = Direction.None;
         int skipped = 0;
 
-        int i = 0;
-        while (i < text.Length)
+        foreach (var run in runs)
         {
-            int start = i;
-            bool space = char.IsWhiteSpace(text[i]);
-            while (i < text.Length && char.IsWhiteSpace(text[i]) == space) i++;
-            var run = text.Substring(start, i - start);
+            if (run.IsSpace) { sb.Append(run.Text); continue; }
 
-            if (space) { sb.Append(run); continue; }
-
-            var dir = DirectionOf(run);
-            var converted = dir switch
-            {
-                Direction.ToRu => ToRussian(run),
-                Direction.ToEn => ToEnglish(run),
-                _ => run,
-            };
-
-            if (dir != Direction.None && SmartWordSelection && !WorthConverting(run, converted, dir))
+            if (run.Dir != Direction.None && !run.Convert)
             {
                 // Слово и так выглядит настоящим — «appconfig», «nginx», «docker».
                 // Конвертация превратила бы его в «фззсщташп».
-                sb.Append(run);
+                sb.Append(run.Text);
                 skipped++;
                 continue;
             }
 
-            sb.Append(converted);
+            sb.Append(run.Converted);
 
             // Наружу отдаём направление ПОСЛЕДНЕГО слова, у которого оно есть:
             // каретка стоит в конце, и системную раскладку надо переключить под
             // то, что человек будет печатать дальше, а не под большинство уже
             // исправленного.
-            if (dir != Direction.None) lastDir = dir;
+            if (run.Dir != Direction.None) lastDir = run.Dir;
         }
 
         // В лог идёт только ЧИСЛО пропущенных слов, не сами слова: набранный
@@ -167,15 +188,60 @@ public static class LayoutConverter
         return (sb.ToString(), lastDir);
     }
 
+    private sealed class Run
+    {
+        public string Text = string.Empty;
+        public bool IsSpace;
+        public Direction Dir;
+        public string Converted = string.Empty;
+        public double Gain;
+        public bool Convert;
+    }
+
+    private static List<Run> Split(string text)
+    {
+        var runs = new List<Run>();
+        int i = 0;
+        while (i < text.Length)
+        {
+            int start = i;
+            bool space = char.IsWhiteSpace(text[i]);
+            while (i < text.Length && char.IsWhiteSpace(text[i]) == space) i++;
+            runs.Add(new Run { Text = text.Substring(start, i - start), IsSpace = space });
+        }
+        return runs;
+    }
+
     /// <summary>
-    /// Стоит ли конвертировать слово: похож ли результат на язык-цель сильнее,
-    /// чем исходник похож на язык-источник.
+    /// Есть ли рядом слово, которое решилось конвертироваться в ту же сторону
+    /// само, без всякой поддержки. Соседом считается ближайшее слово слева и
+    /// справа: пробелы между ними роли не играют.
+    /// </summary>
+    private static bool HasConvertedNeighbour(List<Run> runs, Run run)
+    {
+        int at = runs.IndexOf(run);
+        return Neighbour(runs, at, -1) || Neighbour(runs, at, +1);
+
+        static bool Neighbour(List<Run> runs, int at, int step)
+        {
+            for (int i = at + step; i >= 0 && i < runs.Count; i += step)
+            {
+                if (runs[i].IsSpace) continue;
+                return runs[i].Convert && runs[i].Dir == runs[at].Dir;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Насколько результат правдоподобнее исходника: больше нуля — похоже, что
+    /// слово набрано не в той раскладке.
     ///
     /// Это то самое место, где «xtuj» отличается от «appconfig». Оба полностью
     /// латинские, и подсчётом букв их не разделить — разница только в том, что
     /// одно является словом, а другое нет.
     /// </summary>
-    private static bool WorthConverting(string original, string converted, Direction dir)
+    private static double PlausibilityGain(string original, string converted, Direction dir)
     {
         var from = dir == Direction.ToRu
             ? LanguageModel.Language.English
@@ -184,10 +250,10 @@ public static class LayoutConverter
             ? LanguageModel.Language.Russian
             : LanguageModel.Language.English;
 
-        // Меньше — правдоподобнее, поэтому результат должен быть МЕНЬШЕ
-        // исходника на величину запаса.
-        return LanguageModel.Implausibility(converted, to) + PlausibilityMargin
-             < LanguageModel.Implausibility(original, from);
+        // Меньше — правдоподобнее, поэтому выигрыш положителен, когда результат
+        // выглядит лучше исходника.
+        return LanguageModel.Implausibility(original, from)
+             - LanguageModel.Implausibility(converted, to);
     }
 
     /// <summary>
