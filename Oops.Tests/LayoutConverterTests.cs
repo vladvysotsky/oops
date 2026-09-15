@@ -54,6 +54,40 @@ public class LayoutConverterTests
         Assert.Equal(expected, result);
     }
 
+    [Fact]
+    public void DirectionIsChosenPerWord()
+    {
+        // Первые четыре слова набраны в EN-раскладке вместо русской, последнее —
+        // в русской вместо английской. Одно направление на весь кусок такой
+        // текст не чинило вообще.
+        var (result, dir) = LayoutConverter.AutoConvertWithDirection(
+            "Z djn [jxe pfgecnbnm ЬщвудКшыл");
+
+        Assert.Equal("Я вот хочу запустить ModelRisk", result);
+        // Наружу идёт направление последнего слова: каретка в конце, и системную
+        // раскладку надо переключить под то, что будут печатать дальше.
+        Assert.Equal(LayoutConverter.Direction.ToEn, dir);
+    }
+
+    [Fact]
+    public void WhitespaceIsPreservedExactly()
+    {
+        // Пословная обработка не имеет права трогать разделители: на них
+        // держится арифметика стирания.
+        const string input = "  vfvf\t\nvfvf  ";
+        var (result, _) = LayoutConverter.AutoConvertWithDirection(input);
+        Assert.Equal("  мама\t\nмама  ", result);
+        Assert.Equal(input.Length, result.Length);
+    }
+
+    [Fact]
+    public void WordsWithoutLettersAreLeftAlone()
+    {
+        var (result, dir) = LayoutConverter.AutoConvertWithDirection("123 vfvf 456");
+        Assert.Equal("123 мама 456", result);
+        Assert.Equal(LayoutConverter.Direction.ToRu, dir);
+    }
+
     [Theory]
     [InlineData('@', '"')]
     [InlineData('#', '№')]
