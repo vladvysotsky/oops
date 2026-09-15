@@ -170,6 +170,12 @@ public static class Autostart
     /// <summary>
     /// XML задачи. Вынесено отдельно и публично, чтобы проверять тестом: в этом
     /// файле четыре настройки, каждая из которых молча ломает автозапуск.
+    ///
+    /// Схема ЗАЯВЛЕНА как 1.2, и добавлять сюда элементы из 1.3 нельзя:
+    /// schtasks отказывает целиком, «The task XML contains an unexpected node»,
+    /// и автозапуска не появляется вовсе. Так ушли `UseUnifiedSchedulingEngine`
+    /// и `DisallowStartOnRemoteAppSession` — оба задавали своё же значение по
+    /// умолчанию и не стоили ни отказа, ни поднятия версии схемы.
     /// </summary>
     public static string BuildTaskXml(string exePath)
     {
@@ -210,8 +216,6 @@ public static class Autostart
                 <Enabled>true</Enabled>
                 <Hidden>false</Hidden>
                 <RunOnlyIfIdle>false</RunOnlyIfIdle>
-                <DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>
-                <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
                 <WakeToRun>false</WakeToRun>
                 <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
                 <Priority>5</Priority>

@@ -45,6 +45,26 @@ public class AutostartTests
         Assert.Contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", Xml);
     }
 
+    [Theory]
+    // Эти элементы существуют только в схеме 1.3, а объявлена 1.2. schtasks на
+    // любом из них отказывает целиком — «The task XML contains an unexpected
+    // node», — и автозапуска не появляется вовсе.
+    [InlineData("UseUnifiedSchedulingEngine")]
+    [InlineData("DisallowStartOnRemoteAppSession")]
+    [InlineData("MaintenanceSettings")]
+    [InlineData("Volatile")]
+    public void NoElementFromANewerSchemaThanTheOneWeDeclare(string element)
+    {
+        Assert.Contains("<Task version=\"1.2\"", Xml);
+        Assert.DoesNotContain(element, Xml);
+    }
+
+    [Fact]
+    public void XmlIsWellFormed()
+    {
+        System.Xml.Linq.XDocument.Parse(Xml);
+    }
+
     [Fact]
     public void PathWithSpecialCharactersIsEscaped()
     {
