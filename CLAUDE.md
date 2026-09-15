@@ -176,7 +176,14 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   "appconfig" — both are pure Latin, and the only difference is that one is a
   word. Without this "appconfig" became "фззсщташп". The margin is biased
   towards leaving a word alone: a broken word can be forced with another press,
-  a corrupted one in mid-phrase has to be retyped by hand. Switched off by
+  a corrupted one in mid-phrase has to be retyped by hand.
+  A short word gets a second chance from its neighbours: in "ghbdtn rfr ltkf"
+  the word "rfr" has only four letter pairs and reaches a gain of 0.35 where its
+  neighbours reach 2.8, so the margin alone left "привет rfr дела" — the very
+  mush the model was added to remove. A word with a neighbour that converted on
+  its own loses the margin but NOT the threshold: the gain must still be
+  positive, and a real word is negative in any company ("appconfig" −3.9, "tot"
+  −1.3, "get" −0.2), so neighbours can never drag one in. Switched off by
   `AppSettings.SmartWordSelection` when the model gets it wrong and the hotkey
   falls silent.
 - `Core/LanguageModel.cs` — how much a piece looks like a word of a given

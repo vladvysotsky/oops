@@ -45,7 +45,9 @@ public class LayoutConverterTests
 
     [Theory]
     [InlineData("vfvf", LayoutConverter.Direction.ToRu, "мама")]
-    [InlineData("мама", LayoutConverter.Direction.ToEn, "vfvf")]
+    // RU→EN — на сломанном слове, а не на «мама»: превращать настоящее русское
+    // слово в «vfvf» как раз и незачем, и модель языка теперь этого не делает.
+    [InlineData("црфе", LayoutConverter.Direction.ToEn, "what")]
     [InlineData("123 !@#", LayoutConverter.Direction.None, "123 !@#")]
     public void AutoConvert_PicksDirectionByMajorityCharset(string input, LayoutConverter.Direction expectedDir, string expected)
     {
@@ -77,6 +79,37 @@ public class LayoutConverterTests
         // подсчётом букв их не отличить, различает только язык.
         var (result, _) = LayoutConverter.AutoConvertWithDirection("f lkz xtuj appconfig ye;ty");
         Assert.Equal("а для чего appconfig нужен", result);
+    }
+
+    [Fact]
+    public void ShortWordInAMangledPhraseIsConvertedWithItsNeighbours()
+    {
+        // «rfr» — три буквы, и пар в нём слишком мало, чтобы набрать полный
+        // запас правдоподобия: у соседей выигрыш около 2.8, у него 0.35.
+        // Само по себе слово оставалось нетронутым, и получалось «привет rfr
+        // дела» — ровно то месиво, ради которого модель языка и заводилась.
+        var (result, _) = LayoutConverter.AutoConvertWithDirection("ghbdtn rfr ltkf");
+        Assert.Equal("привет как дела", result);
+    }
+
+    [Fact]
+    public void NeighboursDoNotDragARealWordIntoTheConversion()
+    {
+        // Обратная сторона: поддержка соседей снимает запас, но не порог.
+        // Настоящее слово уходит в минус в любом окружении — «appconfig» −3.9,
+        // «tot» −1.3, «get» −0.2, — и вытащить его соседями нельзя.
+        Assert.Equal("привет tot дела",
+            LayoutConverter.AutoConvertWithDirection("ghbdtn tot ltkf").Result);
+        Assert.Equal("привет get дела",
+            LayoutConverter.AutoConvertWithDirection("ghbdtn get ltkf").Result);
+    }
+
+    [Fact]
+    public void LoneRealWordIsLeftAloneWithNoNeighboursToVouchForIt()
+    {
+        var (result, dir) = LayoutConverter.AutoConvertWithDirection("tot");
+        Assert.Equal("tot", result);
+        Assert.Equal(LayoutConverter.Direction.None, dir);
     }
 
     [Theory]

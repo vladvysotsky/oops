@@ -79,9 +79,12 @@ public class ScopeEditorTests
         var first = s.NextLayoutStep("ghbdtn rfr ltkf", T0);
         Assert.Equal("дела", first.Text);
 
-        var typedMore = first.NewBufferContent + " tot";
+        // «ytn», а не «tot»: «tot» — настоящее английское слово, и модель
+        // языка оставляет его в покое совершенно правильно. Тест про область,
+        // а не про выбор слов.
+        var typedMore = first.NewBufferContent + " ytn";
         var next = s.NextLayoutStep(typedMore, T0.AddSeconds(5));
-        Assert.Equal("еще", next.Text);           // снова одно последнее слово
+        Assert.Equal("нет", next.Text);           // снова одно последнее слово
         Assert.Equal(3, next.EraseCount);
     }
 
