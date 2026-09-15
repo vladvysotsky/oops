@@ -130,6 +130,16 @@ against the published SHA-256 before it is launched. Turn the check off with a
 checkbox in the settings; run it by hand from "Check for updates" in the tray
 menu.
 
+## 🚀 Starting with Windows
+
+The installer offers autostart, and the settings let you pick how it happens.
+**Normal** uses the usual `Run` registry entry. **Early** registers a logon task
+with no delay: `Run` entries have no ordering and Windows staggers them by about
+ten seconds, while a scheduled task is not subject to that.
+
+Only one of the two ever exists — two would mean the app launching twice at
+every logon.
+
 ## 🩺 When a hotkey goes silent
 
 Settings → "Hotkeys" → the **PROBE** card shows what actually reached the

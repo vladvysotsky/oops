@@ -99,6 +99,22 @@ internal static class Program
                 L10n.T("conflict.body", string.Join("\n", taken)),
                 L10n.T("conflict.hint"));
 
+        // Сколько прошло от старта процесса до готовности. Именно эта цифра
+        // отвечает на вопрос «почему программа появляется через десять секунд
+        // после входа»: если здесь 200 мс, тормозим не мы, а растяжка запуска
+        // Windows — и лечится она ранним автозапуском через планировщик.
+        // Если здесь секунды — виновата распаковка single-file exe, и
+        // планировщик не поможет.
+        if (Log.Enabled)
+        {
+            try
+            {
+                using var self = System.Diagnostics.Process.GetCurrentProcess();
+                Log.Write($"готов через {(DateTime.Now - self.StartTime).TotalMilliseconds:F0} мс после старта процесса");
+            }
+            catch { }
+        }
+
         var ctx = new TrayContext(app);
         Application.Run(ctx);
     }

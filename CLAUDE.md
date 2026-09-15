@@ -250,6 +250,11 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   being typed. Word boundaries go around the whole expression (`\b(?:…)\b`),
   otherwise `\bcat|dog\b` does not mean what was asked. The preview is computed
   from the ORIGINAL text, which makes "apply twice" impossible by construction.
+- `Program.cs` logs **how long startup took** — from process start to hooks
+  installed. That single number decides where "the app appears ten seconds after
+  logon" comes from: a couple of hundred milliseconds means Windows staggered us
+  and the scheduler mode fixes it; seconds mean our own single-file extraction
+  is to blame and the scheduler will not help.
 - `Core/Log.cs` — the detailed log in `%AppData%\Oops\logs`, off by default
   (`AppSettings.VerboseLog`). **Typed text never reaches the log**: keys are
   written as codes (`VK 0x41`), not as characters. The program sees everything
@@ -345,9 +350,26 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   got the old ones back after a restart.
   `Sanitize()` repairs settings from old files (null → default, Alt+Shift →
   default, two identical shortcuts → default).
-- `Settings/Autostart.cs` — the `HKCU\...\Run` registry key. **The single source
-  of truth for autostart**; there is no copy of it in `settings.json` and there
-  must not be one.
+- `Settings/Autostart.cs` — autostart, in two flavours. **The system is the
+  single source of truth**; there is no copy in `settings.json` and there must
+  not be one — a copy of the flag once wiped the entry the installer had made,
+  and the first user got "the checkbox in the installer does nothing". The mode
+  is derived the same way, from what actually exists: a scheduled task wins over
+  a registry value.
+  - `Registry` — `HKCU\...\Run`, as before.
+  - `Scheduler` — a logon task with **zero delay**. That is the whole point:
+    `Run` entries have no ordering at all, and Windows 8+ deliberately staggers
+    them (`StartupDelayInMSec`, about ten seconds), while a scheduled task is
+    not subject to that.
+  Exactly one of them may exist. Two means two launches, and the second one hits
+  the single-instance mutex and shows "oops is already running" at every logon —
+  which is why `installer\Oops.iss` carries a `Check: NoSchedulerTask` guard: it
+  asks the scheduler before writing the registry value.
+  Four settings in the task XML each break autostart silently, so
+  `BuildTaskXml` is public and covered by tests: zero `Delay`,
+  `DisallowStartIfOnBatteries=false` (otherwise nothing starts on a laptop off
+  mains), `RunLevel=LeastPrivilege` (the manifest is asInvoker for a reason) and
+  `ExecutionTimeLimit=PT0S` (the default kills the process after three days).
 
 ## Default hotkeys
 
