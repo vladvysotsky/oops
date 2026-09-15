@@ -105,10 +105,28 @@ public class LayoutConverterTests
     }
 
     [Fact]
-    public void LoneRealWordIsLeftAloneWithNoNeighboursToVouchForIt()
+    public void LoneShortWordIsConvertedWhenThereAreNoBystanders()
     {
-        var (result, dir) = LayoutConverter.AutoConvertWithDirection("tot");
-        Assert.Equal("tot", result);
+        // Первое нажатие берёт в область ровно одно слово, и защищать в ней
+        // некого: человек показал именно на него. Иначе хоткей на «rfr» молчал
+        // бы — три буквы не набирают полного запаса.
+        var (result, dir) = LayoutConverter.AutoConvertWithDirection("rfr");
+        Assert.Equal("как", result);
+        Assert.Equal(LayoutConverter.Direction.ToRu, dir);
+    }
+
+    [Theory]
+    // Запас снят, но порог остался, и всё настоящее держится им одним:
+    // на замерах эти уходят в минус от −0.2 до −3.9.
+    [InlineData("tot")]
+    [InlineData("get")]
+    [InlineData("appconfig")]
+    [InlineData("config.json")]
+    [InlineData("README.md")]
+    public void LoneRealWordIsLeftAloneEvenWithoutTheMargin(string word)
+    {
+        var (result, dir) = LayoutConverter.AutoConvertWithDirection(word);
+        Assert.Equal(word, result);
         Assert.Equal(LayoutConverter.Direction.None, dir);
     }
 
