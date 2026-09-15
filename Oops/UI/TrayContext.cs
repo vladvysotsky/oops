@@ -45,7 +45,7 @@ public sealed class TrayContext : ApplicationContext
         };
         _app.VoicePartial += (_, text) => VoiceOverlay.Partial(text);
         _app.VoiceRecognising += (_, _) => VoiceOverlay.Recognising();
-        _app.VoiceFinished += (_, _) => VoiceOverlay.Hide();
+        _app.VoiceFinished += (_, _) => VoiceOverlay.HidePanel();
 
         // Диалог замены открывает трей, а не App: App не знает про окна, и
         // это единственное, что удерживает его от превращения в UI-класс.
@@ -269,7 +269,7 @@ public sealed class TrayContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
-        VoiceOverlay.Close();
+        VoiceOverlay.Shutdown();
         _icon.Visible = false;
         _icon.Dispose();
         _app.Dispose();
