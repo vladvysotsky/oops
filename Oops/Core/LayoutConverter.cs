@@ -116,11 +116,29 @@ public static class LayoutConverter
     /// тоже конвертируется. Но выделяют ради конвертации то, что считают
     /// сломанным, а при одном направлении такое слово ломалось бы ровно так же.
     /// </summary>
-    public static (string Result, Direction Dir) AutoConvertWithDirection(string text)
+    /// <param name="literal">
+    /// Конвертировать КАЖДОЕ слово, не спрашивая модель языка. Так работает
+    /// выделение: у него нет второго нажатия.
+    ///
+    /// Весь запас правдоподобия держится на том, что отказ поправим — слово
+    /// дожимается повторным нажатием. Для выделения это неверно: следующее
+    /// нажатие прочитает то же выделение и примет то же решение, и человек
+    /// остаётся с «я думаю надо предусмотреть такую inere? потомму» без единого
+    /// способа это исправить. Модель на биграммах иногда просто не видит
+    /// разницы: «inere» как английское — 4.6, «штуку» как русское — 6.7.
+    ///
+    /// Границу здесь провёл человек, и провёл её руками. Цена известна и
+    /// принята: настоящее иностранное слово внутри выделения тоже
+    /// сконвертируется. Направление при этом по-прежнему выбирается ПОСЛОВНО,
+    /// так что смешанный текст не ломается.
+    /// </param>
+    public static (string Result, Direction Dir) AutoConvertWithDirection(
+        string text, bool literal = false)
     {
         if (string.IsNullOrEmpty(text)) return (text, Direction.None);
 
         var runs = Split(text);
+        bool smart = SmartWordSelection && !literal;
 
         // Первый проход: каждое слово судится само по себе, со полным запасом.
         foreach (var run in runs)
@@ -135,7 +153,7 @@ public static class LayoutConverter
             };
             if (run.Dir == Direction.None) continue;
             run.Gain = PlausibilityGain(run.Text, run.Converted, run.Dir);
-            run.Convert = !SmartWordSelection || run.Gain > PlausibilityMargin;
+            run.Convert = !smart || run.Gain > PlausibilityMargin;
         }
 
         // Второй проход: запас нужен не всегда.
@@ -158,7 +176,7 @@ public static class LayoutConverter
         // «CI/CD» −0.6, «https://example.com» −0.4, «get» −0.2. Порог их
         // держит и без запаса.
         bool single = runs.Count(r => !r.IsSpace) == 1;
-        if (SmartWordSelection)
+        if (smart)
             foreach (var run in runs)
                 if (!run.IsSpace && run.Dir != Direction.None && !run.Convert && run.Gain > 0
                     && (single || HasConvertedNeighbour(runs, run)))

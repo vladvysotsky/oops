@@ -105,6 +105,46 @@ public class LayoutConverterTests
     }
 
     [Fact]
+    public void LiteralModeConvertsEveryWordBecauseASelectionHasNoSecondPress()
+    {
+        // Жалоба пользователя: «я думаю надо предусмотреть такую inere? потомму».
+        // Модель на биграммах тут не видит разницы — «inere» как английское 4.6
+        // против «штуку» как русского 6.7, — а выделение исправить нечем:
+        // следующее нажатие прочитает то же выделение и решит так же.
+        var (result, dir) = LayoutConverter.AutoConvertWithDirection(
+            "z levf. yflj ghtlecvjnhtnm nfre. inere? gjnjvve", literal: true);
+
+        Assert.Equal("я думаю надо предусмотреть такую штуку, потомму", result);
+        Assert.Equal(LayoutConverter.Direction.ToRu, dir);
+    }
+
+    [Fact]
+    public void LiteralModeStillPicksTheDirectionPerWord()
+    {
+        // Буквально — не значит «в одну сторону»: смешанный текст обязан
+        // пережить выделение целиком.
+        var (result, dir) = LayoutConverter.AutoConvertWithDirection(
+            "Z djn [jxe pfgecnbnm ЬщвудКшыл", literal: true);
+
+        Assert.Equal("Я вот хочу запустить ModelRisk", result);
+        Assert.Equal(LayoutConverter.Direction.ToEn, dir);
+    }
+
+    [Fact]
+    public void LiteralModeGivesUpTheProtectionOfRealWords_AKnownPrice()
+    {
+        // Цена буквального режима, записанная явно, чтобы её не приняли за
+        // регрессию: в выделении настоящее слово тоже конвертируется. На
+        // набранном тексте оно по-прежнему защищено — там есть второе нажатие.
+        Assert.Equal("а для чего фззсщташп нужен",
+            LayoutConverter.AutoConvertWithDirection(
+                "f lkz xtuj appconfig ye;ty", literal: true).Result);
+
+        Assert.Equal("а для чего appconfig нужен",
+            LayoutConverter.AutoConvertWithDirection("f lkz xtuj appconfig ye;ty").Result);
+    }
+
+    [Fact]
     public void LoneShortWordIsConvertedWhenThereAreNoBystanders()
     {
         // Первое нажатие берёт в область ровно одно слово, и защищать в ней
