@@ -187,6 +187,8 @@
   "settings.section.probe": "DIAGNOSTICS",
   "settings.slowTyping": "Type slowly, one character at a time",
   "settings.slowTyping.hint": "Turn this on if text arrives with missing characters in some app",
+  "settings.smartWords": "Leave real words alone",
+  "settings.smartWords.hint": "“appconfig” inside a Russian phrase stays “appconfig” instead of becoming “фззсщташп”. Turn this off if the shortcut stays silent where it should not",
   "settings.subtitle": "Fixes the layout and case of text you just typed. You set the boundary: each next press of the hotkey captures one more word.",
   "settings.theme": "Appearance",
   "settings.theme.auto": "Auto",

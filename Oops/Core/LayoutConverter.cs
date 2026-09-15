@@ -79,6 +79,22 @@ public static class LayoutConverter
     public enum Direction { None, ToRu, ToEn }
 
     /// <summary>
+    /// Пропускать слова, которые и так выглядят настоящими словами своего
+    /// языка. Включено по умолчанию; выключается настройкой на случай, когда
+    /// модель ошиблась и хоткей молчит там, где не должен.
+    /// </summary>
+    public static bool SmartWordSelection { get; set; } = true;
+
+    /// <summary>
+    /// Насколько результат должен выглядеть правдоподобнее исходника, чтобы
+    /// слово конвертировать. Запас смещён в сторону «не трогать»: испортить
+    /// правильное слово хуже, чем оставить сломанное — сломанное человек
+    /// дожмёт повторным нажатием, а испорченное посреди фразы придётся
+    /// перенабирать руками.
+    /// </summary>
+    private const double PlausibilityMargin = 0.5;
+
+    /// <summary>
     /// Конвертация с возвратом направления. Направление выбирается ДЛЯ КАЖДОГО
     /// СЛОВА ОТДЕЛЬНО.
     ///
@@ -105,6 +121,7 @@ public static class LayoutConverter
 
         var sb = new StringBuilder(text.Length);
         var lastDir = Direction.None;
+        int skipped = 0;
 
         int i = 0;
         while (i < text.Length)
@@ -117,12 +134,23 @@ public static class LayoutConverter
             if (space) { sb.Append(run); continue; }
 
             var dir = DirectionOf(run);
-            sb.Append(dir switch
+            var converted = dir switch
             {
                 Direction.ToRu => ToRussian(run),
                 Direction.ToEn => ToEnglish(run),
                 _ => run,
-            });
+            };
+
+            if (dir != Direction.None && SmartWordSelection && !WorthConverting(run, converted, dir))
+            {
+                // Слово и так выглядит настоящим — «appconfig», «nginx», «docker».
+                // Конвертация превратила бы его в «фззсщташп».
+                sb.Append(run);
+                skipped++;
+                continue;
+            }
+
+            sb.Append(converted);
 
             // Наружу отдаём направление ПОСЛЕДНЕГО слова, у которого оно есть:
             // каретка стоит в конце, и системную раскладку надо переключить под
@@ -131,7 +159,35 @@ public static class LayoutConverter
             if (dir != Direction.None) lastDir = dir;
         }
 
+        // В лог идёт только ЧИСЛО пропущенных слов, не сами слова: набранный
+        // текст в лог не попадает никогда.
+        if (skipped > 0 && Log.Enabled)
+            Log.Write($"пропущено слов как уже правдоподобные: {skipped}");
+
         return (sb.ToString(), lastDir);
+    }
+
+    /// <summary>
+    /// Стоит ли конвертировать слово: похож ли результат на язык-цель сильнее,
+    /// чем исходник похож на язык-источник.
+    ///
+    /// Это то самое место, где «xtuj» отличается от «appconfig». Оба полностью
+    /// латинские, и подсчётом букв их не разделить — разница только в том, что
+    /// одно является словом, а другое нет.
+    /// </summary>
+    private static bool WorthConverting(string original, string converted, Direction dir)
+    {
+        var from = dir == Direction.ToRu
+            ? LanguageModel.Language.English
+            : LanguageModel.Language.Russian;
+        var to = dir == Direction.ToRu
+            ? LanguageModel.Language.Russian
+            : LanguageModel.Language.English;
+
+        // Меньше — правдоподобнее, поэтому результат должен быть МЕНЬШЕ
+        // исходника на величину запаса.
+        return LanguageModel.Implausibility(converted, to) + PlausibilityMargin
+             < LanguageModel.Implausibility(original, from);
     }
 
     /// <summary>
