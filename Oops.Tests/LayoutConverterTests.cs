@@ -70,6 +70,47 @@ public class LayoutConverterTests
     }
 
     [Fact]
+    public void RealForeignWordsSurviveTheConversion()
+    {
+        // Жалоба пользователя: «appconfig» превращался в «фззсщташп».
+        // Оба слова вокруг него полностью латинские, как и оно само, —
+        // подсчётом букв их не отличить, различает только язык.
+        var (result, _) = LayoutConverter.AutoConvertWithDirection("f lkz xtuj appconfig ye;ty");
+        Assert.Equal("а для чего appconfig нужен", result);
+    }
+
+    [Theory]
+    // Ничего из этого трогать нельзя: одно нажатие превратило бы в мусор,
+    // а вернуть повторным нажатием уже не получится.
+    [InlineData("https://example.com")]
+    [InlineData("config.json")]
+    [InlineData("CI/CD")]
+    [InlineData("README.md")]
+    [InlineData("nginx")]
+    [InlineData("useState")]
+    public void CorrectTextIsLeftAlone(string input)
+    {
+        var (result, _) = LayoutConverter.AutoConvertWithDirection(input);
+        Assert.Equal(input, result);
+    }
+
+    [Fact]
+    public void SmartSelectionCanBeTurnedOff()
+    {
+        // Запасной ход для случая, когда модель ошиблась и сочетание молчит.
+        try
+        {
+            LayoutConverter.SmartWordSelection = false;
+            var (result, _) = LayoutConverter.AutoConvertWithDirection("appconfig");
+            Assert.Equal("фззсщташп", result);
+        }
+        finally
+        {
+            LayoutConverter.SmartWordSelection = true;
+        }
+    }
+
+    [Fact]
     public void WhitespaceIsPreservedExactly()
     {
         // Пословная обработка не имеет права трогать разделители: на них

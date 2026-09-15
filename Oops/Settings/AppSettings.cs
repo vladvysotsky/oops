@@ -60,6 +60,16 @@ public sealed class AppSettings
     /// </summary>
     public bool VerboseLog { get; set; } = false;
 
+    /// <summary>
+    /// Пропускать слова, которые и так выглядят настоящими словами своего
+    /// языка: «appconfig» внутри русской фразы остаётся «appconfig», а не
+    /// превращается в «фззсщташп».
+    ///
+    /// Выключать имеет смысл, только если модель ошиблась и хоткей молчит там,
+    /// где не должен: тогда конвертируется всё подряд, как раньше.
+    /// </summary>
+    public bool SmartWordSelection { get; set; } = true;
+
     /// <summary>Проверять обновления на GitHub при запуске (не чаще раза в сутки).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 

@@ -24,6 +24,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbCharByChar = new ToggleBox();
     private readonly CheckBox _cbVoiceLive = new ToggleBox();
     private readonly CheckBox _cbVerboseLog = new ToggleBox();
+    private readonly CheckBox _cbSmartWords = new ToggleBox();
     private readonly SegmentedControl _theme = new();
     private readonly SegmentedControl _language = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
@@ -468,6 +469,10 @@ public sealed class SettingsForm : ThemedForm
 
         AddAutoRow(rows, CheckRow(_cbCharByChar, L10n.T("settings.slowTyping"),
             L10n.T("settings.slowTyping.hint")));
+        AddAutoRow(rows, Divider());
+
+        AddAutoRow(rows, CheckRow(_cbSmartWords, L10n.T("settings.smartWords"),
+            L10n.T("settings.smartWords.hint")));
         return card;
     }
 
@@ -1091,6 +1096,7 @@ public sealed class SettingsForm : ThemedForm
         _cbCharByChar.Checked = _settings.CharByCharTyping;
         _cbVoiceLive.Checked = _settings.VoiceLiveText;
         _cbVerboseLog.Checked = _settings.VerboseLog;
+        _cbSmartWords.Checked = _settings.SmartWordSelection;
         // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
         // запустит пересборку окна по кругу.
         _theme.SelectedIndexChanged -= ThemeChangedHandler;
@@ -1162,6 +1168,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
         _settings.VoiceLiveText = _cbVoiceLive.Checked;
+        _settings.SmartWordSelection = _cbSmartWords.Checked;
 
         // Лог включаем и выключаем сразу: человек жмёт «Сохранить» ровно
         // затем, чтобы следующее же нажатие хоткея попало в файл.

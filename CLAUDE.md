@@ -170,6 +170,27 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   direction for the whole piece lets the majority of letters win (16 against 9),
   everything goes EN→RU, and the Cyrillic word simply does not appear in that
   table and passes through untouched. No number of presses fixed such text.
+  A word is converted only when the result looks **more like a word** of the
+  target language than the original does of the source one
+  (`LanguageModel`, margin 0.5). Counting letters cannot tell "xtuj" from
+  "appconfig" — both are pure Latin, and the only difference is that one is a
+  word. Without this "appconfig" became "фззсщташп". The margin is biased
+  towards leaving a word alone: a broken word can be forced with another press,
+  a corrupted one in mid-phrase has to be retyped by hand. Switched off by
+  `AppSettings.SmartWordSelection` when the model gets it wrong and the hotkey
+  falls silent.
+- `Core/LanguageModel.cs` — how much a piece looks like a word of a given
+  language, used for exactly that decision. **Not the dictionary we removed**:
+  no word list is stored or searched, only letter-pair frequencies including
+  word boundaries — 1156 and 784 bytes, built from open word lists and quantised
+  into a byte each. "фззсщташп" is rejected not for being absent from a list but
+  because "зз", "сщ" and "шп" hardly occur in Russian; "nginx" and "useState"
+  pass even though no list contains them.
+  A deliberate fallback to brute force was **tried and rejected**: when the smart
+  pass changes nothing, converting everything anyway turns
+  "https://example.com" into garbage on a single press, and a second press
+  cannot bring it back — the scope is already fully expanded. Silence is the
+  safer failure here, and the setting is the way out.
 - `Core/Sender.cs` — SendInput: `SendBackspaces`, `SendUnicode` (in small
   batches — Electron/React lose batched events), `WaitForModifiersReleased`,
   `ReleaseHotkeyModifiers`, `CancelMenuActivation`.
