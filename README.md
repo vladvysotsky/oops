@@ -48,8 +48,11 @@ it is never touched.
 Each word decides its own direction, and a word that already looks like a real
 word is left alone — `appconfig` inside a Russian phrase stays `appconfig`
 instead of turning into `фззсщташп`. No dictionary is involved: the check is
-letter-pair statistics, under 2 KB, so `nginx` and `useState` pass too. Miss the second press within 2 seconds and a new scope
-begins, again from the last word.
+letter-pair statistics, under 2 KB, so `nginx` and `useState` pass too.
+
+Type anything after a fix and the next press starts a new scope, again from the
+last word. As long as you have not typed, the presses keep expanding the same
+one — however long you spend looking at the result.
 
 ## ⌨️ Hotkeys
 
