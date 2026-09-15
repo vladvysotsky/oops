@@ -101,6 +101,16 @@ last word or the whole thing.
 Every step is a **1-to-1** transformation of a clearly delimited piece. Correct
 text outside the scope is never touched.
 
+**The scope continues by content, not only by the clock.** If the buffer is
+still exactly what we left behind, nothing was typed after our edit and the next
+press obviously continues the same scope, however long the user took. Going by
+the two-second window alone produced the worst possible behaviour: press, look
+at the result, press again — a new session started, took the word we had just
+fixed and dutifully put it back. The second press was wasted and reaching the
+goal took three. The `_step < 2` guard keeps the old way of undoing an edit:
+once the scope is fully expanded, a press after the window starts a new session
+and converts the last word back.
+
 Text is rewritten with Backspace × N + `SendInput` with `KEYEVENTF_UNICODE`.
 The result is **never** written to the clipboard.
 
@@ -127,7 +137,10 @@ history.
 All of this existed and caused constant complaints — removed deliberately:
 dictionaries (`WordDictionary`, `words_ru/en.txt`), layout guessing
 (`AutoDetector`), auto-correction while typing, typography (`Typography`),
-word-by-word conversion (`AutoConvertPerWord`), the whole-buffer fallback,
+word-by-word conversion **while typing** (`AutoConvertPerWord`) — note that
+choosing the direction per word inside a piece the user has already delimited is
+a different thing and is what `AutoConvertWithDirection` does now,
+the whole-buffer fallback,
 selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
 `ClipboardSafe`), `NeverFixList`.
 
@@ -148,8 +161,15 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   `StartOfLastWords` / `CountWords`. No cursor and no navigation — deliberately.
 - `Core/LayoutConverter.cs` — the JCUKEN↔QWERTY table (`PairsLower`/`PairsUpper`,
   Shift symbols `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё``). `ToRussian`/`ToEnglish`
-  are 1-to-1; `AutoConvertWithDirection` picks the side by the majority of
-  characters.
+  are 1-to-1; `AutoConvertWithDirection` picks the side **per word**, and
+  reports the direction of the last word that had one — the caret sits at the
+  end, so the system layout should match what will be typed next.
+  Per word rather than per piece because of the ordinary mixed case:
+  "Z djn [jxe pfgecnbnm ЬщвудКшыл", where the first words were typed in the
+  English layout instead of Russian and the last one the other way round. One
+  direction for the whole piece lets the majority of letters win (16 against 9),
+  everything goes EN→RU, and the Cyrillic word simply does not appear in that
+  table and passes through untouched. No number of presses fixed such text.
 - `Core/Sender.cs` — SendInput: `SendBackspaces`, `SendUnicode` (in small
   batches — Electron/React lose batched events), `WaitForModifiersReleased`,
   `ReleaseHotkeyModifiers`, `CancelMenuActivation`.

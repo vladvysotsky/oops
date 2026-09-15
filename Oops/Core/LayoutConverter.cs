@@ -78,17 +78,77 @@ public static class LayoutConverter
 
     public enum Direction { None, ToRu, ToEn }
 
-    /// <summary>Конвертация с возвратом выбранного направления.</summary>
+    /// <summary>
+    /// Конвертация с возвратом направления. Направление выбирается ДЛЯ КАЖДОГО
+    /// СЛОВА ОТДЕЛЬНО.
+    ///
+    /// Иначе не лечится обычный случай: «Z djn [jxe pfgecnbnm ЬщвудКшыл», где
+    /// первые слова набраны в английской раскладке вместо русской, а последнее —
+    /// наоборот. При одном направлении на весь кусок побеждает большинство букв
+    /// (16 латинских против 9), всё едет EN→RU, а кириллическое слово в этой
+    /// таблице просто не встречается и проходит нетронутым. Ни одно нажатие
+    /// такой текст не исправляло.
+    ///
+    /// Это НЕ возвращение `AutoConvertPerWord` из списка удалённого: то была
+    /// автоматическая правка во время печати, где программа сама решала, что
+    /// испорчено. Здесь границу по-прежнему задаёт человек — выделением или
+    /// шагом области, — и пословно выбирается только сторона перевода внутри
+    /// уже указанного куска.
+    ///
+    /// Цена известна: правильное слово на другом языке внутри выделения теперь
+    /// тоже конвертируется. Но выделяют ради конвертации то, что считают
+    /// сломанным, а при одном направлении такое слово ломалось бы ровно так же.
+    /// </summary>
     public static (string Result, Direction Dir) AutoConvertWithDirection(string text)
     {
+        if (string.IsNullOrEmpty(text)) return (text, Direction.None);
+
+        var sb = new StringBuilder(text.Length);
+        var lastDir = Direction.None;
+
+        int i = 0;
+        while (i < text.Length)
+        {
+            int start = i;
+            bool space = char.IsWhiteSpace(text[i]);
+            while (i < text.Length && char.IsWhiteSpace(text[i]) == space) i++;
+            var run = text.Substring(start, i - start);
+
+            if (space) { sb.Append(run); continue; }
+
+            var dir = DirectionOf(run);
+            sb.Append(dir switch
+            {
+                Direction.ToRu => ToRussian(run),
+                Direction.ToEn => ToEnglish(run),
+                _ => run,
+            });
+
+            // Наружу отдаём направление ПОСЛЕДНЕГО слова, у которого оно есть:
+            // каретка стоит в конце, и системную раскладку надо переключить под
+            // то, что человек будет печатать дальше, а не под большинство уже
+            // исправленного.
+            if (dir != Direction.None) lastDir = dir;
+        }
+
+        return (sb.ToString(), lastDir);
+    }
+
+    /// <summary>
+    /// Куда конвертировать этот кусок. Считаются только буквы: цифры и знаки
+    /// есть в обеих раскладках и голоса не имеют — иначе «2024 (!!!)» решало бы
+    /// судьбу слов вокруг себя.
+    /// </summary>
+    private static Direction DirectionOf(string word)
+    {
         int latin = 0, cyr = 0;
-        foreach (var c in text)
+        foreach (var c in word)
         {
             if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
             else if ((c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё') cyr++;
         }
-        if (latin == 0 && cyr == 0) return (text, Direction.None);
-        return latin >= cyr ? (ToRussian(text), Direction.ToRu) : (ToEnglish(text), Direction.ToEn);
+        if (latin == 0 && cyr == 0) return Direction.None;
+        return latin >= cyr ? Direction.ToRu : Direction.ToEn;
     }
 
     /// <summary>
