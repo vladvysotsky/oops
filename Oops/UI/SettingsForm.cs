@@ -743,6 +743,9 @@ public sealed class SettingsForm : ThemedForm
         {
             pageHeight = Math.Max(Theme.Px(200), maxClient - aroundPage);
             _page.AutoScroll = true;
+            // Полосу рисует система, и в тёмном окне она белая — красим сразу
+            // здесь, потому что появляется она только в этой ветке.
+            Theme.ApplyScrollbarChrome(_page);
         }
 
         _page.Height = pageHeight;
