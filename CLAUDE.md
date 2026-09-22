@@ -601,6 +601,33 @@ user block the program from starting forever.
   and the window the selection lives in is remembered via `GetForegroundWindow`
   and restored via `SetForegroundWindow` before typing. Without a pause after
   the restore the first characters go to the still-closing dialog and vanish.
+- **A runaway conversion must be stoppable, and a huge selection must not start
+  one.** Reported: the user missed an input field by a little, pressed Ctrl+A —
+  selecting an entire read-only page — then the layout hotkey, and thousands of
+  characters began typing themselves one by one. The characters went nowhere
+  while the page had focus; then the user clicked into the real field and the
+  rest of the flood landed there. Nothing could stop it. Two guards, both
+  needed:
+  - `App.MaxSelectionLength` (2000) refuses an oversized selection and SAYS SO
+    through `Notice` — the hotkey fixes a phrase, not a document, and silence
+    would be indistinguishable from a broken program.
+  - `Sender.SendUnicode`/`SendBackspaces` return `false` when they stopped early
+    and check between chunks for a foreground-window change, Esc, or a fresh
+    mouse click — each means the text is no longer going where it was aimed.
+    **The checks are direct API calls, never our hook**: the hook lives on this
+    same thread, which is sitting in a `Sleep` loop and pumping no messages, so
+    the callback cannot run (and Windows will remove the hook on
+    `LowLevelHooksTimeout` anyway). `GetForegroundWindow` and `GetAsyncKeyState`
+    need no message pump. The mouse is compared against its state at the start,
+    so a button still held from selecting text does not abort instantly.
+    A caller that chains erase-then-type must check the first result: after an
+    interrupted erase, typing would land on top of the remainder.
+- **Detecting "is a text field focused" is NOT a usable guard** — it was
+  considered for the case above and rejected. `GetGUIThreadInfo().hwndCaret` is
+  empty in Chromium, Electron and anything else that draws its own caret, which
+  is most of what people type into; matching window class names fails on every
+  custom control. Such a check would turn the program off precisely where it is
+  needed and leave "the hotkey does nothing" with no explanation.
 - An empty scope step (`ScopeEditor`, "nothing left to expand") does NOT update
   `_lastPressUtc`. Otherwise frequent presses extend the expansion window
   forever: a person presses the hotkey once a second and sees nothing at all.
