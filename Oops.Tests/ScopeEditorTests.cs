@@ -193,13 +193,13 @@ public class ScopeEditorTests
         // русской, последнее — наоборот. При одном направлении на весь кусок
         // побеждало большинство букв, и кириллическое слово оставалось как есть.
         var s = new ScopeEditor();
-        const string typed = "Z djn [jxe pfgecnbnm ЬщвудКшыл";
+        const string typed = "Z djn [jxe gjckfnm уьфшд";
 
         var first = s.NextLayoutStep(typed, T0);
-        Assert.Equal("ModelRisk", first.Text);    // последнее слово — RU→EN
+        Assert.Equal("email", first.Text);    // последнее слово — RU→EN
 
         var second = s.NextLayoutStep(first.NewBufferContent, T0.AddMilliseconds(300));
-        Assert.Equal("Я вот хочу запустить ModelRisk", second.Text);
+        Assert.Equal("Я вот хочу послать email", second.Text);
         Assert.Equal(typed.Length, second.EraseCount);
     }
 
