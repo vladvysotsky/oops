@@ -28,6 +28,14 @@ public sealed class ScopeEditor
     // Хук вызывает ResetSession из своего потока, шаги выполняются в UI-потоке.
     private readonly object _gate = new();
     private string _original = string.Empty;
+
+    /// <summary>
+    /// Что мы напечатали на прошлом шаге. Если буфер всё ещё ровно такой —
+    /// человек после нашей правки ничего не набирал, и следующее нажатие
+    /// очевидно продолжает ту же область, сколько бы времени ни прошло.
+    /// </summary>
+    private string _lastEmitted = string.Empty;
+
     private DateTime _lastPressUtc = DateTime.MinValue;
     private int _step;              // 0 — сессии нет, 1 — последнее слово, 2 — всё
     private Kind _kind = Kind.None;
@@ -61,6 +69,7 @@ public sealed class ScopeEditor
             _kind = Kind.None;
             _step = 0;
             _original = string.Empty;
+            _lastEmitted = string.Empty;
         }
     }
 
@@ -71,10 +80,26 @@ public sealed class ScopeEditor
 
     private Edit NextStepLocked(Kind kind, string currentBuffer, DateTime nowUtc)
     {
+        // Продолжаем область не только по таймеру, но и по содержимому.
+        //
+        // Иначе получалось вот что: человек нажимает хоткей, СМОТРИТ на
+        // результат, нажимает снова — а две секунды уже прошли. Начиналась
+        // новая сессия, брала последнее слово, которое мы только что исправили,
+        // и честно возвращала его назад. Второе нажатие уходило впустую, и
+        // до цели приходилось жать три раза вместо двух.
+        //
+        // Если буфер ровно такой, каким мы его оставили, значит после правки
+        // ничего не набирали — это продолжение, а не новое начало. Набрали
+        // что-то — буфер отличается, и сессия начинается заново, как и должна.
+        //
+        // Ограничение `_step < 2` оставляет прежний способ откатить правку:
+        // когда область уже развёрнута до конца, нажатие после окна начинает
+        // новую сессию и конвертирует последнее слово обратно.
         bool continuing =
             _kind == kind &&
             _step > 0 &&
-            nowUtc - _lastPressUtc <= ExpandWindow;
+            (nowUtc - _lastPressUtc <= ExpandWindow
+             || (_step < 2 && currentBuffer == _lastEmitted));
 
         if (!continuing)
         {
@@ -132,6 +157,7 @@ public sealed class ScopeEditor
         // символов, сколько в _original, сколько бы раз мы уже ни переписывали.
         int eraseCount = _original.Length - scopeStart;
         var newBuffer = _original.Substring(0, scopeStart) + converted;
+        _lastEmitted = newBuffer;
 
         return new Edit(eraseCount, converted, dir, newBuffer);
     }

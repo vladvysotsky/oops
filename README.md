@@ -43,8 +43,20 @@ typed:     ghjdthrf njuj rfr 'nj hf,jnftn
 ```
 
 Every step is a 1-to-1 transformation of a clearly delimited piece. Text outside
-it is never touched. Miss the second press within 2 seconds and a new scope
-begins, again from the last word.
+it is never touched.
+
+Each word decides its own direction, and a word that already looks like a real
+word is left alone — `appconfig` inside a Russian phrase stays `appconfig`
+instead of turning into `фззсщташп`. No dictionary is involved: the check is
+letter-pair statistics, under 2 KB, so `nginx` and `useState` pass too.
+
+A **selection** is different: it is converted literally, every word. You drew
+the boundary yourself, and there is no second press that could change the
+verdict — so the program does not argue with you.
+
+Type anything after a fix and the next press starts a new scope, again from the
+last word. As long as you have not typed, the presses keep expanding the same
+one — however long you spend looking at the result.
 
 ## ⌨️ Hotkeys
 
@@ -111,7 +123,7 @@ To check that you downloaded exactly what CI built, use the `SHA256SUMS.txt`
 from the same release:
 
 ```powershell
-Get-FileHash .\oops-Setup-2.1.1.exe -Algorithm SHA256
+Get-FileHash .\oops-Setup-2.2.0.exe -Algorithm SHA256
 ```
 
 ## 🔄 Updates
@@ -121,6 +133,16 @@ version: it downloads the installer and runs it. The downloaded file is verified
 against the published SHA-256 before it is launched. Turn the check off with a
 checkbox in the settings; run it by hand from "Check for updates" in the tray
 menu.
+
+## 🚀 Starting with Windows
+
+The installer offers autostart, and the settings let you pick how it happens.
+**Normal** uses the usual `Run` registry entry. **Early** registers a logon task
+with no delay: `Run` entries have no ordering and Windows staggers them by about
+ten seconds, while a scheduled task is not subject to that.
+
+Only one of the two ever exists — two would mean the app launching twice at
+every logon.
 
 ## 🩺 When a hotkey goes silent
 

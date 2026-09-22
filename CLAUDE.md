@@ -101,6 +101,16 @@ last word or the whole thing.
 Every step is a **1-to-1** transformation of a clearly delimited piece. Correct
 text outside the scope is never touched.
 
+**The scope continues by content, not only by the clock.** If the buffer is
+still exactly what we left behind, nothing was typed after our edit and the next
+press obviously continues the same scope, however long the user took. Going by
+the two-second window alone produced the worst possible behaviour: press, look
+at the result, press again — a new session started, took the word we had just
+fixed and dutifully put it back. The second press was wasted and reaching the
+goal took three. The `_step < 2` guard keeps the old way of undoing an edit:
+once the scope is fully expanded, a press after the window starts a new session
+and converts the last word back.
+
 Text is rewritten with Backspace × N + `SendInput` with `KEYEVENTF_UNICODE`.
 The result is **never** written to the clipboard.
 
@@ -108,6 +118,16 @@ The result is **never** written to the clipboard.
 
 If the typing buffer is empty, the hotkey tries the selected text and converts
 it whole, 1-to-1 (no expansion — the user has already set the boundary).
+
+**A selection is converted LITERALLY: every word, without asking the language
+model** (`literal: true`). The margin that protects real words rests entirely on
+a refusal being recoverable — the word can be forced with another press. For a
+selection it is not: the next press reads the same selection and reaches the
+same verdict. That left "я думаю надо предусмотреть такую inere? потомму" with
+no way at all to fix it, because a bigram model cannot separate "inere" as
+English (4.6) from "штуку" as Russian (6.7). The price is accepted and is the
+exact mirror of the typed case: a real foreign word inside a selection is
+converted too. The direction is still chosen per word, so mixed text survives.
 
 The order "buffer first, selection second" is not a compromise but a
 consequence: text can only be selected with the mouse or Shift+arrows, and both
@@ -127,7 +147,10 @@ history.
 All of this existed and caused constant complaints — removed deliberately:
 dictionaries (`WordDictionary`, `words_ru/en.txt`), layout guessing
 (`AutoDetector`), auto-correction while typing, typography (`Typography`),
-word-by-word conversion (`AutoConvertPerWord`), the whole-buffer fallback,
+word-by-word conversion **while typing** (`AutoConvertPerWord`) — note that
+choosing the direction per word inside a piece the user has already delimited is
+a different thing and is what `AutoConvertWithDirection` does now,
+the whole-buffer fallback,
 selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
 `ClipboardSafe`), `NeverFixList`.
 
@@ -148,8 +171,48 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   `StartOfLastWords` / `CountWords`. No cursor and no navigation — deliberately.
 - `Core/LayoutConverter.cs` — the JCUKEN↔QWERTY table (`PairsLower`/`PairsUpper`,
   Shift symbols `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё``). `ToRussian`/`ToEnglish`
-  are 1-to-1; `AutoConvertWithDirection` picks the side by the majority of
-  characters.
+  are 1-to-1; `AutoConvertWithDirection` picks the side **per word**, and
+  reports the direction of the last word that had one — the caret sits at the
+  end, so the system layout should match what will be typed next.
+  Per word rather than per piece because of the ordinary mixed case:
+  "Z djn [jxe pfgecnbnm ЬщвудКшыл", where the first words were typed in the
+  English layout instead of Russian and the last one the other way round. One
+  direction for the whole piece lets the majority of letters win (16 against 9),
+  everything goes EN→RU, and the Cyrillic word simply does not appear in that
+  table and passes through untouched. No number of presses fixed such text.
+  A word is converted only when the result looks **more like a word** of the
+  target language than the original does of the source one
+  (`LanguageModel`, margin 0.5). Counting letters cannot tell "xtuj" from
+  "appconfig" — both are pure Latin, and the only difference is that one is a
+  word. Without this "appconfig" became "фззсщташп". The margin is biased
+  towards leaving a word alone: a broken word can be forced with another press,
+  a corrupted one in mid-phrase has to be retyped by hand.
+  The margin protects BYSTANDERS — words the user did not point at. Where there
+  are none, it is dropped and only the threshold remains: the result must simply
+  look more plausible than the original. That is the case for a scope of one
+  word (the user delimited exactly it) and for a word whose neighbour converted
+  on its own. Short words need this: four letter pairs are too few to earn the
+  full margin, so "rfr" at 0.35 left "привет rfr дела" — the very mush the model
+  was added to remove — and a lone press on "rfr" did nothing at all. Dropping
+  the margin is safe because everything real measures negative: "appconfig" −3.9,
+  "config.json" −2.7, "README.md" −1.9, "tot" −1.3, "CI/CD" −0.6,
+  "https://example.com" −0.4, "get" −0.2. None of this applies to a selection —
+  see "Selection": there the conversion is literal, because a refusal there
+  cannot be undone. Switched off by
+  `AppSettings.SmartWordSelection` when the model gets it wrong and the hotkey
+  falls silent.
+- `Core/LanguageModel.cs` — how much a piece looks like a word of a given
+  language, used for exactly that decision. **Not the dictionary we removed**:
+  no word list is stored or searched, only letter-pair frequencies including
+  word boundaries — 1156 and 784 bytes, built from open word lists and quantised
+  into a byte each. "фззсщташп" is rejected not for being absent from a list but
+  because "зз", "сщ" and "шп" hardly occur in Russian; "nginx" and "useState"
+  pass even though no list contains them.
+  A deliberate fallback to brute force was **tried and rejected**: when the smart
+  pass changes nothing, converting everything anyway turns
+  "https://example.com" into garbage on a single press, and a second press
+  cannot bring it back — the scope is already fully expanded. Silence is the
+  safer failure here, and the setting is the way out.
 - `Core/Sender.cs` — SendInput: `SendBackspaces`, `SendUnicode` (in small
   batches — Electron/React lose batched events), `WaitForModifiersReleased`,
   `ReleaseHotkeyModifiers`, `CancelMenuActivation`.
@@ -209,6 +272,11 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   being typed. Word boundaries go around the whole expression (`\b(?:…)\b`),
   otherwise `\bcat|dog\b` does not mean what was asked. The preview is computed
   from the ORIGINAL text, which makes "apply twice" impossible by construction.
+- `Program.cs` logs **how long startup took** — from process start to hooks
+  installed. That single number decides where "the app appears ten seconds after
+  logon" comes from: a couple of hundred milliseconds means Windows staggered us
+  and the scheduler mode fixes it; seconds mean our own single-file extraction
+  is to blame and the scheduler will not help.
 - `Core/Log.cs` — the detailed log in `%AppData%\Oops\logs`, off by default
   (`AppSettings.VerboseLog`). **Typed text never reaches the log**: keys are
   written as codes (`VK 0x41`), not as characters. The program sees everything
@@ -304,9 +372,26 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   got the old ones back after a restart.
   `Sanitize()` repairs settings from old files (null → default, Alt+Shift →
   default, two identical shortcuts → default).
-- `Settings/Autostart.cs` — the `HKCU\...\Run` registry key. **The single source
-  of truth for autostart**; there is no copy of it in `settings.json` and there
-  must not be one.
+- `Settings/Autostart.cs` — autostart, in two flavours. **The system is the
+  single source of truth**; there is no copy in `settings.json` and there must
+  not be one — a copy of the flag once wiped the entry the installer had made,
+  and the first user got "the checkbox in the installer does nothing". The mode
+  is derived the same way, from what actually exists: a scheduled task wins over
+  a registry value.
+  - `Registry` — `HKCU\...\Run`, as before.
+  - `Scheduler` — a logon task with **zero delay**. That is the whole point:
+    `Run` entries have no ordering at all, and Windows 8+ deliberately staggers
+    them (`StartupDelayInMSec`, about ten seconds), while a scheduled task is
+    not subject to that.
+  Exactly one of them may exist. Two means two launches, and the second one hits
+  the single-instance mutex and shows "oops is already running" at every logon —
+  which is why `installer\Oops.iss` carries a `Check: NoSchedulerTask` guard: it
+  asks the scheduler before writing the registry value.
+  Four settings in the task XML each break autostart silently, so
+  `BuildTaskXml` is public and covered by tests: zero `Delay`,
+  `DisallowStartIfOnBatteries=false` (otherwise nothing starts on a laptop off
+  mains), `RunLevel=LeastPrivilege` (the manifest is asInvoker for a reason) and
+  `ExecutionTimeLimit=PT0S` (the default kills the process after three days).
 
 ## Default hotkeys
 
@@ -516,6 +601,33 @@ user block the program from starting forever.
   and the window the selection lives in is remembered via `GetForegroundWindow`
   and restored via `SetForegroundWindow` before typing. Without a pause after
   the restore the first characters go to the still-closing dialog and vanish.
+- **A runaway conversion must be stoppable, and a huge selection must not start
+  one.** Reported: the user missed an input field by a little, pressed Ctrl+A —
+  selecting an entire read-only page — then the layout hotkey, and thousands of
+  characters began typing themselves one by one. The characters went nowhere
+  while the page had focus; then the user clicked into the real field and the
+  rest of the flood landed there. Nothing could stop it. Two guards, both
+  needed:
+  - `App.MaxSelectionLength` (2000) refuses an oversized selection and SAYS SO
+    through `Notice` — the hotkey fixes a phrase, not a document, and silence
+    would be indistinguishable from a broken program.
+  - `Sender.SendUnicode`/`SendBackspaces` return `false` when they stopped early
+    and check between chunks for a foreground-window change, Esc, or a fresh
+    mouse click — each means the text is no longer going where it was aimed.
+    **The checks are direct API calls, never our hook**: the hook lives on this
+    same thread, which is sitting in a `Sleep` loop and pumping no messages, so
+    the callback cannot run (and Windows will remove the hook on
+    `LowLevelHooksTimeout` anyway). `GetForegroundWindow` and `GetAsyncKeyState`
+    need no message pump. The mouse is compared against its state at the start,
+    so a button still held from selecting text does not abort instantly.
+    A caller that chains erase-then-type must check the first result: after an
+    interrupted erase, typing would land on top of the remainder.
+- **Detecting "is a text field focused" is NOT a usable guard** — it was
+  considered for the case above and rejected. `GetGUIThreadInfo().hwndCaret` is
+  empty in Chromium, Electron and anything else that draws its own caret, which
+  is most of what people type into; matching window class names fails on every
+  custom control. Such a check would turn the program off precisely where it is
+  needed and leave "the hotkey does nothing" with no explanation.
 - An empty scope step (`ScopeEditor`, "nothing left to expand") does NOT update
   `_lastPressUtc`. Otherwise frequent presses extend the expansion window
   forever: a person presses the hotkey once a second and sees nothing at all.

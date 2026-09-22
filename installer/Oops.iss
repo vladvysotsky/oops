@@ -79,10 +79,16 @@ Name: "{group}\{cm:UninstallIcon}";            Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";            Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-; Опциональный автозапуск через реестр
+; Опциональный автозапуск через реестр.
+;
+; Check следит, чтобы автозапусков не стало ДВА. В настройках можно выбрать
+; «ранний» способ — задачу в планировщике; если она есть, а установщик допишет
+; ещё и запись в Run, программа при входе будет запускаться дважды. Вторая
+; копия упрётся в single-instance mutex и покажет окно «программа уже
+; запущена» — при каждом входе в систему.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "Oops"; ValueData: """{app}\{#MyAppExeName}"""; \
-    Flags: uninsdeletevalue; Tasks: autostart
+    Flags: uninsdeletevalue; Tasks: autostart; Check: NoSchedulerTask
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchAfterInstall}"; \
@@ -91,3 +97,17 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchAfterInstall}"; \
 [UninstallRun]
 ; Гарантированно прибиваем процесс перед удалением (на случай если CloseApplications не сработал)
 Filename: "{cmd}"; Parameters: "/c taskkill /f /im {#MyAppExeName} 2>nul"; Flags: runhidden
+
+[Code]
+// Есть ли уже задача автозапуска в планировщике. Имя обязано совпадать с
+// Autostart.TaskName в коде программы.
+function NoSchedulerTask: Boolean;
+var
+  ResultCode: Integer;
+begin
+  if Exec(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN "Oops Autostart"',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Result := ResultCode <> 0      // 0 значит задача есть — запись в Run не нужна
+  else
+    Result := True;                // не смогли спросить — ведём себя как раньше
+end;

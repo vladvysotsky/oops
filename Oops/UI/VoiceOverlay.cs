@@ -120,12 +120,14 @@ internal sealed class VoiceOverlay : Form
         form.Reposition();
     }
 
-    public static void Hide()
+    /// <summary>Убирает плашку с экрана, окно остаётся жить до выхода.</summary>
+    public static void HidePanel()
     {
         if (_instance is { Visible: true } form) form.Visible = false;
     }
 
-    public static void Close()
+    /// <summary>Уничтожает окно совсем — при выходе из программы.</summary>
+    public static void Shutdown()
     {
         _instance?.Dispose();
         _instance = null;
