@@ -78,6 +78,11 @@ public sealed class TrayContext : ApplicationContext
             L10n.T("translate.failed.hint"),
             ex.ToString(), reportContext: "Ошибка перевода");
 
+        _app.SelectionTooLarge += (_, n) => Notice.Warn(null,
+            L10n.T("selection.toobig.title"),
+            L10n.T("selection.toobig.body", n, App.MaxSelectionLength),
+            L10n.T("selection.toobig.hint"));
+
         _ = ScheduleStartupUpdateCheckAsync();
     }
 

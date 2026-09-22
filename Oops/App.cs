@@ -51,6 +51,9 @@ public sealed class App : IDisposable
     /// <summary>Запись включилась (true) или выключилась (false) — трею есть что показать.</summary>
     public event EventHandler<bool>? VoiceRecordingChanged;
 
+    /// <summary>Выделение больше <see cref="MaxSelectionLength"/> — объясняем отказ.</summary>
+    public event EventHandler<int>? SelectionTooLarge;
+
     /// <summary>Промежуточная расшифровка, пока человек ещё говорит.</summary>
     public event EventHandler<string>? VoicePartial;
 
@@ -343,10 +346,30 @@ public sealed class App : IDisposable
     /// поверх (выделение ещё активно, ввод его перетирает). Возвращает false,
     /// если выделения нет и нужно работать с набранным буфером.
     /// </summary>
+    /// <summary>
+    /// Потолок на размер выделения.
+    ///
+    /// Взялся из реального случая: человек промахнулся мимо поля ввода, нажал
+    /// Ctrl+A — выделив всю страницу — и хоткей раскладки. Несколько тысяч
+    /// символов пошли печататься по одному, и остановить это было нечем.
+    ///
+    /// Две тысячи — это уже страница текста. Набрать столько в чужой раскладке,
+    /// не заметив, невозможно: хоткей чинит фразу, а не документ. Отказ
+    /// ОБЪЯСНЯЕТСЯ окном — молчание здесь неотличимо от сломанной программы.
+    /// </summary>
+    public const int MaxSelectionLength = 2000;
+
     private bool TryConvertSelection(bool layout)
     {
         var selection = SelectionReader.TryRead();
         if (string.IsNullOrEmpty(selection)) return false;
+
+        if (selection.Length > MaxSelectionLength)
+        {
+            Log.Write($"выделение отклонено: {selection.Length} символов");
+            SelectionTooLarge?.Invoke(this, selection.Length);
+            return true;
+        }
 
         string converted;
         var dir = LayoutConverter.Direction.None;
@@ -379,8 +402,10 @@ public sealed class App : IDisposable
 
         if (edit.IsEmpty) return;
 
-        Sender.SendBackspaces(edit.EraseCount);
-        Sender.SendUnicode(edit.Text);
+        // Если стирание прервали, печатать НЕЛЬЗЯ: стёрта только часть, и текст
+        // лёг бы поверх остатка. Лента после этого экрану не соответствует.
+        if (!Sender.SendBackspaces(edit.EraseCount)) { ResetAll(); return; }
+        if (!Sender.SendUnicode(edit.Text)) { ResetAll(); return; }
 
         SwitchSystemLayout(edit.Direction);
 
@@ -444,7 +469,7 @@ public sealed class App : IDisposable
                 if (result == text) return;
 
                 Sender.WaitForModifiersReleased();
-                if (erase > 0) Sender.SendBackspaces(erase);
+                if (erase > 0 && !Sender.SendBackspaces(erase)) { ResetAll(); return; }
                 Sender.SendUnicode(result!);
 
                 // Напечатали не то, что вели в ленте, — она больше не отражает экран.
