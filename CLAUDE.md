@@ -175,7 +175,7 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   reports the direction of the last word that had one — the caret sits at the
   end, so the system layout should match what will be typed next.
   Per word rather than per piece because of the ordinary mixed case:
-  "Z djn [jxe pfgecnbnm ЬщвудКшыл", where the first words were typed in the
+  "Z djn [jxe gjckfnm уьфшд", where the first words were typed in the
   English layout instead of Russian and the last one the other way round. One
   direction for the whole piece lets the majority of letters win (16 against 9),
   everything goes EN→RU, and the Cyrillic word simply does not appear in that
@@ -183,8 +183,8 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   A word is converted only when the result looks **more like a word** of the
   target language than the original does of the source one
   (`LanguageModel`, margin 0.5). Counting letters cannot tell "xtuj" from
-  "appconfig" — both are pure Latin, and the only difference is that one is a
-  word. Without this "appconfig" became "фззсщташп". The margin is biased
+  "password" — both are pure Latin, and the only difference is that one is a
+  word. Without this "password" became "зфыыцщкв". The margin is biased
   towards leaving a word alone: a broken word can be forced with another press,
   a corrupted one in mid-phrase has to be retyped by hand.
   The margin protects BYSTANDERS — words the user did not point at. Where there
@@ -194,8 +194,8 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   on its own. Short words need this: four letter pairs are too few to earn the
   full margin, so "rfr" at 0.35 left "привет rfr дела" — the very mush the model
   was added to remove — and a lone press on "rfr" did nothing at all. Dropping
-  the margin is safe because everything real measures negative: "appconfig" −3.9,
-  "config.json" −2.7, "README.md" −1.9, "tot" −1.3, "CI/CD" −0.6,
+  the margin is safe because everything real measures negative: "email" −6.1,
+  "password" −6.0, "online" −4.0, "Anderson" −4.0, "tot" −1.3, "photo.jpg" −0.7,
   "https://example.com" −0.4, "get" −0.2. None of this applies to a selection —
   see "Selection": there the conversion is literal, because a refusal there
   cannot be undone. Switched off by
@@ -205,9 +205,9 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   language, used for exactly that decision. **Not the dictionary we removed**:
   no word list is stored or searched, only letter-pair frequencies including
   word boundaries — 1156 and 784 bytes, built from open word lists and quantised
-  into a byte each. "фззсщташп" is rejected not for being absent from a list but
-  because "зз", "сщ" and "шп" hardly occur in Russian; "nginx" and "useState"
-  pass even though no list contains them.
+  into a byte each. "зфыыцщкв" is rejected not for being absent from a list but
+  because "зз", "сщ" and "шп" hardly occur in Russian; a name like "Anderson" or
+  "Helsinki" passes even though no word list contains it.
   A deliberate fallback to brute force was **tried and rejected**: when the smart
   pass changes nothing, converting everything anyway turns
   "https://example.com" into garbage on a single press, and a second press
