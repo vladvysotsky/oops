@@ -65,6 +65,9 @@ public static class Sender
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int nVirtKey);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
     /// <summary>
     /// Сколько символов (или Backspace) уходит в одной посылке SendInput.
     ///
@@ -177,6 +180,79 @@ public static class Sender
         System.Threading.Thread.Sleep(20); // даём приложению переварить key-up'ы
     }
 
+
+    // ------------------------------------------------- аварийная остановка
+
+    private const int VK_ESCAPE = 0x1B;
+    private const int VK_LBUTTON = 0x01;
+    private const int VK_RBUTTON = 0x02;
+
+    private static IntPtr _target;
+    private static bool _mouseWasDown;
+
+    /// <summary>Сколько символов было напечатано до прерывания последней посылки.</summary>
+    public static int LastSentCount { get; private set; }
+
+    /// <summary>
+    /// Запоминает, куда и при каком состоянии мыши мы начали печатать.
+    ///
+    /// Проверки между посылками идут ТОЛЬКО прямыми вызовами API. Наш хук здесь
+    /// бесполезен: он живёт на этом же потоке, а поток сидит в цикле с Sleep и
+    /// сообщений не качает — колбэк просто не вызовется (а Windows ещё и снимет
+    /// хук по LowLevelHooksTimeout). GetForegroundWindow и GetAsyncKeyState
+    /// очереди сообщений не требуют.
+    /// </summary>
+    private static void ArmGuard()
+    {
+        _target = GetForegroundWindow();
+        // Исходное состояние кнопок мыши запоминаем, чтобы прерываться на
+        // НАЖАТИИ, а не на удержании: человек мог выделить текст мышью и нажать
+        // хоткей, не отпустив кнопку.
+        _mouseWasDown = MouseDown();
+        LastSentCount = 0;
+    }
+
+    private static bool MouseDown() =>
+        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+
+    /// <summary>
+    /// Пора ли прекратить печать. Три признака, и каждый означает одно и то же:
+    /// текст идёт уже не туда, куда его отправляли.
+    ///
+    /// Понадобилось после реального случая: человек промахнулся мимо поля ввода,
+    /// нажал Ctrl+A (выделив всю страницу) и хоткей раскладки, а потом кликнул по
+    /// настоящему полю — и весь этот текст полился в него нескончаемым потоком.
+    /// Остановить его было нечем.
+    /// </summary>
+    private static bool ShouldStop()
+    {
+        // Окно сменилось — то, что мы печатаем, относилось к прежнему.
+        if (GetForegroundWindow() != _target)
+        {
+            Log.Write("печать прервана: сменилось активное окно");
+            return true;
+        }
+
+        // Esc — общепринятое «отмена», и держать его во время хоткея незачем.
+        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0)
+        {
+            Log.Write("печать прервана: Esc");
+            return true;
+        }
+
+        // Клик. Именно это делает человек, когда видит, что пошло не так.
+        bool mouse = MouseDown();
+        if (mouse && !_mouseWasDown)
+        {
+            Log.Write("печать прервана: клик мышью");
+            return true;
+        }
+        _mouseWasDown = mouse;
+
+        return false;
+    }
+
     /// <summary>Перемещает каретку вправо N раз (полезно перед SendBackspaces, если буфер-курсор не в конце).</summary>
     public static void SendRightArrow(int count)
     {
@@ -203,15 +279,17 @@ public static class Sender
     /// Ctrl+Backspace (удаление слова целиком). Одноразовой очистки перед циклом
     /// не хватает — зажатая клавиша возвращает состояние обратно.
     /// </summary>
-    public static void SendBackspaces(int count)
+    public static bool SendBackspaces(int count)
     {
-        if (count <= 0) return;
+        if (count <= 0) return true;
 
         int chunk = Math.Max(1, ChunkSize);
         int sz = Marshal.SizeOf<INPUT>();
+        ArmGuard();
 
         for (int sent = 0; sent < count; sent += chunk)
         {
+            if (sent > 0 && ShouldStop()) return false;
             int len = Math.Min(chunk, count - sent);
             var batch = new INPUT[ModifierClears + len * 2];
             FillModifierClears(batch);
@@ -221,8 +299,10 @@ public static class Sender
                 batch[ModifierClears + i * 2 + 1] = new INPUT { type = INPUT_KEYBOARD, u = new InputUnion { ki = new KEYBDINPUT { wVk = VK_BACK, dwFlags = KEYEVENTF_KEYUP } } };
             }
             SendInput((uint)batch.Length, batch, sz);
+            LastSentCount = sent + len;
             System.Threading.Thread.Sleep(ChunkDelayMs);
         }
+        return true;
     }
 
     /// <summary>Сколько INPUT-ов в начале посылки занимает снятие модификаторов.</summary>
@@ -258,16 +338,18 @@ public static class Sender
     /// поэтому со стороны это выглядело как «стёрло и ничего не написало» или,
     /// на пустом буфере, как полное отсутствие реакции.
     /// </summary>
-    public static void SendUnicode(string text)
+    public static bool SendUnicode(string text)
     {
-        if (string.IsNullOrEmpty(text)) return;
+        if (string.IsNullOrEmpty(text)) return true;
         text = text.Replace("\r\n", "\r").Replace('\n', '\r');
 
         int sz = Marshal.SizeOf<INPUT>();
         int chunk = Math.Max(1, ChunkSize);
+        ArmGuard();
 
         for (int start = 0; start < text.Length; )
         {
+            if (start > 0 && ShouldStop()) return false;
             int len = Math.Min(chunk, text.Length - start);
 
             // Суррогатную пару нельзя разрывать между посылками: два её кода
@@ -292,8 +374,10 @@ public static class Sender
 
             SendInput((uint)batch.Length, batch, sz);
             start += len;
+            LastSentCount = start;
             if (start < text.Length) System.Threading.Thread.Sleep(ChunkDelayMs);
         }
+        return true;
     }
 
     /// <summary>

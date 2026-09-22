@@ -99,7 +99,14 @@ public sealed class WelcomeForm : ThemedForm
 
             app.Settings.ConvertHotkey = wizard.ConvertHotkey;
             app.Settings.ChangeCaseHotkey = wizard.ChangeCaseHotkey;
-            Autostart.Set(wizard.AutostartWanted);
+            // Способ берём тот, что уже есть в системе: инсталлятор мог создать
+            // запись сам, а «ранний» режим — задачу в планировщике. Навязать
+            // здесь Registry значило бы молча её снести.
+            var autostartError = Autostart.Set(wizard.AutostartWanted, Autostart.CurrentMode);
+            if (autostartError != null)
+                Notice.Error(null, L10n.T("autostart.failed.title"),
+                    L10n.T("autostart.failed.body"), L10n.T("autostart.failed.hint"),
+                    autostartError, reportContext: "Не удалось настроить автозапуск");
 
             // Ставим отметку в любом случае, даже если окно просто закрыли крестиком:
             // мастер не должен встречать человека при каждом запуске.

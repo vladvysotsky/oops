@@ -45,7 +45,7 @@ public sealed class TrayContext : ApplicationContext
         };
         _app.VoicePartial += (_, text) => VoiceOverlay.Partial(text);
         _app.VoiceRecognising += (_, _) => VoiceOverlay.Recognising();
-        _app.VoiceFinished += (_, _) => VoiceOverlay.Hide();
+        _app.VoiceFinished += (_, _) => VoiceOverlay.HidePanel();
 
         // Диалог замены открывает трей, а не App: App не знает про окна, и
         // это единственное, что удерживает его от превращения в UI-класс.
@@ -77,6 +77,11 @@ public sealed class TrayContext : ApplicationContext
             L10n.T("translate.failed.body"),
             L10n.T("translate.failed.hint"),
             ex.ToString(), reportContext: "Ошибка перевода");
+
+        _app.SelectionTooLarge += (_, n) => Notice.Warn(null,
+            L10n.T("selection.toobig.title"),
+            L10n.T("selection.toobig.body", n, App.MaxSelectionLength),
+            L10n.T("selection.toobig.hint"));
 
         _ = ScheduleStartupUpdateCheckAsync();
     }
@@ -269,7 +274,7 @@ public sealed class TrayContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
-        VoiceOverlay.Close();
+        VoiceOverlay.Shutdown();
         _icon.Visible = false;
         _icon.Dispose();
         _app.Dispose();

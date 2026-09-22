@@ -52,16 +52,40 @@ public class ScopeEditorTests
     }
 
     [Fact]
-    public void PressAfterWindowExpires_StartsNewScopeAtLastWord()
+    public void SlowSecondPress_ContinuesInsteadOfUndoingTheFirst()
     {
+        // Регрессия и жалоба пользователя: человек нажимает, СМОТРИТ на
+        // результат, нажимает снова — а окно в две секунды уже вышло. Раньше
+        // начиналась новая сессия, брала только что исправленное последнее
+        // слово и возвращала его назад: второе нажатие уходило впустую, до
+        // цели требовалось три.
+        //
+        // Если после нашей правки ничего не набирали, буфер ровно такой, каким
+        // мы его оставили, — это продолжение, сколько бы времени ни прошло.
         var s = new ScopeEditor { ExpandWindow = TimeSpan.FromSeconds(2) };
         var first = s.NextLayoutStep("ghbdtn rfr ltkf", T0);
         Assert.Equal("дела", first.Text);
 
-        // Прошло больше окна — снова только последнее слово, уже нового содержимого.
         var later = s.NextLayoutStep(first.NewBufferContent, T0.AddSeconds(5));
-        Assert.Equal("ltkf", later.Text);         // "дела" обратно в EN
-        Assert.Equal(4, later.EraseCount);
+        Assert.Equal("привет как дела", later.Text);
+    }
+
+    [Fact]
+    public void TypingAfterOurEdit_StartsAFreshScope()
+    {
+        // Обратная сторона: буфер отличается от того, что мы оставили, —
+        // значит человек печатал, и область начинается заново.
+        var s = new ScopeEditor { ExpandWindow = TimeSpan.FromSeconds(2) };
+        var first = s.NextLayoutStep("ghbdtn rfr ltkf", T0);
+        Assert.Equal("дела", first.Text);
+
+        // «ytn», а не «tot»: «tot» — настоящее английское слово, и модель
+        // языка оставляет его в покое совершенно правильно. Тест про область,
+        // а не про выбор слов.
+        var typedMore = first.NewBufferContent + " ytn";
+        var next = s.NextLayoutStep(typedMore, T0.AddSeconds(5));
+        Assert.Equal("нет", next.Text);           // снова одно последнее слово
+        Assert.Equal(3, next.EraseCount);
     }
 
     [Fact]
@@ -160,6 +184,23 @@ public class ScopeEditorTests
     public void ToggleCase_LowersWhenAnyUpper(string input, string expected)
     {
         Assert.Equal(expected, ScopeEditor.ToggleCase(input));
+    }
+
+    [Fact]
+    public void MixedLayoutText_EachWordGoesItsOwnWay()
+    {
+        // Жалоба пользователя: часть слов набрана в английской раскладке вместо
+        // русской, последнее — наоборот. При одном направлении на весь кусок
+        // побеждало большинство букв, и кириллическое слово оставалось как есть.
+        var s = new ScopeEditor();
+        const string typed = "Z djn [jxe pfgecnbnm ЬщвудКшыл";
+
+        var first = s.NextLayoutStep(typed, T0);
+        Assert.Equal("ModelRisk", first.Text);    // последнее слово — RU→EN
+
+        var second = s.NextLayoutStep(first.NewBufferContent, T0.AddMilliseconds(300));
+        Assert.Equal("Я вот хочу запустить ModelRisk", second.Text);
+        Assert.Equal(typed.Length, second.EraseCount);
     }
 
     [Fact]

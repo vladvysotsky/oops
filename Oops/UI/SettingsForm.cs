@@ -24,7 +24,9 @@ public sealed class SettingsForm : ThemedForm
     private readonly CheckBox _cbCharByChar = new ToggleBox();
     private readonly CheckBox _cbVoiceLive = new ToggleBox();
     private readonly CheckBox _cbVerboseLog = new ToggleBox();
+    private readonly CheckBox _cbSmartWords = new ToggleBox();
     private readonly SegmentedControl _theme = new();
+    private readonly SegmentedControl _autostartMode = new();
     private readonly SegmentedControl _language = new();
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
@@ -321,6 +323,7 @@ public sealed class SettingsForm : ThemedForm
         AddAutoRow(rows, Divider());
         AddAutoRow(rows, CheckRow(_cbAutostart, L10n.T("settings.autostart"),
             L10n.T("settings.autostart.hint")));
+        AddAutoRow(rows, AutostartModeRow());
         AddAutoRow(rows, Divider());
         AddAutoRow(rows, CheckRow(_cbAutoUpdate, L10n.T("settings.autoupdate"),
             L10n.T("settings.autoupdate.hint")));
@@ -341,6 +344,23 @@ public sealed class SettingsForm : ThemedForm
     /// через <see cref="Theme.Apply"/>, в settings.Theme значение попадает
     /// только по «Сохранить» — как у языка.
     /// </summary>
+    /// <summary>
+    /// Способ автозапуска. Отдельной строкой под галочкой, а не третьим
+    /// состоянием самой галочки: «включено» и «как именно» — разные вопросы,
+    /// и смешивать их в одном контроле значит заставлять человека гадать.
+    /// </summary>
+    private Control AutostartModeRow()
+    {
+        _autostartMode.SetItems(
+            L10n.T("settings.autostart.normal"),
+            L10n.T("settings.autostart.early"));
+        return Row(L10n.T("settings.autostart.mode"),
+                   L10n.T("settings.autostart.mode.hint"), _autostartMode);
+    }
+
+    private static readonly AutostartMode[] AutostartModes =
+        { AutostartMode.Registry, AutostartMode.Scheduler };
+
     private Control ThemeRow()
     {
         _theme.SetItems(
@@ -468,6 +488,10 @@ public sealed class SettingsForm : ThemedForm
 
         AddAutoRow(rows, CheckRow(_cbCharByChar, L10n.T("settings.slowTyping"),
             L10n.T("settings.slowTyping.hint")));
+        AddAutoRow(rows, Divider());
+
+        AddAutoRow(rows, CheckRow(_cbSmartWords, L10n.T("settings.smartWords"),
+            L10n.T("settings.smartWords.hint")));
         return card;
     }
 
@@ -1087,10 +1111,12 @@ public sealed class SettingsForm : ThemedForm
         // Автозапуск живёт в реестре, а не в settings.json: галочку могли поставить
         // в инсталляторе, и окно настроек обязано показывать её фактическое состояние.
         _cbAutostart.Checked = Autostart.IsEnabled();
+        _autostartMode.SelectedIndex = Math.Max(0, Array.IndexOf(AutostartModes, Autostart.CurrentMode));
         _cbAutoUpdate.Checked = _settings.AutoCheckUpdates;
         _cbCharByChar.Checked = _settings.CharByCharTyping;
         _cbVoiceLive.Checked = _settings.VoiceLiveText;
         _cbVerboseLog.Checked = _settings.VerboseLog;
+        _cbSmartWords.Checked = _settings.SmartWordSelection;
         // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
         // запустит пересборку окна по кругу.
         _theme.SelectedIndexChanged -= ThemeChangedHandler;
@@ -1162,6 +1188,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.AutoCheckUpdates = _cbAutoUpdate.Checked;
         _settings.CharByCharTyping = _cbCharByChar.Checked;
         _settings.VoiceLiveText = _cbVoiceLive.Checked;
+        _settings.SmartWordSelection = _cbSmartWords.Checked;
 
         // Лог включаем и выключаем сразу: человек жмёт «Сохранить» ровно
         // затем, чтобы следующее же нажатие хоткея попало в файл.
@@ -1179,7 +1206,15 @@ public sealed class SettingsForm : ThemedForm
         _settings.TranslationEnabled = Translator.IsReady;
 
         // Реестр — единственный источник правды для автозапуска.
-        Autostart.Set(_cbAutostart.Checked);
+        // Реестр — единственный источник правды для автозапуска, поэтому
+        // отказ показываем сразу: человек снял галочку и уверен, что программа
+        // больше не запустится сама.
+        var autostartError = Autostart.Set(
+            _cbAutostart.Checked, AutostartModes[Math.Max(0, _autostartMode.SelectedIndex)]);
+        if (autostartError != null)
+            Notice.Error(this, L10n.T("autostart.failed.title"),
+                L10n.T("autostart.failed.body"), L10n.T("autostart.failed.hint"),
+                autostartError, reportContext: "Не удалось настроить автозапуск");
         return true;
     }
 }
