@@ -359,6 +359,31 @@ internal static class Theme
         catch { }
     }
 
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetWindowTheme(IntPtr hwnd, string? app, string? id);
+
+    /// <summary>
+    /// Красит полосы прокрутки контрола в тон тёмной темы.
+    ///
+    /// Полосы у Panel с AutoScroll рисует система, в неклиентской области, и
+    /// обычным BackColor до них не дотянуться: в тёмном окне они остаются
+    /// белыми и видны сильнее всего остального. «DarkMode_Explorer» — тот же
+    /// класс темы, которым Проводник красит свои списки.
+    ///
+    /// Имя класса недокументировано, поэтому вызов и обёрнут: на сборке, где
+    /// такого класса нет, SetWindowTheme просто вернёт ошибку, и полосы
+    /// останутся прежними — хуже, чем сейчас, не станет.
+    ///
+    /// Хэндл обязан уже существовать: до его создания красить нечего, а
+    /// обращение к Handle создало бы окно раньше времени.
+    /// </summary>
+    public static void ApplyScrollbarChrome(Control control)
+    {
+        if (!IsDark || !control.IsHandleCreated) return;
+        try { SetWindowTheme(control.Handle, "DarkMode_Explorer", null); }
+        catch { }
+    }
+
     /// <summary>
     /// Одевает меню трея в тему приложения. Меню — самая заметная поверхность
     /// программы, и светлое меню в тёмной Windows выдаёт приложение сильнее,
