@@ -10,15 +10,15 @@ public class LanguageModelTests
 
     [Theory]
     // Настоящие слова выглядят правдоподобнее мусора из другой раскладки.
-    [InlineData("привет", "фззсщташп")]
+    [InlineData("привет", "зфыыцщкв")]
     [InlineData("работает", "вщслук")]
     [InlineData("нужен", "гыуыефеу")]
     public void RealRussianWordsScoreBetterThanLayoutGarbage(string real, string garbage)
         => Assert.True(Ru(real) < Ru(garbage), $"{real} vs {garbage}");
 
     [Theory]
-    [InlineData("appconfig", "lkz")]
-    [InlineData("docker", "xtuj")]
+    [InlineData("password", "lkz")]
+    [InlineData("online", "xtuj")]
     [InlineData("hello", "ye")]
     public void RealEnglishWordsScoreBetterThanLayoutGarbage(string real, string garbage)
         => Assert.True(En(real) < En(garbage), $"{real} vs {garbage}");
@@ -26,10 +26,10 @@ public class LanguageModelTests
     [Fact]
     public void UnknownButWellFormedWordsAreAccepted()
     {
-        // Модель не словарь: этих слов нет ни в одном списке, но сложены они
+        // Модель не словарь: имён нет ни в одном списке слов, но сложены они
         // из обычных для языка сочетаний — и должны считаться правдоподобными.
-        Assert.True(En("nginx") < En("xtuj"));
-        Assert.True(En("usestate") < En("lkz"));
+        Assert.True(En("anderson") < En("xtuj"));
+        Assert.True(En("helsinki") < En("lkz"));
     }
 
     [Fact]
