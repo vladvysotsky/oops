@@ -46,9 +46,9 @@ Every step is a 1-to-1 transformation of a clearly delimited piece. Text outside
 it is never touched.
 
 Each word decides its own direction, and a word that already looks like a real
-word is left alone — `appconfig` inside a Russian phrase stays `appconfig`
-instead of turning into `фззсщташп`. No dictionary is involved: the check is
-letter-pair statistics, under 2 KB, so `nginx` and `useState` pass too.
+word is left alone — `password` inside a Russian phrase stays `password`
+instead of turning into `зфыыцщкв`. No dictionary is involved: the check is
+letter-pair statistics, under 2 KB, so a name like `Anderson` passes too.
 
 A **selection** is different: it is converted literally, every word. You drew
 the boundary yourself, and there is no second press that could change the
