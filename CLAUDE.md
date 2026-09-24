@@ -622,22 +622,33 @@ user block the program from starting forever.
     so a button still held from selecting text does not abort instantly.
     A caller that chains erase-then-type must check the first result: after an
     interrupted erase, typing would land on top of the remainder.
-- **`IncludeAllContentForSelfExtract` makes the app depend on a temp folder
-  surviving for its whole lifetime.** The flag extracts EVERYTHING — managed
-  assemblies included — to `%TEMP%\.net\...` and loads them from there, instead
-  of mapping them out of the exe. An assembly a feature has not used yet is not
-  open, so nothing stops a temp cleanup (Storage Sense, Disk Cleanup, an
-  antivirus) from deleting it, and oops sits in the tray for days. Reported as a
-  crash on the replace hotkey: `FileNotFoundException:
-  System.Text.RegularExpressions` from `TextReplacer.Apply` — the first place
-  regular expressions are touched at all.
-  `Program.PinLazyAssemblies` touches such an assembly at startup, while the
-  folder is certainly intact: a loaded assembly is mapped and its file cannot be
-  deleted. That covers only the MANAGED assemblies listed there. The real cure
-  is to stop extracting managed assemblies, but the flag exists for Whisper's
-  native libraries (see above), so removing it requires testing voice input on
-  Windows. `Notice.Crash` recognises a missing-file failure and says "restart"
-  rather than offering to file a bug.
+- **THE INSTALLER IS BUILT WITHOUT `PublishSingleFile`; only the portable
+  archive is one file.** A single-file exe with
+  `IncludeAllContentForSelfExtract` extracts EVERYTHING — managed assemblies
+  included — to `%TEMP%\.net\...` and loads them from there, instead of mapping
+  them out of the exe. An assembly a feature has not used yet is not open, so
+  nothing stops a temp cleanup (Storage Sense, Disk Cleanup, an antivirus) from
+  deleting it, and oops sits in the tray for days. **And .NET does not
+  re-extract when the folder already exists** — it reuses the damaged one, so a
+  single cleanup breaks the feature permanently, at every launch afterwards.
+  Reported that way: `FileNotFoundException: System.Text.RegularExpressions`
+  from `TextReplacer.Apply`, the first place regular expressions are touched at
+  all, on every press of the replace hotkey. Deleting `%TEMP%\.net\oops`
+  cured it.
+  An installed copy has no use for a single file — it lives in its own folder —
+  so `installer\build.ps1` and the release workflow publish it as a plain
+  folder into `build\app`, and `Oops.iss` takes that whole tree. No extraction,
+  nothing to clean, and `runtimes\win-x64` sits next to the exe, which is
+  exactly where Whisper looks by default.
+  The portable archive must stay one file, so it keeps single-file and both
+  extraction flags, published separately into `build\portable`. It therefore
+  keeps the exposure — `Program.PinLazyAssemblies` touches the regex assembly at
+  startup while the folder is certainly intact (a loaded assembly is mapped and
+  its file cannot be deleted), but that covers only the managed assemblies named
+  there. `Notice.Crash` recognises a missing-file failure and says so instead of
+  offering to file a bug.
+  The two publishes go to SEPARATE output folders on purpose: one output
+  directory would mix a bundled exe with loose assemblies from the other build.
 - **Detecting "is a text field focused" is NOT a usable guard** — it was
   considered for the case above and rejected. `GetGUIThreadInfo().hwndCaret` is
   empty in Chromium, Electron and anything else that draws its own caret, which
