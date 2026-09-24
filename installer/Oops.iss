@@ -16,7 +16,10 @@
 #define MyAppPublisher  "oops"
 #define MyAppURL        "https://github.com/vladvysotsky/oops"
 #define MyAppExeName    "oops.exe"
-#define PublishDir      "..\Oops\bin\Release\net8.0-windows\win-x64\publish"
+; ОБЫЧНАЯ публикация, не single-file: DLL лежат рядом с exe и никуда не
+; распаковываются. Установленной программе один файл не нужен, а распаковка
+; во временную папку стоила пользователю неработающей замены — см. CLAUDE.md.
+#define PublishDir      "..\build\app"
 
 [Setup]
 AppId={{7F3C1E42-9A6D-4B58-8E0F-2C5D74A19B33}
@@ -69,8 +72,7 @@ Name: "autostart";      Description: "{cm:AutostartTask}"; GroupDescription: "{c
 Name: "launchonfinish"; Description: "{cm:LaunchTask}"; GroupDescription: "{cm:ExtraOptions}";
 
 [Files]
-; В publish либо один exe, либо папка с зависимостями — забираем всё
-; содержимое в любом случае.
+; Папка со всеми зависимостями — забираем её целиком.
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

@@ -49,7 +49,27 @@ jobs:
       - name: Test
         run: dotnet test --configuration Release
 
-      - name: Publish single-file exe
+      # Установщику single-file не нужен и вреден: exe распаковывал бы себя во
+      # временную папку и грузил сборки оттуда, а уборка временных файлов
+      # выгрызала из неё то, что программа ещё ни разу не открывала — .NET при
+      # этом повторно не распаковывает, и замена падала при каждом запуске.
+      # Установленная программа и так живёт в своей папке, DLL лежат рядом.
+      - name: Publish for the installer (plain folder)
+        run: >
+          dotnet publish Oops
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=false
+          --output build\app
+          -p:Version=${{ steps.ver.outputs.numeric }}
+          -p:FileVersion=${{ steps.ver.outputs.numeric }}
+          -p:AssemblyVersion=${{ steps.ver.outputs.numeric }}
+
+      # Портативный вариант обязан быть одним файлом, поэтому здесь single-file
+      # со всей его распаковкой остаётся. Отдельная папка вывода — чтобы две
+      # публикации не перемешались.
+      - name: Publish single-file exe (portable)
         run: >
           dotnet publish Oops
           --configuration Release
@@ -59,6 +79,7 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:IncludeAllContentForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
+          --output build\portable
           -p:Version=${{ steps.ver.outputs.numeric }}
           -p:FileVersion=${{ steps.ver.outputs.numeric }}
           -p:AssemblyVersion=${{ steps.ver.outputs.numeric }}
@@ -78,7 +99,7 @@ jobs:
       - name: Pack portable zip
         shell: pwsh
         run: |
-          $src = "Oops\bin\Release\net8.0-windows\win-x64\publish\oops.exe"
+          $src = "build\portable\oops.exe"
           if (-not (Test-Path $src)) { throw "Не найден собранный exe: $src" }
           Compress-Archive -Path $src -DestinationPath "dist\oops-portable-${{ steps.ver.outputs.version }}.zip" -Force
 

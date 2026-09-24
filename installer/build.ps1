@@ -3,7 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File installer\build.ps1
 #
 # Делает:
-#   1) dotnet publish (Release, win-x64, single-file, self-contained)
+#   1) dotnet publish (Release, win-x64, self-contained, ОБЫЧНОЙ ПАПКОЙ)
 #   2) Запускает Inno Setup 6 для упаковки в oops-Setup-<ver>.exe
 #
 # Требует:
@@ -18,6 +18,7 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $Project  = Join-Path $RepoRoot "Oops\Oops.csproj"
 $IssFile  = Join-Path $PSScriptRoot "Oops.iss"
 $DistDir  = Join-Path $RepoRoot "dist"
+$AppDir   = Join-Path $RepoRoot "build\app"
 
 # Запущенная копия держит oops.exe открытым, и publish падает с MSB3027
 # («Could not copy … Exceeded retry count of 10»). Закрываем её заранее.
@@ -28,14 +29,24 @@ if ($running) {
     Start-Sleep -Milliseconds 500
 }
 
-Write-Host "[1/2] dotnet publish..." -ForegroundColor Cyan
+# Публикуем ОБЫЧНОЙ ПАПКОЙ, без PublishSingleFile.
+#
+# Установленной программе single-file не нужен — она и так живёт в своей папке,
+# — а цена у него высокая: exe распаковывает себя во временную папку и грузит
+# сборки оттуда. Уборка временных файлов выгрызала из неё то, что программа ещё
+# ни разу не открывала, .NET повторно не распаковывал (папка-то есть), и замена
+# падала при каждом запуске. Одним файлом остаётся только портативный архив.
+#
+# Папка чистится перед публикацией: иначе файлы прошлой сборки уедут в
+# установщик вместе с новыми.
+Write-Host "[1/2] dotnet publish (папкой)..." -ForegroundColor Cyan
+if (Test-Path $AppDir) { Remove-Item $AppDir -Recurse -Force }
 dotnet publish $Project `
     -c Release `
     -r win-x64 `
     --self-contained true `
-    -p:PublishSingleFile=true `
-    -p:IncludeNativeLibrariesForSelfExtract=true `
-    -p:EnableCompressionInSingleFile=true
+    -p:PublishSingleFile=false `
+    -o $AppDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 # Найти iscc.exe
