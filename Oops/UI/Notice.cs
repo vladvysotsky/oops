@@ -112,10 +112,20 @@ internal sealed class Notice : ThemedForm
     /// </summary>
     public static void Crash(Exception ex)
     {
+        // Пропавшая сборка — не поломка кода, а исчезнувший файл: single-file
+        // exe распаковывает себя во временную папку, а уборка временных файлов
+        // сносит оттуда то, что программа ещё ни разу не открывала. Лечится
+        // перезапуском, и человеку надо сказать именно это, а не предлагать
+        // прислать отчёт о «неожиданной ошибке».
+        bool missingFile = ex is FileNotFoundException or FileLoadException
+            or BadImageFormatException;
+
         Show(null, NoticeKind.Error,
-            L10n.T("crash.title"), L10n.T("crash.body"), L10n.T("crash.hint"),
+            L10n.T("crash.title"),
+            missingFile ? L10n.T("crash.missing.body") : L10n.T("crash.body"),
+            missingFile ? L10n.T("crash.missing.hint") : L10n.T("crash.hint"),
             ex.ToString(),
-            reportContext: "Необработанное исключение");
+            reportContext: missingFile ? "Пропал файл сборки" : "Необработанное исключение");
     }
 
     private static void Show(IWin32Window? owner, NoticeKind kind, string title,
