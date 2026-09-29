@@ -68,6 +68,25 @@ public sealed class KeyboardHook : IDisposable
     private IntPtr _hook = IntPtr.Zero;
 
     /// <summary>
+    /// Поток, в котором живёт хук. null — поток того, кто вызвал Install (так
+    /// работают короткоживущие хуки окна настроек: их обработчики трогают
+    /// контролы, и им нужен UI-поток).
+    /// </summary>
+    private readonly HookThread? _host;
+
+    /// <summary>
+    /// Список зажатых клавиш пишет колбэк (поток хука), а читает и чистит сторож
+    /// (UI-поток). Без замка HashSet при одновременной записи портится молча.
+    /// </summary>
+    private readonly object _keysGate = new();
+
+    public KeyboardHook() { }
+
+    /// <param name="host">Поток ввода, в котором поставить хук. Колбэк и события
+    /// KeyDown/KeyUp тогда приходят в НЁМ, а не в UI-потоке.</param>
+    public KeyboardHook(HookThread host) => _host = host;
+
+    /// <summary>
     /// Физически зажатые сейчас клавиши. Нужны, чтобы отличить автоповтор от
     /// нового нажатия: Windows шлёт поток WM_KEYDOWN, пока клавишу держат, и
     /// modifier-only хоткей (Ctrl+Win) иначе срабатывал бы десятки раз за одно
@@ -106,14 +125,26 @@ public sealed class KeyboardHook : IDisposable
         public bool Win { get; init; }
     }
 
-    public void Install()
+    public void Install() => OnHost(InstallCore);
+
+    /// <summary>Выполнить в потоке хука: SetWindowsHookEx привязывает хук к вызывающему потоку.</summary>
+    private void OnHost(Action action)
+    {
+        if (_host != null) _host.Invoke(action);
+        else action();
+    }
+
+    private void InstallCore()
     {
         if (_hook != IntPtr.Zero) return;
         // Что было зажато до установки хука, мы не видели, а отпускание увидим и
         // вычтем из пустого множества. Начинаем с чистого листа, иначе застрявшая
         // клавиша заставила бы модификатор считаться зажатым навсегда.
-        _physicallyDown.Clear();
-        _downSince.Clear();
+        lock (_keysGate)
+        {
+            _physicallyDown.Clear();
+            _downSince.Clear();
+        }
         _proc = HookCallback;
         using var proc = Process.GetCurrentProcess();
         using var mod = proc.MainModule!;
@@ -122,7 +153,9 @@ public sealed class KeyboardHook : IDisposable
             throw new InvalidOperationException("SetWindowsHookEx failed, error=" + Marshal.GetLastWin32Error());
     }
 
-    public void Uninstall()
+    public void Uninstall() => OnHost(UninstallCore);
+
+    private void UninstallCore()
     {
         if (_hook != IntPtr.Zero)
         {
@@ -137,17 +170,18 @@ public sealed class KeyboardHook : IDisposable
     ///
     /// Windows молча снимает низкоуровневый хук, если обработчик не успел
     /// ответить за LowLevelHooksTimeout (по умолчанию 300 мс). Обработчик
-    /// вызывается в потоке, который хук поставил, — у нас это UI-поток, и
-    /// любая долгая работа на нём (ожидание отпускания модификаторов, печать
-    /// длинного текста, пауза перед возвратом фокуса) успевает съесть этот
-    /// лимит. Снаружи это выглядит как «программа в какой-то момент перестала
+    /// вызывается в потоке, который хук поставил. Хук приложения поэтому живёт
+    /// в отдельном потоке ввода (<see cref="HookThread"/>), где его ничто не
+    /// задерживает, — и это главная защита. Revive остаётся страховкой: раньше
+    /// хук стоял в UI-потоке, и ожидание модификаторов, печать длинного текста
+    /// или пауза перед возвратом фокуса успевали съесть этот лимит. Снаружи это выглядит как «программа в какой-то момент перестала
     /// работать»: окна открываются, хоткеи молчат, и ничего в логах.
     ///
     /// Узнаём это по <c>UnhookWindowsHookEx</c>: если он вернул false, хука
     /// уже не было — значит нас сняли.
     /// </summary>
     /// <summary>Сейчас зажата хоть одна клавиша — момент неподходящий для переустановки.</summary>
-    public bool AnyKeyDown => _physicallyDown.Count > 0;
+    public bool AnyKeyDown { get { lock (_keysGate) return _physicallyDown.Count > 0; } }
 
     /// <summary>
     /// Выбрасывает клавиши, «зажатые» дольше разумного, и возвращает их коды.
@@ -168,24 +202,32 @@ public sealed class KeyboardHook : IDisposable
     public IReadOnlyList<uint> DropStuckKeys(TimeSpan longerThan)
     {
         var now = DateTime.UtcNow;
-        var stuck = _downSince.Where(p => now - p.Value > longerThan)
-                              .Select(p => p.Key).ToList();
-        foreach (var vk in stuck)
+        lock (_keysGate)
         {
-            _physicallyDown.Remove(vk);
-            _downSince.Remove(vk);
+            var stuck = _downSince.Where(p => now - p.Value > longerThan)
+                                  .Select(p => p.Key).ToList();
+            foreach (var vk in stuck)
+            {
+                _physicallyDown.Remove(vk);
+                _downSince.Remove(vk);
+            }
+            return stuck;
         }
-        return stuck;
     }
 
     public bool Revive()
     {
-        if (_hook == IntPtr.Zero) { Install(); return true; }
+        bool revived = false;
+        OnHost(() =>
+        {
+            if (_hook == IntPtr.Zero) { InstallCore(); revived = true; return; }
 
-        bool wasAlive = UnhookWindowsHookEx(_hook);
-        _hook = IntPtr.Zero;
-        Install();
-        return !wasAlive;
+            bool wasAlive = UnhookWindowsHookEx(_hook);
+            _hook = IntPtr.Zero;
+            InstallCore();
+            revived = !wasAlive;
+        });
+        return revived;
     }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -201,8 +243,11 @@ public sealed class KeyboardHook : IDisposable
             if ((up.flags & LLKHF_INJECTED) != 0)
                 return CallNextHookEx(_hook, nCode, wParam, lParam);
 
-            _physicallyDown.Remove(up.vkCode);
-            _downSince.Remove(up.vkCode);
+            lock (_keysGate)
+            {
+                _physicallyDown.Remove(up.vkCode);
+                _downSince.Remove(up.vkCode);
+            }
 
             var upHandler = KeyUp;
             if (upHandler != null)
@@ -231,8 +276,12 @@ public sealed class KeyboardHook : IDisposable
                 return CallNextHookEx(_hook, nCode, wParam, lParam);
 
             // Если клавиша уже была зажата — это автоповтор, а не новое нажатие.
-            bool isRepeat = !_physicallyDown.Add(data.vkCode);
-            if (!isRepeat) _downSince[data.vkCode] = DateTime.UtcNow;
+            bool isRepeat;
+            lock (_keysGate)
+            {
+                isRepeat = !_physicallyDown.Add(data.vkCode);
+                if (!isRepeat) _downSince[data.vkCode] = DateTime.UtcNow;
+            }
 
             var vk = (Keys)data.vkCode;
 
@@ -295,11 +344,13 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     private bool Held(params uint[] vks)
     {
-        foreach (var v in vks)
+        lock (_keysGate)
         {
-            if (_physicallyDown.Contains(v)) return true;
-            if ((GetAsyncKeyState((int)v) & 0x8000) != 0) return true;
+            foreach (var v in vks)
+                if (_physicallyDown.Contains(v)) return true;
         }
+        foreach (var v in vks)
+            if ((GetAsyncKeyState((int)v) & 0x8000) != 0) return true;
         return false;
     }
 

@@ -29,13 +29,28 @@ public sealed class App : IDisposable
     /// перехватывалось бы хуком, тот запускал бы чтение выделения, а оно шлёт
     /// Ctrl+C — и диалог записывал бы именно Ctrl+C вместо нажатого сочетания.
     /// </summary>
-    public bool HotkeysSuspended { get; set; }
+    /// <summary>
+    /// Выставляет UI-поток (открыты настройки), читает поток ввода на каждом
+    /// нажатии — поэтому volatile: без него JIT вправе закешировать значение.
+    /// </summary>
+    public bool HotkeysSuspended
+    {
+        get => _hotkeysSuspended;
+        set => _hotkeysSuspended = value;
+    }
+    private volatile bool _hotkeysSuspended;
 
     private readonly TypingBuffer _buffer = new();
     private readonly ScopeEditor _scope = new();
     private readonly LayoutTracker _layoutTracker = new();
-    private readonly KeyboardHook _kbHook = new();
-    private readonly MouseHook _mouseHook = new();
+    /// <summary>
+    /// Поток ввода: в нём живут оба хука и выполняется <see cref="OnKeyDown"/>.
+    /// UI-поток ждёт модификаторы, печатает и спит — будь хук в нём, Windows
+    /// снимала бы его по таймауту (см. <see cref="HookThread"/>).
+    /// </summary>
+    private readonly HookThread _inputThread;
+    private readonly KeyboardHook _kbHook;
+    private readonly MouseHook _mouseHook;
     private readonly ForegroundWatcher _fgWatcher = new();
 
     private readonly SynchronizationContext _uiContext;
@@ -122,6 +137,10 @@ public sealed class App : IDisposable
         _uiContext = SynchronizationContext.Current
             ?? throw new InvalidOperationException("App must be created on the UI thread");
 
+        _inputThread = new HookThread("oops input");
+        _kbHook = new KeyboardHook(_inputThread);
+        _mouseHook = new MouseHook(_inputThread);
+
         ApplySettings();
 
         // Потолок записи упёрли — останавливаемся сами и печатаем, что успели.
@@ -192,6 +211,13 @@ public sealed class App : IDisposable
         _scope.ResetSession();
     }
 
+    /// <summary>
+    /// Выполняется в ПОТОКЕ ВВОДА, а не в UI. Отсюда два правила:
+    /// всё, что трогает окна или печатает, уходит в UI-поток через Post; и всё,
+    /// что здесь читается и пишется, обязано быть потокобезопасным — лента и
+    /// область под своими замками, трекер раскладки тоже.
+    /// Отвечать надо быстро: пока этот метод работает, клавиша никуда не ушла.
+    /// </summary>
     private void OnKeyDown(object? sender, KeyboardHook.KeyEvent e)
     {
         // Клавиша пишется КОДОМ, без символа: этого хватает, чтобы понять,
@@ -681,5 +707,7 @@ public sealed class App : IDisposable
         _kbHook.Dispose();
         _mouseHook.Dispose();
         _fgWatcher.Dispose();
+        // Последним: хуки снимаются В НЁМ, до этого поток нужен живым.
+        _inputThread.Dispose();
     }
 }
