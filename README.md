@@ -128,8 +128,10 @@ Get-FileHash .\oops-Setup-2.2.1.exe -Algorithm SHA256
 
 ## 🔄 Updates
 
-Once a day the application checks the releases and offers to install a new
-version: it downloads the installer and runs it. The downloaded file is verified
+While it runs, the application checks the releases every six hours. When a new
+version is out, a Windows notification says so — it does not steal focus from
+whatever you are typing — and the tray menu item turns into "Install update".
+Installing downloads the installer and runs it. The downloaded file is verified
 against the published SHA-256 before it is launched. Turn the check off with a
 checkbox in the settings; run it by hand from "Check for updates" in the tray
 menu.
