@@ -29,6 +29,10 @@ public sealed class LayoutTracker
     private IntPtr _lastHkl = IntPtr.Zero;
     private DateTime _selfSwitchUntilUtc = DateTime.MinValue;
 
+    // Спрашивает поток ввода (на каждое нажатие), а отмечает свои переключения
+    // и сбрасывает UI-поток. Два поля меняются вместе, поэтому под одним замком.
+    private readonly object _gate = new();
+
     /// <summary>Возвращает true, только если раскладку сменил пользователь, а не мы.</summary>
     public bool UserChangedLayout()
     {
@@ -37,6 +41,12 @@ public sealed class LayoutTracker
 
         var tid = GetWindowThreadProcessId(hwnd, out _);
         var hkl = GetKeyboardLayout(tid);
+
+        lock (_gate) return UserChangedLayoutLocked(hkl);
+    }
+
+    private bool UserChangedLayoutLocked(IntPtr hkl)
+    {
         if (hkl == _lastHkl) return false;
 
         bool wasInitialized = _lastHkl != IntPtr.Zero;
@@ -52,11 +62,17 @@ public sealed class LayoutTracker
     }
 
     /// <summary>Сообщить трекеру, что раскладку сейчас переключили мы сами.</summary>
-    public void NoteSelfSwitch() => _selfSwitchUntilUtc = DateTime.UtcNow + SelfSwitchWindow;
+    public void NoteSelfSwitch()
+    {
+        lock (_gate) _selfSwitchUntilUtc = DateTime.UtcNow + SelfSwitchWindow;
+    }
 
     public void Reset()
     {
-        _lastHkl = IntPtr.Zero;
-        _selfSwitchUntilUtc = DateTime.MinValue;
+        lock (_gate)
+        {
+            _lastHkl = IntPtr.Zero;
+            _selfSwitchUntilUtc = DateTime.MinValue;
+        }
     }
 }
