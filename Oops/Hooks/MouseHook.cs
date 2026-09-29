@@ -30,9 +30,29 @@ public sealed class MouseHook : IDisposable
     private LowLevelMouseProc? _proc;
     private IntPtr _hook = IntPtr.Zero;
 
+    /// <summary>
+    /// Поток, в котором живёт хук (см. <see cref="HookThread"/>). Этот хук у
+    /// него обязателен по той же причине, что и у клавиатурного: мышиный
+    /// LL-хук Windows снимает по тому же таймауту. Снятый хук молчит, клик
+    /// перестаёт сбрасывать ленту — и следующая конвертация сотрёт не те
+    /// символы, потому что каретку человек уже переставил.
+    /// </summary>
+    private readonly HookThread? _host;
+
     public event EventHandler? Clicked;
 
+    public MouseHook() { }
+
+    /// <param name="host">Поток ввода; событие Clicked приходит в нём.</param>
+    public MouseHook(HookThread host) => _host = host;
+
     public void Install()
+    {
+        if (_host != null) _host.Invoke(InstallCore);
+        else InstallCore();
+    }
+
+    private void InstallCore()
     {
         if (_hook != IntPtr.Zero) return;
         _proc = HookCallback;
@@ -42,6 +62,12 @@ public sealed class MouseHook : IDisposable
     }
 
     public void Uninstall()
+    {
+        if (_host != null) _host.Invoke(UninstallCore);
+        else UninstallCore();
+    }
+
+    private void UninstallCore()
     {
         if (_hook != IntPtr.Zero)
         {

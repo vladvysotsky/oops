@@ -16,6 +16,8 @@
   "conflict.title": "A shortcut is taken by another program",
   "crash.body": "Something happened that the app did not anticipate. Hotkeys may have stopped working — please restart it.",
   "crash.hint": "If this keeps happening, send a report: it arrives with the error description, so we do not have to guess.",
+  "crash.missing.body": "The program could not find one of its own files — it was deleted from disk while the program was running. A temporary-files cleanup is the usual cause.",
+  "crash.missing.hint": "Restart the program: it lays its files out again on startup. If it keeps happening, exclude the oops folder from automatic disk cleanup.",
   "crash.title": "oops crashed unexpectedly",
   "feedback.browserFailed": "Could not open the browser. Write manually: {0}",
   "feedback.hint.empty": "Describe it in your own words — the app and Windows versions are filled in automatically.",

@@ -159,6 +159,7 @@ internal sealed class WhatsNewForm : ThemedForm
         body.Controls.Add(Sidebar(), 0, 0);
 
         _detail.AutoScroll = true;
+        _detail.HandleCreated += (_, _) => Theme.ApplyScrollbarChrome(_detail);
         _detail.BackColor = Theme.Canvas;
         _detail.Dock = DockStyle.Fill;
         _detail.Margin = new Padding(0);
@@ -176,6 +177,14 @@ internal sealed class WhatsNewForm : ThemedForm
             Dock = DockStyle.Fill,
             Margin = new Padding(0, 0, Theme.S3, 0),
         };
+        host.HandleCreated += (_, _) => Theme.ApplyScrollbarChrome(host);
+
+        // Ширина ЗА ВЫЧЕТОМ вертикальной полосы. Версий в списке всегда больше,
+        // чем влезает, поэтому полоса есть всегда и забирает свои пиксели у
+        // клиентской области: список во всю ширину переставал помещаться, и
+        // снизу вылезала вторая, горизонтальная — она обрезала нижнюю версию.
+        // В правой панели этот вычет был с самого начала, в левой забыли.
+        int inner = SidebarWidth - SystemInformation.VerticalScrollBarWidth;
 
         var stack = new TableLayoutPanel
         {
@@ -184,7 +193,7 @@ internal sealed class WhatsNewForm : ThemedForm
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Theme.Canvas,
             Margin = new Padding(0),
-            Width = SidebarWidth,
+            Width = inner,
         };
         stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
@@ -198,7 +207,7 @@ internal sealed class WhatsNewForm : ThemedForm
             {
                 Text = _sets[i].Version.ToString(3),
                 AutoSize = false,
-                Width = SidebarWidth,
+                Width = inner,
                 Height = Theme.TextRowHeight,
                 Margin = new Padding(0, 0, 0, Theme.S1),
             };
