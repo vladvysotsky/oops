@@ -53,7 +53,18 @@ Push-Location $RepoRoot
 try {
     if (-not $NoPull) {
         Step "Обновляю $Branch"
-        git checkout $Branch;            Assert-LastExitCode "git checkout"
+        # Ветку, которой ещё нет локально (новая ветка из облака), checkout не
+        # видит и падает с «pathspec did not match». Поэтому сначала fetch — с
+        # ЯВНЫМ refspec: обычный «git fetch origin <ветка>» в клоне с узким
+        # refspec кладёт её только в FETCH_HEAD, и checkout падает всё равно.
+        # И создаём локальную ветку явно, а не надеемся на автоугадывание
+        # checkout: оно работает не во всех клонах.
+        git fetch origin "+refs/heads/${Branch}:refs/remotes/origin/${Branch}"
+        Assert-LastExitCode "git fetch"
+        git rev-parse --verify --quiet "refs/heads/$Branch" | Out-Null
+        if ($LASTEXITCODE -eq 0) { git checkout $Branch }
+        else                     { git checkout -b $Branch "origin/$Branch" }
+        Assert-LastExitCode "git checkout"
         git pull origin $Branch;         Assert-LastExitCode "git pull"
     }
     Write-Host ("Собираю коммит: " + (git log --oneline -1)) -ForegroundColor DarkGray

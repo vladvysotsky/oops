@@ -298,6 +298,17 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   (otherwise Ctrl+Win did not match because of timing).
 - `Hooks/MouseHook.cs`, `Hooks/ForegroundWatcher.cs` — clear the buffer on a
   click and on a window change.
+- `Hooks/HookThread.cs` — **the input thread**: its own message loop
+  (`Application.Run` with a `WindowsFormsSynchronizationContext`) that hosts the
+  app's keyboard and mouse hooks. `App.OnKeyDown` therefore runs on THIS thread,
+  not the UI thread: it must only decide "swallow or pass" and `Post` any real
+  work to the UI thread, and everything it touches must be thread-safe
+  (`TypingBuffer`, `ScopeEditor`, `LayoutTracker` and the hook's own set of held
+  keys are locked; `HotkeysSuspended` is volatile). Never `Send`/`Invoke` from
+  the input thread to the UI thread — the UI thread waits on the input thread in
+  `HookThread.Invoke`, and that would deadlock. The settings window's probe and
+  recording hooks deliberately stay on the UI thread: they are short-lived and
+  their handlers touch controls.
 - `UI/Theme.cs` — the design system: palette, typography, 8px grid, `ThemedForm`,
   `Card`, `FlatButton`, `HotkeyDisplay` (draws a shortcut as "keycaps").
   The palette consists of **properties, not constants**: it reads the Windows
@@ -444,10 +455,13 @@ user block the program from starting forever.
   1. *The hook was removed by the system.* Windows silently removes
      WH_KEYBOARD_LL if the callback did not answer within
      `LowLevelHooksTimeout` (300 ms). The callback lives on the thread that
-     installed the hook — for us that is the UI thread, and the same thread
-     waits for modifiers to be released (up to a second), types long text and
-     sleeps before restoring focus. `KeyboardHook.Revive()` learns about it from
-     `UnhookWindowsHookEx`: it returned false, so the hook was already gone.
+     installed the hook. It used to be the UI thread, which also waits for
+     modifiers to be released (up to a second), types long text in chunks with
+     `Sleep` between them and pauses before restoring focus — and our own
+     `SendInput` events pass through our own hook too. **Fixed at the root by
+     `HookThread`**: the hooks now live on a thread that does nothing but take
+     input. `KeyboardHook.Revive()` stays as insurance; it learns about a
+     removed hook from `UnhookWindowsHookEx` returning false.
   2. *A stuck modifier.* The key-up does not always arrive: it is eaten by the
      secure desktop (a UAC prompt), a session switch, RDP — and for the **Pause**
      key the driver sends an extra Ctrl press that will never get its matching
@@ -614,14 +628,41 @@ user block the program from starting forever.
   - `Sender.SendUnicode`/`SendBackspaces` return `false` when they stopped early
     and check between chunks for a foreground-window change, Esc, or a fresh
     mouse click — each means the text is no longer going where it was aimed.
-    **The checks are direct API calls, never our hook**: the hook lives on this
-    same thread, which is sitting in a `Sleep` loop and pumping no messages, so
-    the callback cannot run (and Windows will remove the hook on
-    `LowLevelHooksTimeout` anyway). `GetForegroundWindow` and `GetAsyncKeyState`
-    need no message pump. The mouse is compared against its state at the start,
+    **The checks are direct API calls, not our hook**: they were written when
+    the hook lived on this same thread, sitting in a `Sleep` loop and pumping no
+    messages. The hook now has its own thread, so it could report Esc and clicks
+    itself; the polling stays because it needs no cross-thread plumbing and
+    `GetForegroundWindow`/`GetAsyncKeyState` need no message pump. The mouse is compared against its state at the start,
     so a button still held from selecting text does not abort instantly.
     A caller that chains erase-then-type must check the first result: after an
     interrupted erase, typing would land on top of the remainder.
+- **THE INSTALLER IS BUILT WITHOUT `PublishSingleFile`; only the portable
+  archive is one file.** A single-file exe with
+  `IncludeAllContentForSelfExtract` extracts EVERYTHING — managed assemblies
+  included — to `%TEMP%\.net\...` and loads them from there, instead of mapping
+  them out of the exe. An assembly a feature has not used yet is not open, so
+  nothing stops a temp cleanup (Storage Sense, Disk Cleanup, an antivirus) from
+  deleting it, and oops sits in the tray for days. **And .NET does not
+  re-extract when the folder already exists** — it reuses the damaged one, so a
+  single cleanup breaks the feature permanently, at every launch afterwards.
+  Reported that way: `FileNotFoundException: System.Text.RegularExpressions`
+  from `TextReplacer.Apply`, the first place regular expressions are touched at
+  all, on every press of the replace hotkey. Deleting `%TEMP%\.net\oops`
+  cured it.
+  An installed copy has no use for a single file — it lives in its own folder —
+  so `installer\build.ps1` and the release workflow publish it as a plain
+  folder into `build\app`, and `Oops.iss` takes that whole tree. No extraction,
+  nothing to clean, and `runtimes\win-x64` sits next to the exe, which is
+  exactly where Whisper looks by default.
+  The portable archive must stay one file, so it keeps single-file and both
+  extraction flags, published separately into `build\portable`. It therefore
+  keeps the exposure — `Program.PinLazyAssemblies` touches the regex assembly at
+  startup while the folder is certainly intact (a loaded assembly is mapped and
+  its file cannot be deleted), but that covers only the managed assemblies named
+  there. `Notice.Crash` recognises a missing-file failure and says so instead of
+  offering to file a bug.
+  The two publishes go to SEPARATE output folders on purpose: one output
+  directory would mix a bundled exe with loose assemblies from the other build.
 - **Detecting "is a text field focused" is NOT a usable guard** — it was
   considered for the case above and rejected. `GetGUIThreadInfo().hwndCaret` is
   empty in Chromium, Electron and anything else that draws its own caret, which
