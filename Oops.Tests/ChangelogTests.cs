@@ -56,6 +56,21 @@ public class ChangelogTests
     }
 
     [Fact]
+    public void TheVersionBeingBuiltHasItsOwnSection()
+    {
+        // 2.2.1 вышла без раздела здесь: решили, что в патче «учиться нечему».
+        // Итог — версии нет даже в списке слева, и человек не узнал, что
+        // починили то, на что он жаловался. Раз обновление приходит молча, это
+        // окно — единственное место, где о нём вообще говорится.
+        //
+        // Проверка срабатывает при поднятии версии в csproj перед релизом:
+        // без записи здесь тесты красные, и тег не ставится.
+        var built = typeof(Changelog).Assembly.GetName().Version!;
+        var current = new Version(built.Major, built.Minor, Math.Max(built.Build, 0));
+        Assert.Contains(Changelog.All, c => c.Version == current);
+    }
+
+    [Fact]
     public void NothingNewAfterTheLatestVersion()
     {
         var newest = Changelog.All.Max(c => c.Version)!;

@@ -359,7 +359,21 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   start, even when the window was not shown — otherwise it would pop up again
   and again. On a fresh install there is no window: the first-run wizard does
   that job.
-- `UI/TrayContext.cs` — NotifyIcon and the menu.
+  **Every release gets a section, fixes included** — `ChangelogTests` fails
+  while the csproj version has no entry. 2.2.1 shipped without one on the
+  reasoning that a patch has "nothing to learn"; it then did not even appear in
+  the version list, and nobody learned that the thing they had complained about
+  was fixed. For a fix, "nothing to do, it just works now" IS the answer to
+  "how to use this".
+- `UI/TrayContext.cs` — NotifyIcon and the menu. Also the **background update
+  check**: an hourly WinForms timer that goes to the network only when
+  `UpdateCheckInterval` (6 h) has passed since `LastUpdateCheckUtc`. It used to
+  run once, at startup — and oops lives in the tray for weeks, so a new version
+  went unnoticed until the user checked by hand. A background check that finds
+  one must NOT open a modal window: it would pop up mid-typing and take focus
+  from the very field being typed into. It shows a balloon notification once
+  per version and turns the tray item into "Install update X", which survives a
+  missed balloon. Only a check the user asked for opens `UpdateDialog` at once.
 - `Core/L10n.cs` + `Resources/lang_{ru,en}.json` — the interface strings.
   **Embedded resources only, not `.resx` with satellites**: under
   `PublishSingleFile` satellite assemblies do not go inside the exe but are laid
