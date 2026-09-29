@@ -108,6 +108,8 @@
   "news.2_2_1.hooks.title": "Shortcuts no longer drop out",
   "news.2_2_1.replace.body": "If the replace shortcut showed an error about System.Text.RegularExpressions, it is gone after this update: the program now installs as a plain folder and no longer depends on temporary-files cleanup. Select text and press the shortcut as before.",
   "news.2_2_1.replace.title": "Replace in selection works again",
+  "news.2_2_2.updates.body": "Updates used to be checked only at startup, and the program lives in the tray for weeks — so a new version stayed unnoticed until you pressed “Check for updates”. Now it checks every six hours. When a new version is out, a Windows notification appears; it does not take focus from the text you are typing. Missed it? The tray menu will have an “Install update” item.",
+  "news.2_2_2.updates.title": "New versions announce themselves",
   "news.header.hint": "Versions on the left, what they brought on the right. The shortcuts shown are the ones you have right now.",
   "news.header.plain": "What's new in oops",
   "news.header.updated": "oops has been updated to {0}",
