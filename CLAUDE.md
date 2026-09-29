@@ -359,6 +359,12 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   start, even when the window was not shown — otherwise it would pop up again
   and again. On a fresh install there is no window: the first-run wizard does
   that job.
+  **Every release gets a section, fixes included** — `ChangelogTests` fails
+  while the csproj version has no entry. 2.2.1 shipped without one on the
+  reasoning that a patch has "nothing to learn"; it then did not even appear in
+  the version list, and nobody learned that the thing they had complained about
+  was fixed. For a fix, "nothing to do, it just works now" IS the answer to
+  "how to use this".
 - `UI/TrayContext.cs` — NotifyIcon and the menu.
 - `Core/L10n.cs` + `Resources/lang_{ru,en}.json` — the interface strings.
   **Embedded resources only, not `.resx` with satellites**: under
