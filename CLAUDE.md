@@ -311,6 +311,21 @@ lands in the wrong window. The conditions it comes back under:
   you type, and the only thing that makes it usable is that it keeps none of it;
   the log cannot be an exception. The file is capped at 8 MB, the last five are
   kept.
+- `Core/RivalSwitchers.cs` — another keyboard-layout switcher running alongside
+  (Punto Switcher, Caramba and the like). Two programs with low-level keyboard
+  hooks get in each other's way silently: shortcuts do not fire, inserted text
+  arrives with gaps. Recognised by the PRODUCT NAME in the exe's resources, not
+  by the process name — Punto's process is a generic `ps.exe`, Caramba's carries
+  a version date. The path comes from `QueryFullProcessImageName` with
+  `PROCESS_QUERY_LIMITED_INFORMATION`, not `Process.MainModule`, which needs
+  read access to the other process's memory and is refused almost everywhere.
+  Runs off the UI thread a few seconds after start; warns once per program
+  (`AppSettings.RivalsWarned`) — some people run both on purpose.
+- Pause (tray menu, 15 min / 1 h / 3 h) is held in `App` only, never in
+  settings: after a restart the program simply works. It exists because a
+  program switched off with "Enabled" gets forgotten and then taken for broken.
+  Pausing stops a running dictation — the voice hotkey is not heard while
+  paused, so nothing else could stop it.
 - `Core/HotkeyConflicts.cs` — a check at startup for whether a shortcut is
   already taken by another program (`RegisterHotKey` +
   `ERROR_HOTKEY_ALREADY_REGISTERED`). It only catches those who register the

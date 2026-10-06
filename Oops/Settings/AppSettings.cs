@@ -114,6 +114,13 @@ public sealed class AppSettings
     /// </summary>
     public bool VoiceLiveText { get; set; } = true;
 
+    /// <summary>
+    /// О каких соседних переключателях уже предупредили. Предупреждаем один раз:
+    /// кто-то держит обе программы сознательно, и окно при каждом входе в
+    /// систему превратилось бы в наказание за это.
+    /// </summary>
+    public List<string> RivalsWarned { get; set; } = new();
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");
@@ -154,6 +161,8 @@ public sealed class AppSettings
     /// </summary>
     private void Sanitize()
     {
+        RivalsWarned ??= new();
+
         ConvertHotkey = Fix(ConvertHotkey, HotkeyConfig.Default);
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);
         TranslateHotkey = Fix(TranslateHotkey, HotkeyConfig.TranslateDefault);
