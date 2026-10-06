@@ -43,6 +43,18 @@ public sealed class TrayContext : ApplicationContext
     /// <summary>О какой версии уже сказали уведомлением — не повторяем каждые шесть часов.</summary>
     private Version? _announcedVersion;
 
+    private ToolStripMenuItem _miPause = new();
+    private ToolStripMenuItem _miResume = new();
+
+    /// <summary>
+    /// Срабатывает, когда пауза кончилась сама: вернуть пункт меню и подсказку.
+    /// Сама программа к этому моменту уже работает — App смотрит на время, а
+    /// не на этот таймер.
+    /// </summary>
+    private readonly System.Windows.Forms.Timer _pauseTimer = new();
+
+    private static readonly int[] PauseMinutes = { 15, 60, 180 };
+
     public TrayContext(App app)
     {
         _app = app;
@@ -117,6 +129,9 @@ public sealed class TrayContext : ApplicationContext
         _ = ScheduleStartupUpdateCheckAsync();
         _updateTimer.Tick += async (_, _) => await CheckForUpdatesIfDueAsync();
         _updateTimer.Start();
+
+        _pauseTimer.Tick += (_, _) => { _pauseTimer.Stop(); RefreshPauseState(); };
+        _ = WarnAboutRivalSwitchersAsync();
     }
 
     /// <summary>
@@ -135,6 +150,20 @@ public sealed class TrayContext : ApplicationContext
             _app.Settings.Enabled = miEnabled.Checked;
             _app.Settings.Save();
         };
+
+        // Пауза — подменю с длительностью; на паузе вместо него виден один
+        // пункт «Возобновить». Оба живут в меню всегда и переключаются
+        // видимостью: пересобирать меню из обработчика его же пункта нельзя,
+        // оно ещё не закрылось.
+        _miPause = new ToolStripMenuItem(L10n.T("tray.pause"));
+        foreach (var minutes in PauseMinutes)
+        {
+            var item = new ToolStripMenuItem(L10n.T($"tray.pause.{minutes}"));
+            item.Click += (_, _) => Pause(TimeSpan.FromMinutes(minutes));
+            _miPause.DropDownItems.Add(item);
+        }
+        _miResume = new ToolStripMenuItem();
+        _miResume.Click += (_, _) => { _app.Resume(); RefreshPauseState(); };
 
         var miSettings = new ToolStripMenuItem(L10n.T("tray.settings"));
         miSettings.Click += (_, _) => ShowSettings();
@@ -166,6 +195,8 @@ public sealed class TrayContext : ApplicationContext
         menu.Items.AddRange(new ToolStripItem[]
         {
             miEnabled,
+            _miPause,
+            _miResume,
             new ToolStripSeparator(),
             miSettings,
             _miUpdate,
@@ -176,6 +207,7 @@ public sealed class TrayContext : ApplicationContext
             miExit,
         });
         Theme.ApplyMenuChrome(menu);
+        RefreshPauseState();
 
         _icon.ContextMenuStrip?.Dispose();
         _icon.ContextMenuStrip = menu;
@@ -286,9 +318,61 @@ public sealed class TrayContext : ApplicationContext
     /// напоминает, пока его не поставили. Конец диктовки возвращает именно её,
     /// а не голое «oops», иначе напоминание пропадало бы после первой фразы.
     /// </summary>
-    private string IdleTooltip() => _pendingRelease != null
-        ? L10n.T("update.available.tooltip", _pendingRelease.Version.ToString(3))
+    private string IdleTooltip() =>
+        _app.IsPaused ? L10n.T("tray.paused.tooltip", PauseEndText())
+        : _pendingRelease != null ? L10n.T("update.available.tooltip", _pendingRelease.Version.ToString(3))
         : "oops";
+
+    private string PauseEndText() => _app.PausedUntilUtc.ToLocalTime().ToString("HH:mm");
+
+    private void Pause(TimeSpan duration)
+    {
+        _app.PauseFor(duration);
+        _pauseTimer.Stop();
+        // Тик по окончании паузы. Секунда сверху — чтобы проснуться уже ПОСЛЕ
+        // конца, а не за миг до него: иначе меню осталось бы «на паузе».
+        _pauseTimer.Interval = (int)Math.Min(int.MaxValue, (duration + TimeSpan.FromSeconds(1)).TotalMilliseconds);
+        _pauseTimer.Start();
+        RefreshPauseState();
+    }
+
+    /// <summary>Привести меню и подсказку к тому, на паузе программа или нет.</summary>
+    private void RefreshPauseState()
+    {
+        bool paused = _app.IsPaused;
+        _miPause.Visible = !paused;
+        _miResume.Visible = paused;
+        if (paused) _miResume.Text = L10n.T("tray.resume", PauseEndText());
+        else _pauseTimer.Stop();
+        _icon.Text = IdleTooltip();
+    }
+
+    /// <summary>
+    /// Предупредить о соседнем переключателе раскладки — один раз на каждый.
+    /// Через несколько секунд после старта и не в UI-потоке: перебор процессов
+    /// с чтением ресурсов не должен ни задерживать вход в систему, ни подвешивать
+    /// трей.
+    /// </summary>
+    private async Task WarnAboutRivalSwitchersAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        IReadOnlyList<string> running;
+        try { running = await Task.Run(RivalSwitchers.FindRunning); }
+        catch (Exception ex) { Log.Write("проверка соседних переключателей: " + ex.Message); return; }
+
+        foreach (var name in running)
+        {
+            Log.Write("рядом работает переключатель: " + name);
+            if (_app.Settings.RivalsWarned.Contains(name)) continue;
+
+            _app.Settings.RivalsWarned.Add(name);
+            _app.Settings.Save();
+            Notice.Warn(null,
+                L10n.T("rival.title", name),
+                L10n.T("rival.body", name),
+                L10n.T("rival.hint", name));
+        }
+    }
 
     private void RefreshUpdateItem()
     {
@@ -374,6 +458,8 @@ public sealed class TrayContext : ApplicationContext
         VoiceOverlay.Shutdown();
         _updateTimer.Stop();
         _updateTimer.Dispose();
+        _pauseTimer.Stop();
+        _pauseTimer.Dispose();
         _icon.Visible = false;
         _icon.Dispose();
         _app.Dispose();

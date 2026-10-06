@@ -40,6 +40,41 @@ public sealed class App : IDisposable
     }
     private volatile bool _hotkeysSuspended;
 
+    /// <summary>
+    /// До какого момента (UTC, в тиках) программа на паузе; 0 — не на паузе.
+    ///
+    /// Пауза, а не только «Включено»: выключенную программу забывают включить
+    /// обратно и потом считают сломанной. Пауза кончается сама. В настройки она
+    /// не пишется намеренно — после перезапуска программа просто работает.
+    ///
+    /// Тики через Interlocked: пишет UI-поток (меню трея), а читает поток ввода
+    /// на каждом нажатии.
+    /// </summary>
+    private long _pausedUntilTicks;
+
+    public bool IsPaused => DateTime.UtcNow.Ticks < Interlocked.Read(ref _pausedUntilTicks);
+
+    public DateTime PausedUntilUtc => new(Interlocked.Read(ref _pausedUntilTicks), DateTimeKind.Utc);
+
+    public void PauseFor(TimeSpan duration)
+    {
+        Interlocked.Exchange(ref _pausedUntilTicks, (DateTime.UtcNow + duration).Ticks);
+        // Идущую диктовку завершаем сразу: на паузе сочетание не слушается, и
+        // остановить запись было бы нечем до конца паузы или до потолка длины.
+        if (_recorder.IsRecording) StopVoice();
+        // Набранное до паузы к тексту после неё отношения не имеет: человек
+        // за это время печатал, а мы не смотрели.
+        ResetAll();
+        Log.Write($"пауза на {duration.TotalMinutes:F0} мин");
+    }
+
+    public void Resume()
+    {
+        Interlocked.Exchange(ref _pausedUntilTicks, 0);
+        ResetAll();
+        Log.Write("пауза снята");
+    }
+
     private readonly TypingBuffer _buffer = new();
     private readonly ScopeEditor _scope = new();
     private readonly LayoutTracker _layoutTracker = new();
@@ -224,9 +259,11 @@ public sealed class App : IDisposable
         // доходит ли сочетание, и лог не становится записью всего ввода.
         Log.Key("нажатие", (int)e.VirtualKey, e.Ctrl, e.Alt, e.Shift, e.Win, e.IsRepeat);
 
-        if (!Settings.Enabled || HotkeysSuspended)
+        if (!Settings.Enabled || HotkeysSuspended || IsPaused)
         {
-            Log.Write(Settings.Enabled ? "  пропущено: открыты настройки" : "  пропущено: выключено");
+            Log.Write(!Settings.Enabled ? "  пропущено: выключено"
+                : IsPaused ? "  пропущено: пауза"
+                : "  пропущено: открыты настройки");
             return;
         }
 
