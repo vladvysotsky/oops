@@ -154,6 +154,34 @@ the whole-buffer fallback,
 selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
 `ClipboardSafe`), `NeverFixList`.
 
+**Exception, decided by the author: real-time correction returns in 2.5** —
+built properly this time and learning as it goes, not restored from the old
+code. The old version failed for reasons that are now known, and the competitor
+that does it (keyboop) documents the same failures in its own changelog: real
+words converted mid-phrase ("appconfig" → "фззсщташп"), short words, uppercase
+abbreviations, "ю/б/ж" inside a word read as punctuation, apps where the retype
+lands in the wrong window. The conditions it comes back under:
+- **Off by default, opt-in.** The hotkey model stays the default and the core.
+- **Only the last word, only at a word boundary**, decided by the same
+  `LanguageModel` gain as the hotkey path but with a stricter threshold: a wrong
+  correction mid-phrase costs far more than a missed one.
+- **One press of the layout hotkey right after an automatic fix undoes it** —
+  the expanding-scope model already does exactly that, so undo is not a new
+  mechanism.
+- **Learning from the user, in both directions**: an automatic fix undone at
+  once teaches "leave this word alone"; a word the user fixed by hotkey that
+  auto mode had left teaches "convert this one". Without this it is the old
+  feature again.
+- **What is learned is typed text, and "nothing typed reaches the disk" still
+  holds.** Store learned words as salted hashes, never plaintext: matching works,
+  reading them back does not. The settings then show a count and a reset button,
+  not a word list. Changing this needs the author's explicit decision.
+- **Never in a password field.** A corrected password is a failed login and a
+  confused user. Detect it (Win32 `ES_PASSWORD`, UI Automation `IsPassword`) and
+  stay out; when detection is not possible, stay out as well.
+- **Per-application exclusions** (terminals, IDEs, games), because the
+  boundary between "a word" and "a command" is not ours to judge there.
+
 ## Architecture
 
 - `Program.cs` — entry point, single-instance mutex, UI SyncContext.
