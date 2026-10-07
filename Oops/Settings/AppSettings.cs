@@ -121,6 +121,15 @@ public sealed class AppSettings
     /// </summary>
     public List<string> RivalsWarned { get; set; } = new();
 
+    /// <summary>
+    /// Между какими раскладками переводить — их HKL, как их отдаёт
+    /// <see cref="Oops.Core.SystemLayouts"/>. Пусто или раскладку удалили из
+    /// Windows — берётся пара по умолчанию (английская и русская, см.
+    /// <see cref="Oops.Core.LayoutPair.Choose"/>).
+    /// </summary>
+    public string LayoutFirst { get; set; } = string.Empty;
+    public string LayoutSecond { get; set; } = string.Empty;
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");
@@ -162,6 +171,8 @@ public sealed class AppSettings
     private void Sanitize()
     {
         RivalsWarned ??= new();
+        LayoutFirst ??= string.Empty;
+        LayoutSecond ??= string.Empty;
 
         ConvertHotkey = Fix(ConvertHotkey, HotkeyConfig.Default);
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);

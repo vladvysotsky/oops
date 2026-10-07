@@ -197,6 +197,30 @@ lands in the wrong window. The conditions it comes back under:
   (the hook and the UI thread).
 - `Core/TypingBuffer.cs` — the ribbon of typed characters plus the static
   `StartOfLastWords` / `CountWords`. No cursor and no navigation — deliberately.
+- `Core/KeyboardLayouts.cs` + `Core/SystemLayouts.cs` — **any two layouts
+  installed in Windows, not just RU/EN.** A `KeyboardLayout` is a map
+  "physical key ↔ character", and conversion is POSITIONAL: find the character's
+  key in the source layout, take what the same key gives in the target. Windows
+  builds the map itself — `ToUnicodeEx` for every printable key, with and
+  without Shift, flag 0x4 so that probing a dead key (´ ^ in German) does not
+  leave it pressed for the user. Dead keys and ligatures are skipped: a
+  character that did not map to exactly one character would break the
+  length-preserving invariant. `LayoutPair` is the two layouts the hotkey
+  converts between; `LayoutPair.Choose` takes the pair picked in settings
+  (`LayoutFirst`/`LayoutSecond`, stored as HKL hex masked to 8 digits — x64
+  sign-extends values like 0xF0020409) and falls back to English + Russian,
+  else the first two, when a chosen layout was removed or both are the same.
+  **A pair, not "all installed layouts", by the author's decision**: with RU,
+  UA and EN, a word typed in Latin has two candidates, and choosing between
+  them is exactly the guessing this program refuses to do. App rebuilds the
+  pair before each conversion when `SystemLayouts.Signature()` changed —
+  layouts get added without restarting the program.
+  The built-in pair (`LayoutPair.BuiltIn`) is built from the JCUKEN↔QWERTY table
+  below and is used when Windows cannot be read, and in tests; a test asserts
+  it converts exactly like that table. `LayoutConverter.Pair` falls back to it
+  through a GETTER, not a field initializer: the built-in pair is itself built
+  from `LayoutConverter`'s table, and two static initializers referring to each
+  other would leave one of them null depending on which type is touched first.
 - `Core/LayoutConverter.cs` — the JCUKEN↔QWERTY table (`PairsLower`/`PairsUpper`,
   Shift symbols `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё``). `ToRussian`/`ToEnglish`
   are 1-to-1; `AutoConvertWithDirection` picks the side **per word**, and
@@ -236,6 +260,11 @@ lands in the wrong window. The conditions it comes back under:
   into a byte each. "зфыыцщкв" is rejected not for being absent from a list but
   because "зз", "сщ" and "шп" hardly occur in Russian; a name like "Anderson" or
   "Helsinki" passes even though no word list contains it.
+  Tables exist for Russian and English only (`LanguageModel.Supports`). For a
+  pair with any other language there is nothing to judge by, and the gain is
+  treated as infinite: everything in the scope is converted, as it was before
+  the model existed. Going silent on such a pair would mean the hotkey simply
+  does not work there.
   A deliberate fallback to brute force was **tried and rejected**: when the smart
   pass changes nothing, converting everything anyway turns
   "https://example.com" into garbage on a single press, and a second press
@@ -332,7 +361,9 @@ lands in the wrong window. The conditions it comes back under:
   same way; programs with their own low-level hook cannot be detected this way
   at all. The absence of a conflict here is not a guarantee — its presence is a
   definite answer.
-- `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` to the active window.
+- `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` to the active window,
+  with the HKL of the pair's layout; a built-in layout has none and is looked up
+  by language as before.
 - `Core/LayoutTracker.cs` — detects a manual layout change → clears the buffer.
 - `Hooks/KeyboardHook.cs` — `WH_KEYBOARD_LL`. The character comes from
   `ToUnicodeEx` (flag 0x4, "do not change the state"), modifiers from
@@ -367,7 +398,11 @@ lands in the wrong window. The conditions it comes back under:
 - `UI/SettingsForm.cs` — the settings window. **Three tabs** (general / hotkeys +
   probe / behaviour) on the same `SegmentedControl` as the language switch.
   The probe lives next to the hotkeys: it is needed exactly when a shortcut is
-  silent and is being changed. The page height is measured after layout
+  silent and is being changed. The layout pair is chosen at the top of
+  "Behaviour", only when three or more layouts are installed (with two there is
+  nothing to choose), on `SegmentedControl`s rather than a `ComboBox` like every
+  other choice here; picking the same layout twice is refused on save, like
+  clashing hotkeys. The page height is measured after layout
   (`FitPages`) — there is no scrolling on purpose, it would hide part of the
   settings, and the window does not jump when switching tabs. The root is a
   `TableLayoutPanel` with four rows, NOT Dock.Fill+Dock.Bottom: docking order in

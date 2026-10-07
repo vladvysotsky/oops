@@ -28,6 +28,22 @@ public sealed class SettingsForm : ThemedForm
     private readonly SegmentedControl _theme = new();
     private readonly SegmentedControl _autostartMode = new();
     private readonly SegmentedControl _language = new();
+    private readonly SegmentedControl _layoutFirst = new();
+    private readonly SegmentedControl _layoutSecond = new();
+
+    /// <summary>
+    /// Раскладки Windows на момент открытия окна. Выбор пары показывается только
+    /// при трёх и больше: из двух выбирать нечего.
+    /// </summary>
+    private readonly IReadOnlyList<KeyboardLayout> _layouts = LoadLayouts();
+
+    private static IReadOnlyList<KeyboardLayout> LoadLayouts()
+    {
+        try { return SystemLayouts.Installed(); }
+        catch { return Array.Empty<KeyboardLayout>(); }
+    }
+
+    private bool ShowLayoutChoice => _layouts.Count >= 3;
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _translateKeys = new() { Interactive = true };
@@ -475,6 +491,23 @@ public sealed class SettingsForm : ThemedForm
     private Control BehaviourCard()
     {
         var card = NewCard(out var rows);
+
+        // Пара раскладок — первой в «Поведении»: от неё зависит, что вообще
+        // делает главное сочетание. Сегментированный переключатель, как у темы
+        // и языка, а не ComboBox: тот рисуется в чужой теме (см. LanguageRow).
+        // Названия короткие — на самих языках, — и три-четыре раскладки
+        // помещаются в строку.
+        if (ShowLayoutChoice)
+        {
+            var names = _layouts.Select(l => l.DisplayName).ToArray();
+            _layoutFirst.SetItems(names);
+            _layoutSecond.SetItems(names);
+            AddAutoRow(rows, Row(L10n.T("settings.layouts.first"),
+                L10n.T("settings.layouts.first.hint"), _layoutFirst));
+            AddAutoRow(rows, Row(L10n.T("settings.layouts.second"),
+                L10n.T("settings.layouts.second.hint"), _layoutSecond));
+            AddAutoRow(rows, Divider());
+        }
 
         _nudExpand.Minimum = 1; _nudExpand.Maximum = 10;
         AddAutoRow(rows, NumberRow(_nudExpand, L10n.T("settings.expand"), L10n.T("unit.sec"),
@@ -1120,6 +1153,13 @@ public sealed class SettingsForm : ThemedForm
         _cbVoiceLive.Checked = _settings.VoiceLiveText;
         _cbVerboseLog.Checked = _settings.VerboseLog;
         _cbSmartWords.Checked = _settings.SmartWordSelection;
+        if (ShowLayoutChoice && LayoutPair.Choose(_layouts, _settings.LayoutFirst, _settings.LayoutSecond) is { } pair)
+        {
+            // Показываем ту пару, по которой программа работает сейчас, — в том
+            // числе пару по умолчанию, если в настройках ещё ничего не выбрано.
+            _layoutFirst.SelectedIndex = IndexOfLayout(pair.First);
+            _layoutSecond.SelectedIndex = IndexOfLayout(pair.Second);
+        }
         // Отписываемся ДО присвоения: иначе Populate сам вызовет обработчик и
         // запустит пересборку окна по кругу.
         _theme.SelectedIndexChanged -= ThemeChangedHandler;
@@ -1167,6 +1207,13 @@ public sealed class SettingsForm : ThemedForm
     };
 
     /// <summary>Переносит значения в настройки. false — сохранять нельзя, окно не закрываем.</summary>
+    private int IndexOfLayout(KeyboardLayout layout)
+    {
+        for (int i = 0; i < _layouts.Count; i++)
+            if (_layouts[i].Id == layout.Id) return i;
+        return 0;
+    }
+
     private bool ApplyToSettings()
     {
         // Одинаковые сочетания недопустимы: App проверяет раскладку первой, и
@@ -1185,6 +1232,20 @@ public sealed class SettingsForm : ThemedForm
             Notice.Warn(this, L10n.T("hotkey.clash.title"),
                 L10n.T("hotkey.clash.body"), L10n.T("hotkey.clash.hint"));
             return false;
+        }
+
+        if (ShowLayoutChoice)
+        {
+            // Одна и та же раскладка дважды — переводить не между чем, и
+            // главное сочетание молча перестало бы что-либо делать.
+            if (_layoutFirst.SelectedIndex == _layoutSecond.SelectedIndex)
+            {
+                Notice.Warn(this, L10n.T("layouts.same.title"),
+                    L10n.T("layouts.same.body"), L10n.T("layouts.same.hint"));
+                return false;
+            }
+            _settings.LayoutFirst = _layouts[_layoutFirst.SelectedIndex].Id;
+            _settings.LayoutSecond = _layouts[_layoutSecond.SelectedIndex].Id;
         }
 
         _settings.Enabled = _cbEnabled.Checked;

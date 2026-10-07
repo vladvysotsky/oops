@@ -206,6 +206,7 @@ public sealed class App : IDisposable
         _scope.ExpandWindow = TimeSpan.FromSeconds(Settings.ExpandWindowSeconds);
         Sender.UseCharByChar(Settings.CharByCharTyping);
         LayoutConverter.SmartWordSelection = Settings.SmartWordSelection;
+        RefreshLayoutPair(force: true);
         _recorder.MaxDuration = TimeSpan.FromSeconds(Settings.VoiceMaxSeconds);
     }
 
@@ -384,8 +385,44 @@ public sealed class App : IDisposable
           or Keys.Menu or Keys.LMenu or Keys.RMenu
           or Keys.LWin or Keys.RWin;
 
+    /// <summary>Список раскладок Windows в прошлый раз — чтобы не перечитывать их на каждое нажатие.</summary>
+    private string _layoutSignature = string.Empty;
+
+    /// <summary>
+    /// Собрать пару раскладок из установленных в Windows и настроек. Только в
+    /// UI-потоке.
+    ///
+    /// Вызывается перед каждой конвертацией, а не только при старте: раскладку
+    /// добавляют и удаляют, не перезапуская программу, и пара должна это
+    /// заметить. Само сравнение — строка из нескольких HKL, перечитываются
+    /// карты только когда список и правда поменялся.
+    /// </summary>
+    private void RefreshLayoutPair(bool force = false)
+    {
+        try
+        {
+            var signature = SystemLayouts.Signature();
+            if (!force && signature == _layoutSignature) return;
+            _layoutSignature = signature;
+
+            var pair = LayoutPair.Choose(SystemLayouts.Installed(), Settings.LayoutFirst, Settings.LayoutSecond);
+            LayoutConverter.Pair = pair ?? LayoutPair.BuiltIn;
+        }
+        catch (Exception ex)
+        {
+            // Прочитать раскладки не вышло — работаем по встроенной таблице
+            // RU↔EN, как раньше, а не молчим.
+            LayoutConverter.Pair = LayoutPair.BuiltIn;
+            Log.Write("раскладки системы не прочитаны: " + ex.Message);
+        }
+        Log.Write($"пара раскладок: {LayoutConverter.Pair.First.Language} {LayoutConverter.Pair.First.Id}"
+                  + $" ↔ {LayoutConverter.Pair.Second.Language} {LayoutConverter.Pair.Second.Id}");
+    }
+
     private void RunStep(bool layout, DateTime pressedAtUtc)
     {
+        if (layout) RefreshLayoutPair();
+
         // Ждём, пока пользователь отпустит модификаторы хоткея: иначе зажатый Ctrl
         // превратит наши Backspace в Ctrl+Backspace (удаление слова целиком),
         // а Ctrl+C для чтения выделения уйдёт как Ctrl+Alt+C и не сработает.
@@ -435,17 +472,17 @@ public sealed class App : IDisposable
         }
 
         string converted;
-        var dir = LayoutConverter.Direction.None;
+        KeyboardLayout? target = null;
         // literal: выделение конвертируется целиком, без модели языка. Человек
         // уже показал границу руками, а второго нажатия здесь нет — оно прочтёт
         // то же выделение и примет то же решение.
-        if (layout) (converted, dir) = LayoutConverter.AutoConvertWithDirection(selection, literal: true);
+        if (layout) (converted, target) = LayoutConverter.Convert(selection, literal: true);
         else converted = ScopeEditor.ToggleCase(selection);
 
         if (converted != selection)
         {
             Sender.SendUnicode(converted);
-            SwitchSystemLayout(dir);
+            SwitchSystemLayout(target);
         }
 
         // Мы переписали не то, что вели в ленте — она больше не отражает экран.
@@ -470,7 +507,7 @@ public sealed class App : IDisposable
         if (!Sender.SendBackspaces(edit.EraseCount)) { ResetAll(); return; }
         if (!Sender.SendUnicode(edit.Text)) { ResetAll(); return; }
 
-        SwitchSystemLayout(edit.Direction);
+        SwitchSystemLayout(edit.SwitchTo);
 
         // Лента теперь соответствует тому, что на экране.
         _buffer.Reset(edit.NewBufferContent);
@@ -721,13 +758,12 @@ public sealed class App : IDisposable
     /// и не сбросил ленту — иначе следующее нажатие хоткея не смогло бы
     /// расширить область.
     /// </summary>
-    private void SwitchSystemLayout(LayoutConverter.Direction dir)
+    private void SwitchSystemLayout(KeyboardLayout? target)
     {
-        if (dir == LayoutConverter.Direction.None) return;
+        if (target == null) return;
 
         _layoutTracker.NoteSelfSwitch();
-        if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
-        else LayoutSwitcher.SwitchToEnglish();
+        LayoutSwitcher.SwitchTo(target);
     }
 
     public void Dispose()
