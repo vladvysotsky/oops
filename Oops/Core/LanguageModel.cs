@@ -51,6 +51,17 @@ public static class LanguageModel
     }
 
     /// <summary>
+    /// Есть ли таблица для языка (ISO 639-1). Пока только русский и английский:
+    /// для пары с другим языком судить нечем, и конвертер переводит всё, что
+    /// попало в область, — как было до появления модели.
+    /// </summary>
+    public static bool Supports(string iso) => iso is "ru" or "en";
+
+    /// <summary>То же, что по перечислению, — по коду языка. Только для <see cref="Supports"/>-языков.</summary>
+    public static double Implausibility(string word, string iso)
+        => Implausibility(word, iso == "ru" ? Language.Russian : Language.English);
+
+    /// <summary>
     /// Средняя «неправдоподобность» на пару букв: МЕНЬШЕ значит больше похоже
     /// на слово этого языка. Величина — натуральный логарифм вероятности со
     /// знаком минус, так что сравнивать можно только между собой.

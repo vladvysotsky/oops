@@ -45,12 +45,12 @@ public sealed class ScopeEditor
     /// <summary>Что нужно сделать с текстом на экране.</summary>
     /// <param name="EraseCount">Сколько символов стереть Backspace'ами.</param>
     /// <param name="Text">Что напечатать вместо них.</param>
-    /// <param name="Direction">Куда переключить системную раскладку (только для Layout).</param>
+    /// <param name="SwitchTo">На какую раскладку переключить систему; null — не переключать.</param>
     /// <param name="NewBufferContent">Каким должен стать буфер после операции.</param>
-    public readonly record struct Edit(int EraseCount, string Text, LayoutConverter.Direction Direction, string NewBufferContent)
+    public readonly record struct Edit(int EraseCount, string Text, KeyboardLayout? SwitchTo, string NewBufferContent)
     {
         public bool IsEmpty => EraseCount == 0 && Text.Length == 0;
-        public static readonly Edit None = new(0, string.Empty, LayoutConverter.Direction.None, string.Empty);
+        public static readonly Edit None = new(0, string.Empty, null, string.Empty);
     }
 
     /// <summary>Нажали хоткей смены раскладки.</summary>
@@ -138,10 +138,10 @@ public sealed class ScopeEditor
         var scope = _original.Substring(scopeStart);
 
         string converted;
-        var dir = LayoutConverter.Direction.None;
+        KeyboardLayout? target = null;
         if (kind == Kind.Layout)
         {
-            (converted, dir) = LayoutConverter.AutoConvertWithDirection(scope);
+            (converted, target) = LayoutConverter.Convert(scope);
         }
         else
         {
@@ -159,7 +159,7 @@ public sealed class ScopeEditor
         var newBuffer = _original.Substring(0, scopeStart) + converted;
         _lastEmitted = newBuffer;
 
-        return new Edit(eraseCount, converted, dir, newBuffer);
+        return new Edit(eraseCount, converted, target, newBuffer);
     }
 
     /// <summary>

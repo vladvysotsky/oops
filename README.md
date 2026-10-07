@@ -15,7 +15,8 @@ Works in every Windows application: browsers, messengers, IDEs, the terminal.
 
 ## 🧼 What it does
 
-- **Fixes the keyboard layout** RU ↔ EN on text you have just typed.
+- **Fixes the keyboard layout** on text you have just typed — between any two
+  layouts added to Windows, RU ↔ EN by default.
 - **Switches case** — UPPER ↔ lower, by the same logic.
 - **Converts a selection** as a whole, if something is selected with the mouse.
 - **Translates** RU ↔ EN right in the input field — *beta*.

@@ -4,14 +4,18 @@ using System.Text;
 namespace Oops.Core;
 
 /// <summary>
-/// Двунаправленная конвертация символов между QWERTY (en-US) и ЙЦУКЕН (ru).
-/// Карта построена по позициям клавиш на стандартной 104-клавишной раскладке.
+/// Конвертация текста между двумя раскладками — активной парой <see cref="Pair"/>.
+///
+/// Пара берётся из установленных в Windows и выбирается в настройках; по
+/// умолчанию это английская и русская. Прошитая ниже таблица ЙЦУКЕН↔QWERTY —
+/// встроенная пара на случай, когда системные раскладки прочитать нельзя (и
+/// для тестов), а <see cref="ToRussian"/>/<see cref="ToEnglish"/> работают по ней.
 /// </summary>
 public static class LayoutConverter
 {
     // Пары: символ EN <-> символ RU в одной и той же физической позиции клавиши.
     // Нижний регистр.
-    private static readonly (char en, char ru)[] PairsLower =
+    public static readonly (char en, char ru)[] PairsLower =
     {
         ('q','й'), ('w','ц'), ('e','у'), ('r','к'), ('t','е'), ('y','н'),
         ('u','г'), ('i','ш'), ('o','щ'), ('p','з'), ('[','х'), (']','ъ'),
@@ -23,7 +27,7 @@ public static class LayoutConverter
     };
 
     // Верхний регистр / Shift-варианты.
-    private static readonly (char en, char ru)[] PairsUpper =
+    public static readonly (char en, char ru)[] PairsUpper =
     {
         ('Q','Й'), ('W','Ц'), ('E','У'), ('R','К'), ('T','Е'), ('Y','Н'),
         ('U','Г'), ('I','Ш'), ('O','Щ'), ('P','З'), ('{','Х'), ('}','Ъ'),
@@ -79,6 +83,23 @@ public static class LayoutConverter
 
     public enum Direction { None, ToRu, ToEn }
 
+    private static volatile LayoutPair? _pair;
+
+    /// <summary>
+    /// Между какими раскладками переводим. Ставит App из настроек и из списка
+    /// раскладок Windows.
+    ///
+    /// По умолчанию — встроенная пара, и отдаётся она ЛЕНИВО, через геттер, а не
+    /// инициализатором поля: встроенная пара сама строится из таблиц этого
+    /// класса, и два статических инициализатора, ссылающихся друг на друга, при
+    /// неудачном порядке оставили бы здесь null.
+    /// </summary>
+    public static LayoutPair Pair
+    {
+        get => _pair ?? LayoutPair.BuiltIn;
+        set => _pair = value;
+    }
+
     /// <summary>
     /// Пропускать слова, которые и так выглядят настоящими словами своего
     /// языка. Включено по умолчанию; выключается настройкой на случай, когда
@@ -132,11 +153,11 @@ public static class LayoutConverter
     /// сконвертируется. Направление при этом по-прежнему выбирается ПОСЛОВНО,
     /// так что смешанный текст не ломается.
     /// </param>
-    public static (string Result, Direction Dir) AutoConvertWithDirection(
-        string text, bool literal = false)
+    public static (string Result, KeyboardLayout? Target) Convert(string text, bool literal = false)
     {
-        if (string.IsNullOrEmpty(text)) return (text, Direction.None);
+        if (string.IsNullOrEmpty(text)) return (text, null);
 
+        var pair = Pair;
         var runs = Split(text);
         bool smart = SmartWordSelection && !literal;
 
@@ -144,15 +165,12 @@ public static class LayoutConverter
         foreach (var run in runs)
         {
             if (run.IsSpace) continue;
-            run.Dir = DirectionOf(run.Text);
-            run.Converted = run.Dir switch
-            {
-                Direction.ToRu => ToRussian(run.Text),
-                Direction.ToEn => ToEnglish(run.Text),
-                _ => run.Text,
-            };
-            if (run.Dir == Direction.None) continue;
-            run.Gain = PlausibilityGain(run.Text, run.Converted, run.Dir);
+            var direction = pair.DirectionOf(run.Text);
+            if (direction is not { } d) continue;
+            run.From = d.From;
+            run.To = d.To;
+            run.Converted = d.From.ConvertTo(d.To, run.Text);
+            run.Gain = PlausibilityGain(run.Text, run.Converted, d.From, d.To);
             run.Convert = !smart || run.Gain > PlausibilityMargin;
         }
 
@@ -179,19 +197,19 @@ public static class LayoutConverter
         bool single = runs.Count(r => !r.IsSpace) == 1;
         if (smart)
             foreach (var run in runs)
-                if (!run.IsSpace && run.Dir != Direction.None && !run.Convert && run.Gain > 0
+                if (!run.IsSpace && run.To != null && !run.Convert && run.Gain > 0
                     && (single || HasConvertedNeighbour(runs, run)))
                     run.Convert = true;
 
         var sb = new StringBuilder(text.Length);
-        var lastDir = Direction.None;
+        KeyboardLayout? target = null;
         int skipped = 0;
 
         foreach (var run in runs)
         {
             if (run.IsSpace) { sb.Append(run.Text); continue; }
 
-            if (run.Dir != Direction.None && !run.Convert)
+            if (run.To != null && !run.Convert)
             {
                 // Слово и так выглядит настоящим — «password», «email», «Anderson».
                 // Конвертация превратила бы его в «зфыыцщкв».
@@ -200,13 +218,13 @@ public static class LayoutConverter
                 continue;
             }
 
-            sb.Append(run.Converted);
+            sb.Append(run.To != null ? run.Converted : run.Text);
 
-            // Наружу отдаём направление ПОСЛЕДНЕГО слова, у которого оно есть:
+            // Наружу отдаём раскладку ПОСЛЕДНЕГО сконвертированного слова:
             // каретка стоит в конце, и системную раскладку надо переключить под
             // то, что человек будет печатать дальше, а не под большинство уже
             // исправленного.
-            if (run.Dir != Direction.None) lastDir = run.Dir;
+            if (run.To != null) target = run.To;
         }
 
         // В лог идёт только ЧИСЛО пропущенных слов, не сами слова: набранный
@@ -214,14 +232,30 @@ public static class LayoutConverter
         if (skipped > 0 && Log.Enabled)
             Log.Write($"пропущено слов как уже правдоподобные: {skipped}");
 
-        return (sb.ToString(), lastDir);
+        return (sb.ToString(), target);
+    }
+
+    /// <summary>
+    /// Прежний вид результата — направлением RU/EN. Оставлен для тестов, которые
+    /// работают со встроенной парой; программа пользуется <see cref="Convert"/>.
+    /// </summary>
+    public static (string Result, Direction Dir) AutoConvertWithDirection(
+        string text, bool literal = false)
+    {
+        var (result, target) = Convert(text, literal);
+        var dir = target == null ? Direction.None
+            : target.Language == "en" ? Direction.ToEn
+            : Direction.ToRu;
+        return (result, dir);
     }
 
     private sealed class Run
     {
         public string Text = string.Empty;
         public bool IsSpace;
-        public Direction Dir;
+        /// <summary>Откуда и куда; null — в слове нет букв ни одной раскладки пары.</summary>
+        public KeyboardLayout? From;
+        public KeyboardLayout? To;
         public string Converted = string.Empty;
         public double Gain;
         public bool Convert;
@@ -256,7 +290,7 @@ public static class LayoutConverter
             for (int i = at + step; i >= 0 && i < runs.Count; i += step)
             {
                 if (runs[i].IsSpace) continue;
-                return runs[i].Convert && runs[i].Dir == runs[at].Dir;
+                return runs[i].Convert && runs[i].To == runs[at].To;
             }
             return false;
         }
@@ -269,42 +303,24 @@ public static class LayoutConverter
     /// Это то самое место, где «xtuj» отличается от «password». Оба полностью
     /// латинские, и подсчётом букв их не разделить — разница только в том, что
     /// одно является словом, а другое нет.
+    ///
+    /// Модели языка есть не для всех языков. Если её нет хотя бы для одной
+    /// стороны, судить нечем, и выигрыш считается бесконечным: слово
+    /// конвертируется, как конвертировалось всё до появления модели. Молчать на
+    /// паре без модели было бы хуже — хоткей просто перестал бы работать.
     /// </summary>
-    private static double PlausibilityGain(string original, string converted, Direction dir)
+    private static double PlausibilityGain(string original, string converted,
+        KeyboardLayout from, KeyboardLayout to)
     {
-        var from = dir == Direction.ToRu
-            ? LanguageModel.Language.English
-            : LanguageModel.Language.Russian;
-        var to = dir == Direction.ToRu
-            ? LanguageModel.Language.Russian
-            : LanguageModel.Language.English;
+        if (!LanguageModel.Supports(from.Language) || !LanguageModel.Supports(to.Language))
+            return double.PositiveInfinity;
 
         // Меньше — правдоподобнее, поэтому выигрыш положителен, когда результат
         // выглядит лучше исходника.
-        return LanguageModel.Implausibility(original, from)
-             - LanguageModel.Implausibility(converted, to);
+        return LanguageModel.Implausibility(original, from.Language)
+             - LanguageModel.Implausibility(converted, to.Language);
     }
 
-    /// <summary>
-    /// Куда конвертировать этот кусок. Считаются только буквы: цифры и знаки
-    /// есть в обеих раскладках и голоса не имеют — иначе «2024 (!!!)» решало бы
-    /// судьбу слов вокруг себя.
-    /// </summary>
-    private static Direction DirectionOf(string word)
-    {
-        int latin = 0, cyr = 0;
-        foreach (var c in word)
-        {
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
-            else if ((c >= 'а' && c <= 'я') || (c >= 'А' && c <= 'Я') || c == 'ё' || c == 'Ё') cyr++;
-        }
-        if (latin == 0 && cyr == 0) return Direction.None;
-        return latin >= cyr ? Direction.ToRu : Direction.ToEn;
-    }
-
-    /// <summary>
-    /// Эвристическое определение направления: если в строке больше латиницы — переводим в RU,
-    /// иначе — в EN. Символы вне обеих раскладок не учитываются.
-    /// </summary>
-    public static string AutoConvert(string text) => AutoConvertWithDirection(text).Result;
+    /// <summary>Конвертация без подробностей — только текст.</summary>
+    public static string AutoConvert(string text) => Convert(text).Result;
 }
