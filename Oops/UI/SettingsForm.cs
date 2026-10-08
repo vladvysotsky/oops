@@ -32,8 +32,10 @@ public sealed class SettingsForm : ThemedForm
     private readonly SegmentedControl _layoutSecond = new();
 
     /// <summary>
-    /// Раскладки Windows на момент открытия окна. Выбор пары показывается только
-    /// при трёх и больше: из двух выбирать нечего.
+    /// Раскладки Windows на момент открытия окна. Выбор показывается уже при
+    /// двух: выбирать там нечего, но человек видит, между какими раскладками
+    /// работает программа. Прятать его до третьей раскладки было ошибкой —
+    /// функцию, о которой просили, в настройках просто не находили.
     /// </summary>
     private readonly IReadOnlyList<KeyboardLayout> _layouts = LoadLayouts();
 
@@ -43,7 +45,7 @@ public sealed class SettingsForm : ThemedForm
         catch { return Array.Empty<KeyboardLayout>(); }
     }
 
-    private bool ShowLayoutChoice => _layouts.Count >= 3;
+    private bool ShowLayoutChoice => _layouts.Count >= 2;
     private readonly HotkeyDisplay _convertKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _caseKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _translateKeys = new() { Interactive = true };

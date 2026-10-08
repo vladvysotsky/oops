@@ -399,8 +399,9 @@ lands in the wrong window. The conditions it comes back under:
   probe / behaviour) on the same `SegmentedControl` as the language switch.
   The probe lives next to the hotkeys: it is needed exactly when a shortcut is
   silent and is being changed. The layout pair is chosen at the top of
-  "Behaviour", only when three or more layouts are installed (with two there is
-  nothing to choose), on `SegmentedControl`s rather than a `ComboBox` like every
+  "Behaviour", shown from two installed layouts up — with two there is nothing
+  to choose, but hiding the rows until a third was added meant the requested
+  feature could not be found at all — on `SegmentedControl`s rather than a `ComboBox` like every
   other choice here; picking the same layout twice is refused on save, like
   clashing hotkeys. The page height is measured after layout
   (`FitPages`) — there is no scrolling on purpose, it would hide part of the
