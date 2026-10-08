@@ -161,17 +161,45 @@ public static class LayoutConverter
         var runs = Split(text);
         bool smart = SmartWordSelection && !literal;
 
+        var words = runs.Where(r => !r.IsSpace).ToList();
+        bool single = words.Count == 1;
+        var lettered = words.Where(w => w.Text.Any(char.IsLetter)).ToList();
+        // Всё набрано заглавными — это включённый CapsLock, а не аббревиатуры:
+        // «GHBDTN RFR LTKF» обязано стать «ПРИВЕТ КАК ДЕЛА».
+        bool capsScope = lettered.Count > 0 && lettered.All(w => IsAllCaps(w.Text));
+
         // Первый проход: каждое слово судится само по себе, со полным запасом.
+        Run? previousWord = null;
         foreach (var run in runs)
         {
             if (run.IsSpace) continue;
             var direction = pair.DirectionOf(run.Text);
-            if (direction is not { } d) continue;
+            if (direction is not { } d) { previousWord = run; continue; }
             run.From = d.From;
             run.To = d.To;
-            run.Converted = d.From.ConvertTo(d.To, run.Text);
+            run.Converted = KeepNumbers(run.Text, d.From.ConvertTo(d.To, run.Text));
             run.Gain = PlausibilityGain(run.Text, run.Converted, d.From, d.To);
-            run.Convert = !smart || run.Gain > PlausibilityMargin;
+
+            // Аббревиатура: модель её судить не может. «УФНС» как русское и
+            // «EAYC» как английское одинаково не похожи на слова, и на замерах
+            // настоящие русские аббревиатуры получают выигрыш до +3.2 («ПДД»),
+            // а английские, набранные в русской раскладке, — от −2.7 до +6.4.
+            // Диапазоны перекрываются, порогом их не разделить. Поэтому решает
+            // не модель, а то, на что указал человек: одно слово — переводим,
+            // слово посреди фразы — не трогаем.
+            bool acronym = IsAllCaps(run.Text);
+            if (single && acronym)
+                run.Convert = true;
+            else if (smart && !single
+                     && ((acronym && !capsScope) || IsUnitAfter(previousWord, run.Text) || IsGluedUnit(run.Text)))
+            {
+                run.Convert = false;
+                run.Protected = true;
+            }
+            else
+                run.Convert = !smart || run.Gain > PlausibilityMargin;
+
+            previousWord = run;
         }
 
         // Второй проход: запас нужен не всегда.
@@ -197,7 +225,7 @@ public static class LayoutConverter
         bool single = runs.Count(r => !r.IsSpace) == 1;
         if (smart)
             foreach (var run in runs)
-                if (!run.IsSpace && run.To != null && !run.Convert && run.Gain > 0
+                if (!run.IsSpace && run.To != null && !run.Convert && !run.Protected && run.Gain > 0
                     && (single || HasConvertedNeighbour(runs, run)))
                     run.Convert = true;
 
@@ -259,6 +287,66 @@ public static class LayoutConverter
         public string Converted = string.Empty;
         public double Gain;
         public bool Convert;
+        /// <summary>
+        /// Аббревиатура или единица измерения посреди фразы: не трогаем, и в
+        /// соседи слову не годится — она ничего не говорит о том, сломан ли текст вокруг.
+        /// </summary>
+        public bool Protected;
+    }
+
+    /// <summary>Две буквы и больше, и все заглавные — «УФНС», «API», «ЬФСИЩЩЛ».</summary>
+    private static bool IsAllCaps(string word)
+    {
+        int letters = 0;
+        foreach (var c in word)
+        {
+            if (!char.IsLetter(c)) continue;
+            if (!char.IsUpper(c)) return false;
+            letters++;
+        }
+        return letters >= 2;
+    }
+
+    /// <summary>
+    /// Единица после числа: «5 кг», «100 гб». Короткое слово сразу за числом —
+    /// почти всегда единица, набранная как надо, а конвертация делала из «кг»
+    /// латинское «ru».
+    /// </summary>
+    private static bool IsUnitAfter(Run? previous, string word)
+    {
+        if (previous == null || word.Count(char.IsLetter) > 3) return false;
+        var number = previous.Text;
+        return number.Any(char.IsDigit) && number.All(c => char.IsDigit(c) || c == '.' || c == ',');
+    }
+
+    /// <summary>Число и единица слитно: «5,5кг», «100гб».</summary>
+    private static bool IsGluedUnit(string word)
+    {
+        int i = 0;
+        while (i < word.Length && (char.IsDigit(word[i]) || word[i] == '.' || word[i] == ','))
+            i++;
+        if (i == 0 || !word.Take(i).Any(char.IsDigit)) return false;
+        int letters = word.Length - i;
+        return letters is >= 1 and <= 3 && word.Skip(i).All(char.IsLetter);
+    }
+
+    /// <summary>
+    /// Цифры и разделитель между цифрами не конвертируются никогда. Позиционно
+    /// «5,5» из русской раскладки — это «5?5»: запятая на русской клавиатуре
+    /// стоит там, где у английской вопросительный знак. Число человек набрал
+    /// правильно в любой раскладке; длина при этом не меняется.
+    /// </summary>
+    private static string KeepNumbers(string original, string converted)
+    {
+        var chars = converted.ToCharArray();
+        for (int i = 0; i < original.Length; i++)
+        {
+            char c = original[i];
+            bool betweenDigits = i > 0 && i < original.Length - 1
+                && char.IsDigit(original[i - 1]) && char.IsDigit(original[i + 1]) && !char.IsLetter(c);
+            if (char.IsDigit(c) || betweenDigits) chars[i] = c;
+        }
+        return new string(chars);
     }
 
     private static List<Run> Split(string text)
@@ -289,7 +377,10 @@ public static class LayoutConverter
         {
             for (int i = at + step; i >= 0 && i < runs.Count; i += step)
             {
-                if (runs[i].IsSpace) continue;
+                // Числа и защищённые слова о тексте вокруг ничего не говорят и
+                // в соседи не годятся: иначе «rfr 5 кг ltkf» оставлял «rfr» —
+                // его соседом оказывалось «5», а оно не конвертируется никогда.
+                if (runs[i].IsSpace || runs[i].To == null || runs[i].Protected) continue;
                 return runs[i].Convert && runs[i].To == runs[at].To;
             }
             return false;
