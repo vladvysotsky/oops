@@ -248,7 +248,22 @@ lands in the wrong window. The conditions it comes back under:
   was added to remove — and a lone press on "rfr" did nothing at all. Dropping
   the margin is safe because everything real measures negative: "email" −6.1,
   "password" −6.0, "online" −4.0, "Anderson" −4.0, "tot" −1.3, "photo.jpg" −0.7,
-  "https://example.com" −0.4, "get" −0.2. None of this applies to a selection —
+  "https://example.com" −0.4, "get" −0.2.
+  **Abbreviations are decided by pointing, not by the model.** A word of two or
+  more letters, all uppercase, is not a word at all, and letter-pair statistics
+  say nothing about it: real Russian abbreviations measured a gain of up to
+  +3.2 ("ПДД" → "GLL", "УФНС" → "EAYC"), English ones typed in the Russian
+  layout from −2.7 to +6.4 — the ranges overlap, no threshold separates them.
+  So such a word is converted when it is the whole scope (the user pointed at
+  exactly it) and left alone inside a phrase. The price, accepted: "нужен ФЗШ
+  ключ" no longer becomes "нужен API ключ" on the second press — select "ФЗШ"
+  for that. When EVERY word is uppercase it is CapsLock, not abbreviations, and
+  the model works as usual. A short word right after a number ("5 кг",
+  "100 гб") is a unit and is left alone the same way; digits and a separator
+  between digits are never converted ("5,5" would positionally become "5?5").
+  Numbers and protected words are skipped when looking for a converted
+  neighbour — "rfr 5 кг ltkf" used to keep "rfr", whose neighbour was "5".
+  None of this applies to a selection —
   see "Selection": there the conversion is literal, because a refusal there
   cannot be undone. Switched off by
   `AppSettings.SmartWordSelection` when the model gets it wrong and the hotkey

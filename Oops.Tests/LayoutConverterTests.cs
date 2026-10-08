@@ -235,4 +235,37 @@ public class LayoutConverterTests
         Assert.Equal(ru.ToString(), LayoutConverter.ToRussian(en.ToString()));
         Assert.Equal(en.ToString(), LayoutConverter.ToEnglish(ru.ToString()));
     }
+
+    [Theory]
+    // Аббревиатура посреди фразы: модель её судить не может (настоящие русские
+    // получают выигрыш до +3.2, английские в русской раскладке — от −2.7 до +6.4),
+    // поэтому её не трогаем.
+    [InlineData("ghbdtn УФНС ltkf", "привет УФНС дела")]
+    [InlineData("ghbdtn PDF ltkf", "привет PDF дела")]
+    [InlineData("нужен ФЗШ ключ", "нужен ФЗШ ключ")]
+    // Всё заглавными — это CapsLock, а не аббревиатуры: работает обычная модель.
+    [InlineData("GHBDTN RFR LTKF", "ПРИВЕТ КАК ДЕЛА")]
+    // Единица после числа набрана правильно; число в соседи слову не годится.
+    [InlineData("rfr 5 кг ltkf", "как 5 кг дела")]
+    [InlineData("ghbdtn 100 гб", "привет 100 гб")]
+    public void AbbreviationsUnitsAndNumbersSurviveTheScope(string typed, string expected)
+        => Assert.Equal(expected, LayoutConverter.AutoConvertWithDirection(typed).Result);
+
+    [Theory]
+    // Человек указал ровно на это слово — переводим, даже если модель против:
+    // «ЗВА» → «PDF» она сама не пропустила бы (−2.7).
+    [InlineData("УФНС", "EAYC")]
+    [InlineData("ЗВА", "PDF")]
+    [InlineData("ЬФСИЩЩЛ", "MACBOOK")]
+    public void ALoneAbbreviationIsConvertedBecauseTheUserPointedAtIt(string typed, string expected)
+        => Assert.Equal(expected, LayoutConverter.AutoConvertWithDirection(typed).Result);
+
+    [Fact]
+    public void DigitsAndTheSeparatorBetweenThemAreNeverConverted()
+    {
+        // Позиционно «5,5» из русской раскладки — «5?5». Длина при этом прежняя.
+        var (result, _) = LayoutConverter.AutoConvertWithDirection("5,5кг");
+        Assert.Equal("5,5ru", result);
+        Assert.Equal("5,5кг".Length, result.Length);
+    }
 }
