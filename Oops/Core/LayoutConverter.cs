@@ -222,7 +222,6 @@ public static class LayoutConverter
         // «tot» −1.3, «photo.jpg» −0.7, «https://example.com» −0.4,
         // «get» −0.2. Порог их
         // держит и без запаса.
-        bool single = runs.Count(r => !r.IsSpace) == 1;
         if (smart)
             foreach (var run in runs)
                 if (!run.IsSpace && run.To != null && !run.Convert && !run.Protected && run.Gain > 0
