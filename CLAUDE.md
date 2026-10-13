@@ -334,6 +334,21 @@ lands in the wrong window. The conditions it comes back under:
   the live transcript. The window MUST be non-activating (`ShowWithoutActivation`
   + `WS_EX_NOACTIVATE`): by taking focus it would take away the very field the
   text is being typed into.
+- `Core/Snippets.cs` + `UI/SnippetsForm.cs` — snippets (2.4): an abbreviation
+  typed and followed by Space is replaced with its text. `App.OnKeyDown` checks
+  the last word of `TypingBuffer` on Space, swallows the Space on a match and
+  Posts the rewrite (Backspace × trigger length, then text + space) to the UI
+  thread; if the buffer changed in between, only the swallowed Space is typed.
+  The trigger is matched **by keys, not letters** (`SnippetMatcher.Key`: a
+  character of the pair's second layout is mapped to the same key of the first,
+  then lower-cased) — "!ee", "!уу" and "!EE" are one snippet, otherwise it would
+  go silent exactly when the layout is wrong, which is this program's whole job.
+  This is not guessing: the user defined the abbreviation. A trigger cannot
+  contain whitespace (it could never be typed), and the editor refuses two
+  triggers on the same keys. Snippets are stored in `settings.json` as **plain
+  text, by the author's decision**: it is text the user wrote into the settings,
+  not text captured from typing. Expansion is off while the editor is open
+  (`HotkeysSuspended`), or typing a trigger into it would expand.
 - `Core/TextReplacer.cs` + `UI/ReplaceForm.cs` — find and replace in the selected
   text, plain and by regular expression, with a wizard (ready-made rules +
   building blocks inserted into the search field). The search **must** have a

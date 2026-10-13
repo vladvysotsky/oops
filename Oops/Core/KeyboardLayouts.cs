@@ -49,6 +49,9 @@ public sealed class KeyboardLayout
     public string DisplayName { get; }
     public IntPtr Handle { get; }
 
+    /// <summary>Есть ли символ в этой раскладке.</summary>
+    public bool Produces(char c) => _keyOf.ContainsKey(c);
+
     /// <summary>Сколько букв слова эта раскладка вообще умеет набрать.</summary>
     public int LettersOf(string word)
     {
