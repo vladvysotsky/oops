@@ -124,7 +124,7 @@ To check that you downloaded exactly what CI built, use the `SHA256SUMS.txt`
 from the same release:
 
 ```powershell
-Get-FileHash .\oops-Setup-2.2.2.exe -Algorithm SHA256
+Get-FileHash .\oops-Setup-2.3.0.exe -Algorithm SHA256
 ```
 
 ## 🔄 Updates

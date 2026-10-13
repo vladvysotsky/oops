@@ -127,7 +127,7 @@ second fixes everything you typed. Interface and docs are in Russian.</sub>
 из того же релиза:
 
 ```powershell
-Get-FileHash .\oops-Setup-2.2.2.exe -Algorithm SHA256
+Get-FileHash .\oops-Setup-2.3.0.exe -Algorithm SHA256
 ```
 
 ## 🔄 Обновления
