@@ -207,6 +207,7 @@ public sealed class App : IDisposable
         Sender.UseCharByChar(Settings.CharByCharTyping);
         LayoutConverter.SmartWordSelection = Settings.SmartWordSelection;
         RefreshLayoutPair(force: true);
+        RebuildSnippets();
         _recorder.MaxDuration = TimeSpan.FromSeconds(Settings.VoiceMaxSeconds);
     }
 
@@ -348,6 +349,14 @@ public sealed class App : IDisposable
             return;
         }
 
+        // Пробел после сокращения — раскрыть сниппет. Win+Space — системная
+        // смена раскладки, её не трогаем.
+        if (e.VirtualKey == Keys.Space && !e.Win && !e.IsRepeat && TryExpandSnippet())
+        {
+            e.Handled = true;
+            return;
+        }
+
         switch (e.VirtualKey)
         {
             case Keys.Back:
@@ -385,6 +394,61 @@ public sealed class App : IDisposable
           or Keys.Menu or Keys.LMenu or Keys.RMenu
           or Keys.LWin or Keys.RWin;
 
+    /// <summary>
+    /// Сниппеты в виде, готовом к поиску. Пересобирает UI-поток (настройки,
+    /// смена пары), читает поток ввода на каждом пробеле — поэтому volatile и
+    /// подмена целиком, а не правка на месте.
+    /// </summary>
+    private volatile SnippetMatcher _snippets = SnippetMatcher.Empty;
+
+    private void RebuildSnippets()
+        => _snippets = new SnippetMatcher(Settings.Snippets, LayoutConverter.Pair);
+
+    /// <summary>
+    /// Поток ввода: не сокращение ли последнее слово. Если да — пробел глотаем,
+    /// а стирание и печать отдаём UI-потоку.
+    /// </summary>
+    private bool TryExpandSnippet()
+    {
+        var matcher = _snippets;
+        if (matcher.IsEmpty) return false;
+
+        var buffer = _buffer.Snapshot();
+        var word = SnippetMatcher.LastWord(buffer);
+        if (!matcher.TryMatch(word, out var text)) return false;
+
+        // В лог — только факт, без сокращения и без текста: и то и другое
+        // набрано человеком.
+        Log.Write("сниппет раскрыт");
+        _uiContext.Post(_ => ApplySnippet(buffer, word.Length, text), null);
+        return true;
+    }
+
+    /// <summary>
+    /// UI-поток: стереть сокращение и напечатать текст вместе с проглоченным пробелом.
+    ///
+    /// Между пробелом и этим моментом человек мог успеть набрать ещё что-то —
+    /// поток ввода от UI-потока теперь не зависит. Тогда сокращение уже не в
+    /// конце строки, и стирание пришлось бы на чужие символы. В этом случае
+    /// раскрытие отменяется и печатается только сам пробел: потерять сниппет не
+    /// страшно, испортить текст — страшно.
+    /// </summary>
+    private void ApplySnippet(string bufferAtMatch, int triggerLength, string text)
+    {
+        if (_buffer.Snapshot() != bufferAtMatch)
+        {
+            Sender.SendUnicode(" ");
+            ResetAll();
+            return;
+        }
+
+        if (Sender.SendBackspaces(triggerLength))
+            Sender.SendUnicode(text + " ");
+
+        // Напечатали не то, что вели в ленте, — она больше не отражает экран.
+        ResetAll();
+    }
+
     /// <summary>Список раскладок Windows в прошлый раз — чтобы не перечитывать их на каждое нажатие.</summary>
     private string _layoutSignature = string.Empty;
 
@@ -407,6 +471,8 @@ public sealed class App : IDisposable
 
             var pair = LayoutPair.Choose(SystemLayouts.Installed(), Settings.LayoutFirst, Settings.LayoutSecond);
             LayoutConverter.Pair = pair ?? LayoutPair.BuiltIn;
+            // Сокращения сравниваются по клавишам пары — новая пара, новые ключи.
+            RebuildSnippets();
         }
         catch (Exception ex)
         {
