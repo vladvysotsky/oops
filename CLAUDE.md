@@ -154,6 +154,34 @@ the whole-buffer fallback,
 selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
 `ClipboardSafe`), `NeverFixList`.
 
+**Exception, decided by the author: real-time correction returns in 2.5** —
+built properly this time and learning as it goes, not restored from the old
+code. The old version failed for reasons that are now known, and the competitor
+that does it (keyboop) documents the same failures in its own changelog: real
+words converted mid-phrase ("appconfig" → "фззсщташп"), short words, uppercase
+abbreviations, "ю/б/ж" inside a word read as punctuation, apps where the retype
+lands in the wrong window. The conditions it comes back under:
+- **Off by default, opt-in.** The hotkey model stays the default and the core.
+- **Only the last word, only at a word boundary**, decided by the same
+  `LanguageModel` gain as the hotkey path but with a stricter threshold: a wrong
+  correction mid-phrase costs far more than a missed one.
+- **One press of the layout hotkey right after an automatic fix undoes it** —
+  the expanding-scope model already does exactly that, so undo is not a new
+  mechanism.
+- **Learning from the user, in both directions**: an automatic fix undone at
+  once teaches "leave this word alone"; a word the user fixed by hotkey that
+  auto mode had left teaches "convert this one". Without this it is the old
+  feature again.
+- **What is learned is typed text, and "nothing typed reaches the disk" still
+  holds.** Store learned words as salted hashes, never plaintext: matching works,
+  reading them back does not. The settings then show a count and a reset button,
+  not a word list. Changing this needs the author's explicit decision.
+- **Never in a password field.** A corrected password is a failed login and a
+  confused user. Detect it (Win32 `ES_PASSWORD`, UI Automation `IsPassword`) and
+  stay out; when detection is not possible, stay out as well.
+- **Per-application exclusions** (terminals, IDEs, games), because the
+  boundary between "a word" and "a command" is not ours to judge there.
+
 ## Architecture
 
 - `Program.cs` — entry point, single-instance mutex, UI SyncContext.
@@ -169,6 +197,30 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   (the hook and the UI thread).
 - `Core/TypingBuffer.cs` — the ribbon of typed characters plus the static
   `StartOfLastWords` / `CountWords`. No cursor and no navigation — deliberately.
+- `Core/KeyboardLayouts.cs` + `Core/SystemLayouts.cs` — **any two layouts
+  installed in Windows, not just RU/EN.** A `KeyboardLayout` is a map
+  "physical key ↔ character", and conversion is POSITIONAL: find the character's
+  key in the source layout, take what the same key gives in the target. Windows
+  builds the map itself — `ToUnicodeEx` for every printable key, with and
+  without Shift, flag 0x4 so that probing a dead key (´ ^ in German) does not
+  leave it pressed for the user. Dead keys and ligatures are skipped: a
+  character that did not map to exactly one character would break the
+  length-preserving invariant. `LayoutPair` is the two layouts the hotkey
+  converts between; `LayoutPair.Choose` takes the pair picked in settings
+  (`LayoutFirst`/`LayoutSecond`, stored as HKL hex masked to 8 digits — x64
+  sign-extends values like 0xF0020409) and falls back to English + Russian,
+  else the first two, when a chosen layout was removed or both are the same.
+  **A pair, not "all installed layouts", by the author's decision**: with RU,
+  UA and EN, a word typed in Latin has two candidates, and choosing between
+  them is exactly the guessing this program refuses to do. App rebuilds the
+  pair before each conversion when `SystemLayouts.Signature()` changed —
+  layouts get added without restarting the program.
+  The built-in pair (`LayoutPair.BuiltIn`) is built from the JCUKEN↔QWERTY table
+  below and is used when Windows cannot be read, and in tests; a test asserts
+  it converts exactly like that table. `LayoutConverter.Pair` falls back to it
+  through a GETTER, not a field initializer: the built-in pair is itself built
+  from `LayoutConverter`'s table, and two static initializers referring to each
+  other would leave one of them null depending on which type is touched first.
 - `Core/LayoutConverter.cs` — the JCUKEN↔QWERTY table (`PairsLower`/`PairsUpper`,
   Shift symbols `@"`, `#№`, `&?`, `|/`, `~Ё`, `` `ё``). `ToRussian`/`ToEnglish`
   are 1-to-1; `AutoConvertWithDirection` picks the side **per word**, and
@@ -196,7 +248,22 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   was added to remove — and a lone press on "rfr" did nothing at all. Dropping
   the margin is safe because everything real measures negative: "email" −6.1,
   "password" −6.0, "online" −4.0, "Anderson" −4.0, "tot" −1.3, "photo.jpg" −0.7,
-  "https://example.com" −0.4, "get" −0.2. None of this applies to a selection —
+  "https://example.com" −0.4, "get" −0.2.
+  **Abbreviations are decided by pointing, not by the model.** A word of two or
+  more letters, all uppercase, is not a word at all, and letter-pair statistics
+  say nothing about it: real Russian abbreviations measured a gain of up to
+  +3.2 ("ПДД" → "GLL", "УФНС" → "EAYC"), English ones typed in the Russian
+  layout from −2.7 to +6.4 — the ranges overlap, no threshold separates them.
+  So such a word is converted when it is the whole scope (the user pointed at
+  exactly it) and left alone inside a phrase. The price, accepted: "нужен ФЗШ
+  ключ" no longer becomes "нужен API ключ" on the second press — select "ФЗШ"
+  for that. When EVERY word is uppercase it is CapsLock, not abbreviations, and
+  the model works as usual. A short word right after a number ("5 кг",
+  "100 гб") is a unit and is left alone the same way; digits and a separator
+  between digits are never converted ("5,5" would positionally become "5?5").
+  Numbers and protected words are skipped when looking for a converted
+  neighbour — "rfr 5 кг ltkf" used to keep "rfr", whose neighbour was "5".
+  None of this applies to a selection —
   see "Selection": there the conversion is literal, because a refusal there
   cannot be undone. Switched off by
   `AppSettings.SmartWordSelection` when the model gets it wrong and the hotkey
@@ -208,6 +275,11 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   into a byte each. "зфыыцщкв" is rejected not for being absent from a list but
   because "зз", "сщ" and "шп" hardly occur in Russian; a name like "Anderson" or
   "Helsinki" passes even though no word list contains it.
+  Tables exist for Russian and English only (`LanguageModel.Supports`). For a
+  pair with any other language there is nothing to judge by, and the gain is
+  treated as infinite: everything in the scope is converted, as it was before
+  the model existed. Going silent on such a pair would mean the hotkey simply
+  does not work there.
   A deliberate fallback to brute force was **tried and rejected**: when the smart
   pass changes nothing, converting everything anyway turns
   "https://example.com" into garbage on a single press, and a second press
@@ -283,13 +355,30 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
   you type, and the only thing that makes it usable is that it keeps none of it;
   the log cannot be an exception. The file is capped at 8 MB, the last five are
   kept.
+- `Core/RivalSwitchers.cs` — another keyboard-layout switcher running alongside
+  (Punto Switcher, Caramba and the like). Two programs with low-level keyboard
+  hooks get in each other's way silently: shortcuts do not fire, inserted text
+  arrives with gaps. Recognised by the PRODUCT NAME in the exe's resources, not
+  by the process name — Punto's process is a generic `ps.exe`, Caramba's carries
+  a version date. The path comes from `QueryFullProcessImageName` with
+  `PROCESS_QUERY_LIMITED_INFORMATION`, not `Process.MainModule`, which needs
+  read access to the other process's memory and is refused almost everywhere.
+  Runs off the UI thread a few seconds after start; warns once per program
+  (`AppSettings.RivalsWarned`) — some people run both on purpose.
+- Pause (tray menu, 15 min / 1 h / 3 h) is held in `App` only, never in
+  settings: after a restart the program simply works. It exists because a
+  program switched off with "Enabled" gets forgotten and then taken for broken.
+  Pausing stops a running dictation — the voice hotkey is not heard while
+  paused, so nothing else could stop it.
 - `Core/HotkeyConflicts.cs` — a check at startup for whether a shortcut is
   already taken by another program (`RegisterHotKey` +
   `ERROR_HOTKEY_ALREADY_REGISTERED`). It only catches those who register the
   same way; programs with their own low-level hook cannot be detected this way
   at all. The absence of a conflict here is not a guarantee — its presence is a
   definite answer.
-- `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` to the active window.
+- `Core/LayoutSwitcher.cs` — `WM_INPUTLANGCHANGEREQUEST` to the active window,
+  with the HKL of the pair's layout; a built-in layout has none and is looked up
+  by language as before.
 - `Core/LayoutTracker.cs` — detects a manual layout change → clears the buffer.
 - `Hooks/KeyboardHook.cs` — `WH_KEYBOARD_LL`. The character comes from
   `ToUnicodeEx` (flag 0x4, "do not change the state"), modifiers from
@@ -324,7 +413,12 @@ selection handling via Ctrl+C/Ctrl+V (`SelectionConverter`, `ClipboardPaste`,
 - `UI/SettingsForm.cs` — the settings window. **Three tabs** (general / hotkeys +
   probe / behaviour) on the same `SegmentedControl` as the language switch.
   The probe lives next to the hotkeys: it is needed exactly when a shortcut is
-  silent and is being changed. The page height is measured after layout
+  silent and is being changed. The layout pair is chosen at the top of
+  "Behaviour", shown from two installed layouts up — with two there is nothing
+  to choose, but hiding the rows until a third was added meant the requested
+  feature could not be found at all — on `SegmentedControl`s rather than a `ComboBox` like every
+  other choice here; picking the same layout twice is refused on save, like
+  clashing hotkeys. The page height is measured after layout
   (`FitPages`) — there is no scrolling on purpose, it would hide part of the
   settings, and the window does not jump when switching tabs. The root is a
   `TableLayoutPanel` with four rows, NOT Dock.Fill+Dock.Bottom: docking order in

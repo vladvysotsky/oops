@@ -392,14 +392,28 @@ internal static class Theme
     public static void ApplyMenuChrome(ToolStrip menu)
     {
         if (!IsDark) return;
+        ApplyMenuChrome(menu, new ToolStripProfessionalRenderer(new DarkMenuColors()));
+    }
+
+    /// <summary>
+    /// Рекурсивно, по всем подменю. Выпадающий список подменю — отдельный
+    /// ToolStrip со СВОИМ рендерером и своими цветами, родительские он не
+    /// наследует: пункты «Приостановить → На 15 минут» вышли тёмным текстом на
+    /// тёмном фоне, и прочитать их было нельзя. Пока подменю в трее не было,
+    /// хватало одного уровня.
+    /// </summary>
+    private static void ApplyMenuChrome(ToolStrip menu, ToolStripRenderer renderer)
+    {
         menu.RenderMode = ToolStripRenderMode.Professional;
-        menu.Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors());
+        menu.Renderer = renderer;
         menu.BackColor = Surface;
         menu.ForeColor = Text;
         foreach (ToolStripItem item in menu.Items)
         {
             item.BackColor = Surface;
             item.ForeColor = item is ToolStripSeparator ? Border : Text;
+            if (item is ToolStripDropDownItem { HasDropDownItems: true } parent)
+                ApplyMenuChrome(parent.DropDown, renderer);
         }
     }
 
