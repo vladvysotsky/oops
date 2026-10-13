@@ -21,12 +21,26 @@ public static class LayoutSwitcher
     [DllImport("user32.dll")]
     private static extern int GetKeyboardLayoutList(int nBuff, [Out] IntPtr[] lpList);
 
-    public static void SwitchToRussian() => SwitchTo(LANG_RUSSIAN);
-    public static void SwitchToEnglish() => SwitchTo(LANG_ENGLISH);
-
-    private static void SwitchTo(ushort primaryLang)
+    /// <summary>
+    /// Переключить на раскладку пары. У системной раскладки есть свой HKL —
+    /// его и просим. У встроенной HKL нет, и тогда ищем установленную
+    /// раскладку того же языка, как раньше для русской и английской.
+    /// </summary>
+    public static void SwitchTo(KeyboardLayout layout)
     {
-        var hkl = FindInstalledLayout(primaryLang);
+        var hkl = layout.Handle != IntPtr.Zero ? layout.Handle : FindInstalledLayout(PrimaryLanguage(layout.Language));
+        Post(hkl);
+    }
+
+    private static ushort PrimaryLanguage(string iso) => iso switch
+    {
+        "ru" => LANG_RUSSIAN,
+        "en" => LANG_ENGLISH,
+        _ => (ushort)0,
+    };
+
+    private static void Post(IntPtr hkl)
+    {
         if (hkl == IntPtr.Zero) return;
         var hwnd = GetForegroundWindow();
         if (hwnd == IntPtr.Zero) return;
@@ -35,6 +49,7 @@ public static class LayoutSwitcher
 
     private static IntPtr FindInstalledLayout(ushort primaryLang)
     {
+        if (primaryLang == 0) return IntPtr.Zero;
         int count = GetKeyboardLayoutList(0, Array.Empty<IntPtr>());
         if (count <= 0) return IntPtr.Zero;
         var list = new IntPtr[count];

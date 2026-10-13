@@ -40,6 +40,41 @@ public sealed class App : IDisposable
     }
     private volatile bool _hotkeysSuspended;
 
+    /// <summary>
+    /// До какого момента (UTC, в тиках) программа на паузе; 0 — не на паузе.
+    ///
+    /// Пауза, а не только «Включено»: выключенную программу забывают включить
+    /// обратно и потом считают сломанной. Пауза кончается сама. В настройки она
+    /// не пишется намеренно — после перезапуска программа просто работает.
+    ///
+    /// Тики через Interlocked: пишет UI-поток (меню трея), а читает поток ввода
+    /// на каждом нажатии.
+    /// </summary>
+    private long _pausedUntilTicks;
+
+    public bool IsPaused => DateTime.UtcNow.Ticks < Interlocked.Read(ref _pausedUntilTicks);
+
+    public DateTime PausedUntilUtc => new(Interlocked.Read(ref _pausedUntilTicks), DateTimeKind.Utc);
+
+    public void PauseFor(TimeSpan duration)
+    {
+        Interlocked.Exchange(ref _pausedUntilTicks, (DateTime.UtcNow + duration).Ticks);
+        // Идущую диктовку завершаем сразу: на паузе сочетание не слушается, и
+        // остановить запись было бы нечем до конца паузы или до потолка длины.
+        if (_recorder.IsRecording) StopVoice();
+        // Набранное до паузы к тексту после неё отношения не имеет: человек
+        // за это время печатал, а мы не смотрели.
+        ResetAll();
+        Log.Write($"пауза на {duration.TotalMinutes:F0} мин");
+    }
+
+    public void Resume()
+    {
+        Interlocked.Exchange(ref _pausedUntilTicks, 0);
+        ResetAll();
+        Log.Write("пауза снята");
+    }
+
     private readonly TypingBuffer _buffer = new();
     private readonly ScopeEditor _scope = new();
     private readonly LayoutTracker _layoutTracker = new();
@@ -171,6 +206,7 @@ public sealed class App : IDisposable
         _scope.ExpandWindow = TimeSpan.FromSeconds(Settings.ExpandWindowSeconds);
         Sender.UseCharByChar(Settings.CharByCharTyping);
         LayoutConverter.SmartWordSelection = Settings.SmartWordSelection;
+        RefreshLayoutPair(force: true);
         _recorder.MaxDuration = TimeSpan.FromSeconds(Settings.VoiceMaxSeconds);
     }
 
@@ -224,9 +260,11 @@ public sealed class App : IDisposable
         // доходит ли сочетание, и лог не становится записью всего ввода.
         Log.Key("нажатие", (int)e.VirtualKey, e.Ctrl, e.Alt, e.Shift, e.Win, e.IsRepeat);
 
-        if (!Settings.Enabled || HotkeysSuspended)
+        if (!Settings.Enabled || HotkeysSuspended || IsPaused)
         {
-            Log.Write(Settings.Enabled ? "  пропущено: открыты настройки" : "  пропущено: выключено");
+            Log.Write(!Settings.Enabled ? "  пропущено: выключено"
+                : IsPaused ? "  пропущено: пауза"
+                : "  пропущено: открыты настройки");
             return;
         }
 
@@ -347,8 +385,44 @@ public sealed class App : IDisposable
           or Keys.Menu or Keys.LMenu or Keys.RMenu
           or Keys.LWin or Keys.RWin;
 
+    /// <summary>Список раскладок Windows в прошлый раз — чтобы не перечитывать их на каждое нажатие.</summary>
+    private string _layoutSignature = string.Empty;
+
+    /// <summary>
+    /// Собрать пару раскладок из установленных в Windows и настроек. Только в
+    /// UI-потоке.
+    ///
+    /// Вызывается перед каждой конвертацией, а не только при старте: раскладку
+    /// добавляют и удаляют, не перезапуская программу, и пара должна это
+    /// заметить. Само сравнение — строка из нескольких HKL, перечитываются
+    /// карты только когда список и правда поменялся.
+    /// </summary>
+    private void RefreshLayoutPair(bool force = false)
+    {
+        try
+        {
+            var signature = SystemLayouts.Signature();
+            if (!force && signature == _layoutSignature) return;
+            _layoutSignature = signature;
+
+            var pair = LayoutPair.Choose(SystemLayouts.Installed(), Settings.LayoutFirst, Settings.LayoutSecond);
+            LayoutConverter.Pair = pair ?? LayoutPair.BuiltIn;
+        }
+        catch (Exception ex)
+        {
+            // Прочитать раскладки не вышло — работаем по встроенной таблице
+            // RU↔EN, как раньше, а не молчим.
+            LayoutConverter.Pair = LayoutPair.BuiltIn;
+            Log.Write("раскладки системы не прочитаны: " + ex.Message);
+        }
+        Log.Write($"пара раскладок: {LayoutConverter.Pair.First.Language} {LayoutConverter.Pair.First.Id}"
+                  + $" ↔ {LayoutConverter.Pair.Second.Language} {LayoutConverter.Pair.Second.Id}");
+    }
+
     private void RunStep(bool layout, DateTime pressedAtUtc)
     {
+        if (layout) RefreshLayoutPair();
+
         // Ждём, пока пользователь отпустит модификаторы хоткея: иначе зажатый Ctrl
         // превратит наши Backspace в Ctrl+Backspace (удаление слова целиком),
         // а Ctrl+C для чтения выделения уйдёт как Ctrl+Alt+C и не сработает.
@@ -398,17 +472,17 @@ public sealed class App : IDisposable
         }
 
         string converted;
-        var dir = LayoutConverter.Direction.None;
+        KeyboardLayout? target = null;
         // literal: выделение конвертируется целиком, без модели языка. Человек
         // уже показал границу руками, а второго нажатия здесь нет — оно прочтёт
         // то же выделение и примет то же решение.
-        if (layout) (converted, dir) = LayoutConverter.AutoConvertWithDirection(selection, literal: true);
+        if (layout) (converted, target) = LayoutConverter.Convert(selection, literal: true);
         else converted = ScopeEditor.ToggleCase(selection);
 
         if (converted != selection)
         {
             Sender.SendUnicode(converted);
-            SwitchSystemLayout(dir);
+            SwitchSystemLayout(target);
         }
 
         // Мы переписали не то, что вели в ленте — она больше не отражает экран.
@@ -433,7 +507,7 @@ public sealed class App : IDisposable
         if (!Sender.SendBackspaces(edit.EraseCount)) { ResetAll(); return; }
         if (!Sender.SendUnicode(edit.Text)) { ResetAll(); return; }
 
-        SwitchSystemLayout(edit.Direction);
+        SwitchSystemLayout(edit.SwitchTo);
 
         // Лента теперь соответствует тому, что на экране.
         _buffer.Reset(edit.NewBufferContent);
@@ -684,13 +758,12 @@ public sealed class App : IDisposable
     /// и не сбросил ленту — иначе следующее нажатие хоткея не смогло бы
     /// расширить область.
     /// </summary>
-    private void SwitchSystemLayout(LayoutConverter.Direction dir)
+    private void SwitchSystemLayout(KeyboardLayout? target)
     {
-        if (dir == LayoutConverter.Direction.None) return;
+        if (target == null) return;
 
         _layoutTracker.NoteSelfSwitch();
-        if (dir == LayoutConverter.Direction.ToRu) LayoutSwitcher.SwitchToRussian();
-        else LayoutSwitcher.SwitchToEnglish();
+        LayoutSwitcher.SwitchTo(target);
     }
 
     public void Dispose()

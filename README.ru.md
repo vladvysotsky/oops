@@ -19,7 +19,8 @@ second fixes everything you typed. Interface and docs are in Russian.</sub>
 
 ## 🧼 Что делает
 
-- **Правит раскладку** RU ↔ EN у только что набранного текста.
+- **Правит раскладку** у только что набранного текста — между любыми двумя
+  раскладками, добавленными в Windows, по умолчанию RU ↔ EN.
 - **Меняет регистр** — ВЕРХНИЙ ↔ нижний, по той же логике.
 - **Конвертирует выделенное** целиком, если что-то выделено мышью.
 - **Переводит** RU ↔ EN прямо в поле ввода — *бета*.
@@ -126,7 +127,7 @@ second fixes everything you typed. Interface and docs are in Russian.</sub>
 из того же релиза:
 
 ```powershell
-Get-FileHash .\oops-Setup-2.2.2.exe -Algorithm SHA256
+Get-FileHash .\oops-Setup-2.3.0.exe -Algorithm SHA256
 ```
 
 ## 🔄 Обновления
