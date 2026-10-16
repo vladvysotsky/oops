@@ -792,6 +792,16 @@ user block the program from starting forever.
   is most of what people type into; matching window class names fails on every
   custom control. Such a check would turn the program off precisely where it is
   needed and leave "the hotkey does nothing" with no explanation.
+- **Never `Application.Exit()` — exit through `TrayContext.ExitThread()`.**
+  `Application.Exit` stops the message loops of EVERY thread, the hook thread
+  included, and only then runs our shutdown — which unhooks by invoking into
+  that already dead thread. The exit failed, the process stayed alive holding
+  its DLLs, and two users updating to 2.3.0 got an installer stuck on a locked
+  `Accessibility.dll` until they killed oops by hand. Hence: the update dialog
+  returns OK and the tray exits; `HookThread.Invoke` skips a dead thread;
+  `App.Dispose` runs each step on its own (`Quietly`). And `Oops.iss` has
+  `CloseApplications=force`: a tray app with no window never sees Restart
+  Manager's polite request, and older versions still exit the broken way.
 - An empty scope step (`ScopeEditor`, "nothing left to expand") does NOT update
   `_lastPressUtc`. Otherwise frequent presses extend the expansion window
   forever: a person presses the hotkey once a second and sees nothing at all.
