@@ -27,6 +27,10 @@ public static class Changelog
 {
     public static readonly IReadOnlyList<ChangeSet> All = new[]
     {
+        new ChangeSet(new Version(2, 3, 1), new[]
+        {
+            new ChangeEntry("news.2_3_1.update.title", "news.2_3_1.update.body"),
+        }),
         new ChangeSet(new Version(2, 3, 0), new[]
         {
             new ChangeEntry("news.2_3.layouts.title", "news.2_3.layouts.body", HotkeyRef.Convert),
