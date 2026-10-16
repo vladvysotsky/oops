@@ -47,6 +47,15 @@ public sealed class KeyboardHook : IDisposable
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int nVirtKey);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetKeyboardLayout(uint idThread);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int ToUnicodeEx(uint wVirtKey, uint wScanCode, byte[] lpKeyState,
         [Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pwszBuff, int cchBuff,
@@ -347,9 +356,9 @@ public sealed class KeyboardHook : IDisposable
 
     private static char? TryResolveChar(uint vk, uint scan, bool shift)
     {
-        // Раскладка потока, который получает ввод, а не окна переднего плана:
-        // у полей WebView2 это разные потоки (см. InputFocus).
-        var hkl = Oops.Core.InputFocus.Layout();
+        var hwnd = GetForegroundWindow();
+        uint tid = GetWindowThreadProcessId(hwnd, out _);
+        var hkl = GetKeyboardLayout(tid);
 
         var state = new byte[256];
         GetKeyboardState(state);
