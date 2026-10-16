@@ -13,6 +13,9 @@ public static class LayoutSwitcher
     private const ushort LANG_ENGLISH = 0x09;
 
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll")]
@@ -39,9 +42,7 @@ public static class LayoutSwitcher
     private static void Post(IntPtr hkl)
     {
         if (hkl == IntPtr.Zero) return;
-        // Просим окно с фокусом ввода: у полей WebView2 раскладка своя, и
-        // запрос окну переднего плана её не меняет (см. InputFocus).
-        var hwnd = InputFocus.Window();
+        var hwnd = GetForegroundWindow();
         if (hwnd == IntPtr.Zero) return;
         PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl);
     }

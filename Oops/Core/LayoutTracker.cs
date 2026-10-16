@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Oops.Core;
 
 /// <summary>
@@ -12,6 +14,10 @@ namespace Oops.Core;
 /// </summary>
 public sealed class LayoutTracker
 {
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll")] private static extern IntPtr GetKeyboardLayout(uint idThread);
+
     /// <summary>
     /// Сколько времени после нашего переключения смены раскладки считаются нашими.
     /// Переключение идёт через PostMessage и применяется асинхронно, поэтому
@@ -30,8 +36,11 @@ public sealed class LayoutTracker
     /// <summary>Возвращает true, только если раскладку сменил пользователь, а не мы.</summary>
     public bool UserChangedLayout()
     {
-        if (InputFocus.Window() == IntPtr.Zero) return false;
-        var hkl = InputFocus.Layout();
+        var hwnd = GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return false;
+
+        var tid = GetWindowThreadProcessId(hwnd, out _);
+        var hkl = GetKeyboardLayout(tid);
 
         lock (_gate) return UserChangedLayoutLocked(hkl);
     }
