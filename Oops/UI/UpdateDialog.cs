@@ -206,10 +206,12 @@ public sealed class UpdateDialog : ThemedForm
             _status.Text = L10n.T("update.launching");
             UpdateService.LaunchInstaller(path);
 
-            // Инсталлятор закроет нашу копию сам, но выходим явно, чтобы он
-            // наверняка смог заменить файлы.
+            // Выходим сами, не дожидаясь инсталлятора, — но через трей
+            // (OfferUpdate), а не Application.Exit: тот гасит циклы сообщений
+            // ВСЕХ потоков, включая поток хуков, и снимать хуки при выходе было
+            // уже не в ком. Выход падал, процесс оставался жить и держал DLL —
+            // инсталлятор 2.3.0 упирался в занятый Accessibility.dll.
             DialogResult = DialogResult.OK;
-            Application.Exit();
         }
         catch (Exception ex)
         {

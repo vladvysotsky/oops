@@ -310,7 +310,8 @@ public sealed class TrayContext : ApplicationContext
     private void OfferUpdate(ReleaseInfo release)
     {
         using var dlg = new UpdateDialog(release);
-        dlg.ShowDialog();
+        // OK — инсталлятор запущен, и ему надо освободить файлы.
+        if (dlg.ShowDialog() == DialogResult.OK) ExitThread();
     }
 
     /// <summary>
