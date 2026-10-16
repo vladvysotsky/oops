@@ -768,19 +768,25 @@ public sealed class App : IDisposable
 
     public void Dispose()
     {
-        _hookWatchdog.Stop();
-        _hookWatchdog.Dispose();
-        _voiceTick.Stop();
-        _voiceTick.Dispose();
-        _voiceCts?.Cancel();
-        _voiceCts?.Dispose();
-        _recorder.Dispose();
-        VoiceInput.Unload();
-        Translator.Unload();
-        _kbHook.Dispose();
-        _mouseHook.Dispose();
-        _fgWatcher.Dispose();
+        // Каждый шаг отдельно: при выходе сбой одного не должен оставить
+        // остальное неосвобождённым — а исключение отсюда показывало окно
+        // ошибки, и процесс жил дальше, держа файлы, которые меняет инсталлятор.
+        Quietly(() => { _hookWatchdog.Stop(); _hookWatchdog.Dispose(); });
+        Quietly(() => { _voiceTick.Stop(); _voiceTick.Dispose(); });
+        Quietly(() => { _voiceCts?.Cancel(); _voiceCts?.Dispose(); });
+        Quietly(_recorder.Dispose);
+        Quietly(VoiceInput.Unload);
+        Quietly(Translator.Unload);
+        Quietly(_kbHook.Dispose);
+        Quietly(_mouseHook.Dispose);
+        Quietly(_fgWatcher.Dispose);
         // Последним: хуки снимаются В НЁМ, до этого поток нужен живым.
-        _inputThread.Dispose();
+        Quietly(_inputThread.Dispose);
+    }
+
+    private static void Quietly(Action step)
+    {
+        try { step(); }
+        catch (Exception ex) { Log.Write($"при выходе: {ex.GetType().Name}: {ex.Message}"); }
     }
 }
