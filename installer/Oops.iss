@@ -44,7 +44,10 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=..\Oops\Resources\icon.ico
-CloseApplications=yes
+; force, а не yes: oops живёт в трее без окна, и вежливая просьба Restart
+; Manager закрыться до него не доходит — установщик останавливался на занятом
+; Accessibility.dll, и процесс приходилось снимать руками. force завершает его.
+CloseApplications=force
 RestartApplications=no
 
 [Languages]

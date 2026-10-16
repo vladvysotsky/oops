@@ -75,6 +75,10 @@ public sealed class HookThread : IDisposable
     {
         if (IsCurrent) { action(); return; }
         ObjectDisposedException.ThrowIf(_disposed, this);
+        // Цикл уже остановлен (так делал Application.Exit) — выполнить негде,
+        // а Send в мёртвый поток при выходе ронял его. Хуки потока умирают
+        // вместе с ним, снимать их некому и незачем.
+        if (!_thread.IsAlive) return;
         _context!.Send(_ => action(), null);
     }
 
