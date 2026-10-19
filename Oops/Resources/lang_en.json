@@ -121,6 +121,8 @@
   "news.2_3.pause.title": "Pause from the tray",
   "news.2_3.rivals.body": "If Punto Switcher, Caramba or a similar program is running alongside, oops says so once: two programs that intercept the keyboard get in each other's way, and shortcuts start working only now and then.",
   "news.2_3.rivals.title": "A warning about another layout switcher",
+  "news.2_3_1.update.body": "Nothing to do. The installer used to stop on a file in use (Accessibility.dll), and oops had to be closed from Task Manager. Now the installer closes the running copy itself, and the app exits completely.",
+  "news.2_3_1.update.title": "Updates no longer get stuck",
   "news.header.hint": "Versions on the left, what they brought on the right. The shortcuts shown are the ones you have right now.",
   "news.header.plain": "What's new in oops",
   "news.header.updated": "oops has been updated to {0}",
