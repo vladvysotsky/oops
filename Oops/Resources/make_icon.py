@@ -1,9 +1,8 @@
 """Generate the oops icon: a keycap carrying both legends, Q and Й.
 
 That is how the program converts — positionally: the key that gives Q in the
-English layout gives Й in the Russian one. Both legends fit from 40 px up; the
-tray sizes (16-32 px) cannot hold two letters, so they show the keycap with Й
-alone. Й is cut through the keycap, so the tile's gradient shows in it.
+English layout gives Й in the Russian one. Both legends are on every size,
+the 16 px tray icon included — the author's requirement. Й is cut through the keycap, so the tile's gradient shows in it.
 Shapes are drawn oversampled and scaled down, but at small sizes the
 letter is rendered at the target size itself: a downscaled glyph turns into a
 blur, a hinted one stays sharp.
@@ -57,9 +56,9 @@ def tile(s: int) -> Image.Image:
 
 def keycap(s: int, small: bool) -> Image.Image:
     """White keycap with a lip, on a transparent layer, drawn at s pixels."""
-    # Small sizes give the keycap more of the tile: two pixels of margin are
-    # all a 16 px icon can spare.
-    m = s * (0.12 if small else 0.17)
+    # Small sizes give the keycap more of the tile: two letters on a
+    # 16 px icon need every pixel.
+    m = s * (0.10 if small else 0.17)
     lip = s * (0.09 if small else 0.075)
     r = round(s * 0.12)
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -83,7 +82,7 @@ def cut_out(layer: Image.Image, mask: Image.Image) -> None:
 
 def make(px: int) -> Image.Image:
     s = px * OVERSAMPLE
-    if px >= 40:
+    if px >= 32:
         # Big enough for both glyphs to survive the downscale.
         cap = keycap(s, small=False)
         cut_out(cap, glyph_mask(s, "Й", s * 0.615, s * 0.585, s * 0.30))
@@ -92,11 +91,14 @@ def make(px: int) -> Image.Image:
         ImageDraw.Draw(img).text((s * 0.385, s * 0.375), "Q", font=font(s * 0.30), fill=INK, anchor="mm")
         return img.resize((px, px), Image.LANCZOS)
 
-    # Shapes oversampled, the glyph at native size and nudged up off the lip.
+    # Shapes oversampled, the glyphs at native size: a downscaled glyph blurs,
+    # a hinted one stays sharp. Both letters stay even at 16 px, by the
+    # author's decision — the pair IS the icon.
     cap = keycap(s, small=True).resize((px, px), Image.LANCZOS)
-    cut_out(cap, glyph_mask(px, "Й", px / 2, px * 0.47, px * 0.62))
+    cut_out(cap, glyph_mask(px, "Й", px * 0.68, px * 0.58, px * 0.46))
     img = tile(s).resize((px, px), Image.LANCZOS)
     img.alpha_composite(cap)
+    ImageDraw.Draw(img).text((px * 0.33, px * 0.36), "Q", font=font(px * 0.44), fill=INK, anchor="mm")
     return img
 
 
