@@ -11,3 +11,6 @@ build/
 # (npx skills add emilkowalski/skills), в репозитории ему не место.
 .agents/
 .claude/
+
+# Python bytecode from tools such as Resources/make_icon.py
+__pycache__/
