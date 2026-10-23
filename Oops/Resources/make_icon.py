@@ -1,4 +1,4 @@
-"""Generate the oops icon: one keycap carrying both legends, Q and Й.
+"""Generate the oops icon: a keycap carrying both legends, Q and Й, in white.
 
 That is how the program converts — positionally: the key that gives Q in the
 English layout gives Й in the Russian one. Both legends fit from 40 px up; the
@@ -16,12 +16,11 @@ OUT = Path(__file__).parent / "icon.ico"
 SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 OVERSAMPLE = 8
 
-TILE_TOP = (0x3B, 0x7B, 0xF0)
-TILE_BOTTOM = (0x24, 0x52, 0xC8)
-KEY_FACE = (0xFF, 0xFF, 0xFF)
-KEY_LIP = (0xC4, 0xD3, 0xEE)
-INK = (0x1A, 0x1D, 0x23)
-ACCENT = (0x2D, 0x6C, 0xDF)
+# Blue to purple, the gradient the first icon had.
+TILE_TOP = (0x2D, 0x6C, 0xDF)
+TILE_BOTTOM = (0x74, 0x38, 0xD6)
+KEY_LIP = (0x4A, 0x22, 0x9C)
+INK = (0xFF, 0xFF, 0xFF)
 
 FONTS = (
     "segoeuib.ttf",                                        # Windows
@@ -41,25 +40,21 @@ def font(size: float) -> ImageFont.FreeTypeFont:
 
 
 def keycap(s: int, small: bool) -> Image.Image:
-    """Blue tile with a white keycap, drawn at s pixels."""
-    tile = Image.new("RGBA", (s, s))
-    d = ImageDraw.Draw(tile)
-    for y in range(s):
-        t = y / (s - 1)
-        d.line([(0, y), (s, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(TILE_TOP, TILE_BOTTOM)))
-    mask = Image.new("L", (s, s), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, s - 1, s - 1], radius=round(s * 0.22), fill=255)
+    """The whole tile is the keycap: a gradient face over a darker lip."""
+    lip = round(s * (0.07 if small else 0.06))
+    r = round(s * 0.22)
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    img.paste(tile, mask=mask)
+    ImageDraw.Draw(img).rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill=KEY_LIP)
 
-    # Small sizes give the keycap more of the tile: two pixels of margin are
-    # all a 16 px icon can spare.
-    m = s * (0.12 if small else 0.17)
-    lip = s * (0.09 if small else 0.075)
-    r = round(s * 0.12)
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle([m, m, s - m, s - m], radius=r, fill=KEY_LIP)
-    d.rounded_rectangle([m, m, s - m, s - m - lip], radius=r, fill=KEY_FACE)
+    face_h = s - lip
+    grad = Image.new("RGBA", (s, face_h))
+    d = ImageDraw.Draw(grad)
+    for y in range(face_h):
+        t = y / (face_h - 1)
+        d.line([(0, y), (s, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(TILE_TOP, TILE_BOTTOM)))
+    mask = Image.new("L", (s, face_h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, s - 1, face_h - 1], radius=r, fill=255)
+    img.paste(grad, (0, 0), mask)
     return img
 
 
@@ -72,13 +67,13 @@ def make(px: int) -> Image.Image:
     if px >= 40:
         # Big enough for both glyphs to survive the downscale.
         img = keycap(s, small=False)
-        legend(img, "Q", s * 0.385, s * 0.375, s * 0.30, INK)
-        legend(img, "Й", s * 0.615, s * 0.585, s * 0.30, ACCENT)
+        legend(img, "Q", s * 0.34, s * 0.33, s * 0.38, INK)
+        legend(img, "Й", s * 0.66, s * 0.61, s * 0.38, INK)
         return img.resize((px, px), Image.LANCZOS)
 
     img = keycap(s, small=True).resize((px, px), Image.LANCZOS)
     # Native-size glyph, nudged up off the keycap's lip.
-    legend(img, "Й", px / 2, px * 0.47, px * 0.62, ACCENT)
+    legend(img, "Й", px / 2, px * 0.46, px * 0.72, INK)
     return img
 
 
