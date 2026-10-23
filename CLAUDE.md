@@ -37,16 +37,18 @@ have just typed, on a hotkey. Works globally, in every application.
 ## Git
 
 - Development branch: `prerelease` — all work goes there. The user's local
-  checkout is on it too. `claude/amazing-bardeen-ZvoqL` is the old branch, its
-  PR #1 has been merged.
+  checkout is on it too.
 - **Commit messages, pull request titles and pull request descriptions are
   written in English.** The repository is public and the code is read by people
   who do not speak Russian; a history they cannot read is a history that does
   not help them. The rule that a message says *why*, not only *what*, stays —
   it just holds in English now.
-- **Do not add `Co-Authored-By` trailers to commits.** The repository is public,
-  and the contributor list is the author's. Commit messages describe the change
-  and why, and nothing else.
+- **No assistant attribution anywhere** — no `Co-Authored-By` or session
+  trailers in commits, no "Generated with" lines in pull requests, commits
+  authored as the repository owner, branches without tool prefixes. The
+  repository is public and the contributor list is the author's; the whole
+  history was rewritten once to remove such traces. Commit messages describe
+  the change and why, and nothing else.
 - README lives in two files: `README.md` (English, what GitHub shows by default)
   and `README.ru.md`. They are cross-linked at the top; a change to one belongs
   in the other in the same commit.
@@ -334,6 +336,23 @@ lands in the wrong window. The conditions it comes back under:
   the live transcript. The window MUST be non-activating (`ShowWithoutActivation`
   + `WS_EX_NOACTIVATE`): by taking focus it would take away the very field the
   text is being typed into.
+- `Core/Snippets.cs` + `UI/SnippetsForm.cs` — snippets (2.4): an abbreviation
+  typed and followed by Space is replaced with its text. `App.OnKeyDown` checks
+  the last word of `TypingBuffer` on Space, swallows the Space on a match and
+  Posts the rewrite (Backspace × trigger length, then text + space) to the UI
+  thread; if the buffer changed in between, only the swallowed Space is typed.
+  The trigger is matched **by keys, not letters** (`SnippetMatcher.Key`: a
+  character of the pair's second layout is mapped to the same key of the first,
+  then lower-cased) — "!ee", "!уу" and "!EE" are one snippet, otherwise it would
+  go silent exactly when the layout is wrong, which is this program's whole job.
+  This is not guessing: the user defined the abbreviation. A trigger cannot
+  contain whitespace (it could never be typed), and the editor refuses two
+  triggers on the same keys. Snippets are stored in `settings.json` as **plain
+  text, by the author's decision**: it is text the user wrote into the settings,
+  not text captured from typing. Expansion is off while the editor is open
+  (`SnippetsSuspended`), or typing a trigger into it would expand — but the
+  hotkeys stay on (NOT `HotkeysSuspended`): the layout gets mixed up in those
+  fields like anywhere else, and the editor records no shortcuts.
 - `Core/TextReplacer.cs` + `UI/ReplaceForm.cs` — find and replace in the selected
   text, plain and by regular expression, with a wizard (ready-made rules +
   building blocks inserted into the search field). The search **must** have a

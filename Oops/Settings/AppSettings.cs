@@ -130,6 +130,16 @@ public sealed class AppSettings
     public string LayoutFirst { get; set; } = string.Empty;
     public string LayoutSecond { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Сниппеты: сокращение → текст. Обычным текстом, решение автора: это то,
+    /// что человек вписал сам, а не перехваченный набор, так что правилу
+    /// «набранное не попадает на диск» оно не противоречит. Шифровать средствами
+    /// Windows смысла мало — расшифровывает та же учётная запись, то есть и любая
+    /// программа, запущенная от неё, — а перенести файл на другую машину стало бы
+    /// нельзя.
+    /// </summary>
+    public List<Oops.Core.Snippet> Snippets { get; set; } = new();
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");
@@ -173,6 +183,13 @@ public sealed class AppSettings
         RivalsWarned ??= new();
         LayoutFirst ??= string.Empty;
         LayoutSecond ??= string.Empty;
+        Snippets ??= new();
+        Snippets.RemoveAll(s => s == null);
+        foreach (var snippet in Snippets)
+        {
+            snippet.Trigger ??= string.Empty;
+            snippet.Text ??= string.Empty;
+        }
 
         ConvertHotkey = Fix(ConvertHotkey, HotkeyConfig.Default);
         ChangeCaseHotkey = Fix(ChangeCaseHotkey, HotkeyConfig.ChangeCaseDefault);

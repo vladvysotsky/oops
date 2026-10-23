@@ -168,6 +168,9 @@ public sealed class TrayContext : ApplicationContext
         var miSettings = new ToolStripMenuItem(L10n.T("tray.settings"));
         miSettings.Click += (_, _) => ShowSettings();
 
+        var miSnippets = new ToolStripMenuItem(L10n.T("tray.snippets"));
+        miSnippets.Click += (_, _) => ShowSnippets();
+
         _miUpdate = new ToolStripMenuItem();
         _miUpdate.Click += async (_, _) =>
         {
@@ -199,6 +202,7 @@ public sealed class TrayContext : ApplicationContext
             _miResume,
             new ToolStripSeparator(),
             miSettings,
+            miSnippets,
             _miUpdate,
             miNews,
             miFeedback,
@@ -260,6 +264,30 @@ public sealed class TrayContext : ApplicationContext
         finally
         {
             _app.HotkeysSuspended = false;
+        }
+    }
+
+    private void ShowSnippets()
+    {
+        // Пока окно открыто, сниппеты не раскрываются — иначе сокращение в поле
+        // «сокращение» тут же заменилось бы текстом. Хоткеи работают: раскладку
+        // в этих полях путают так же, как везде.
+        _app.SnippetsSuspended = true;
+        try
+        {
+            if (!SnippetsForm.Edit(_app.Settings)) return;
+            var error = _app.Settings.Save();
+            _app.ApplySettings();
+
+            if (error != null)
+                Notice.Error(null, L10n.T("save.failed.title"),
+                    L10n.T("save.failed.body"),
+                    L10n.T("save.failed.hint", AppSettings.Location),
+                    error, reportContext: "Не удалось сохранить сниппеты");
+        }
+        finally
+        {
+            _app.SnippetsSuspended = false;
         }
     }
 

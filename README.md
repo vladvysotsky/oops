@@ -22,6 +22,7 @@ Works in every Windows application: browsers, messengers, IDEs, the terminal.
 - **Translates** RU ↔ EN right in the input field — *beta*.
 - **Types what you dictate** — *beta*.
 - **Finds and replaces** inside a selection, regular expressions included — *beta*.
+- **Expands snippets**: type an abbreviation and a space, get the full text.
 
 Translation and speech recognition run **on your machine**: neither the text nor
 the audio is sent anywhere. The models are downloaded once and need no internet
@@ -97,6 +98,16 @@ tab — the models are downloaded there too.
 
 The audio exists only in memory and only until recognition finishes — it is
 never written to disk.
+
+## ✂️ Snippets
+
+Tray menu → **Snippets…**: an abbreviation on the left, the text it expands
+into on the right. Type the abbreviation and a space, and it is replaced. The
+layout and case do not matter — `!ee`, `!уу` and `!EE` are the same keys, so a
+snippet works even when the layout is the wrong one.
+
+Snippets are stored in `settings.json` as plain text: you wrote them yourself,
+and you can see and copy them there. Do not put passwords in a snippet.
 
 ## 📋 The clipboard stays clean
 
