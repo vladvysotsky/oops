@@ -2,10 +2,10 @@
 
 That is how the program converts — positionally: the key that gives Q in the
 English layout gives Й in the Russian one. Both legends are on every size,
-the 16 px tray icon included — the author's requirement. Й is cut through the keycap, so the tile's gradient shows in it.
-Shapes are drawn oversampled and scaled down, but at small sizes the
-letter is rendered at the target size itself: a downscaled glyph turns into a
-blur, a hinted one stays sharp.
+the 16 px tray icon included — the author's requirement. Й is cut through the
+keycap, so the tile's gradient shows in it. Shapes are drawn oversampled and
+scaled down, but at small sizes the letters are rendered at the target size
+itself: a downscaled glyph turns into a blur, a hinted one stays sharp.
 
     python make_icon.py        # needs Pillow; writes icon.ico next to it
 """
