@@ -80,7 +80,55 @@ def cut_out(layer: Image.Image, mask: Image.Image) -> None:
     layer.putalpha(ImageChops.subtract(alpha, mask))
 
 
+# The 16 px tray icon is drawn pixel by pixel. No font survives being set
+# six pixels tall: bold strokes merge (Й read as М), regular ones blur.
+PIXEL_Q = [
+    ".###.",
+    "#...#",
+    "#...#",
+    "#...#",
+    "#.#.#",
+    "#..#.",
+    ".##.#",
+]
+PIXEL_J = [
+    ".###.",
+    ".....",
+    "#...#",
+    "#..##",
+    "#.#.#",
+    "##..#",
+    "#...#",
+]
+
+
+def pixels(rows, x0: int, y0: int):
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch == "#":
+                yield x0 + x, y0 + y
+
+
+def make16() -> Image.Image:
+    px = 16
+    img = tile(px * OVERSAMPLE).resize((px, px), Image.LANCZOS)
+    cap = Image.new("RGBA", (px, px), (0, 0, 0, 0))
+    d = ImageDraw.Draw(cap)
+    d.rectangle([1, 1, 14, 13], fill=KEY_LIP)
+    d.rectangle([1, 1, 14, 12], fill=KEY_FACE)
+    for corner in [(1, 1), (14, 1), (1, 13), (14, 13)]:
+        cap.putpixel(corner, (0, 0, 0, 0))
+    for xy in pixels(PIXEL_J, 8, 5):
+        cap.putpixel(xy, (0, 0, 0, 0))
+    img.alpha_composite(cap)
+    for xy in pixels(PIXEL_Q, 2, 2):
+        img.putpixel(xy, INK + (255,))
+    return img
+
+
 def make(px: int) -> Image.Image:
+    if px == 16:
+        return make16()
     s = px * OVERSAMPLE
     if px >= 32:
         # Big enough for both glyphs to survive the downscale.
