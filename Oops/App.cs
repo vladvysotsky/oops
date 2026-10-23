@@ -41,6 +41,19 @@ public sealed class App : IDisposable
     private volatile bool _hotkeysSuspended;
 
     /// <summary>
+    /// Открыт редактор сниппетов: раскрытие выключено, хоткеи — нет. Набрать
+    /// сокращение в поле «сокращение» и тут же получить вместо него текст было
+    /// бы абсурдом, а вот исправить раскладку там нужно так же, как везде.
+    /// Тот же поток и та же причина для volatile, что у HotkeysSuspended.
+    /// </summary>
+    public bool SnippetsSuspended
+    {
+        get => _snippetsSuspended;
+        set => _snippetsSuspended = value;
+    }
+    private volatile bool _snippetsSuspended;
+
+    /// <summary>
     /// До какого момента (UTC, в тиках) программа на паузе; 0 — не на паузе.
     ///
     /// Пауза, а не только «Включено»: выключенную программу забывают включить
@@ -411,7 +424,7 @@ public sealed class App : IDisposable
     private bool TryExpandSnippet()
     {
         var matcher = _snippets;
-        if (matcher.IsEmpty) return false;
+        if (matcher.IsEmpty || SnippetsSuspended) return false;
 
         var buffer = _buffer.Snapshot();
         var word = SnippetMatcher.LastWord(buffer);

@@ -269,9 +269,10 @@ public sealed class TrayContext : ApplicationContext
 
     private void ShowSnippets()
     {
-        // Пока окно открыто, сниппеты не раскрываются и хоткеи молчат: иначе
-        // набор сокращения в поле «сокращение» тут же заменился бы текстом.
-        _app.HotkeysSuspended = true;
+        // Пока окно открыто, сниппеты не раскрываются — иначе сокращение в поле
+        // «сокращение» тут же заменилось бы текстом. Хоткеи работают: раскладку
+        // в этих полях путают так же, как везде.
+        _app.SnippetsSuspended = true;
         try
         {
             if (!SnippetsForm.Edit(_app.Settings)) return;
@@ -286,7 +287,7 @@ public sealed class TrayContext : ApplicationContext
         }
         finally
         {
-            _app.HotkeysSuspended = false;
+            _app.SnippetsSuspended = false;
         }
     }
 

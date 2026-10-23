@@ -350,7 +350,9 @@ lands in the wrong window. The conditions it comes back under:
   triggers on the same keys. Snippets are stored in `settings.json` as **plain
   text, by the author's decision**: it is text the user wrote into the settings,
   not text captured from typing. Expansion is off while the editor is open
-  (`HotkeysSuspended`), or typing a trigger into it would expand.
+  (`SnippetsSuspended`), or typing a trigger into it would expand — but the
+  hotkeys stay on (NOT `HotkeysSuspended`): the layout gets mixed up in those
+  fields like anywhere else, and the editor records no shortcuts.
 - `Core/TextReplacer.cs` + `UI/ReplaceForm.cs` — find and replace in the selected
   text, plain and by regular expression, with a wizard (ready-made rules +
   building blocks inserted into the search field). The search **must** have a
