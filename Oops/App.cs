@@ -167,6 +167,15 @@ public sealed class App : IDisposable
     /// <summary>Нажали хоткей замены, а ничего не выделено.</summary>
     public event EventHandler? ReplaceNeedsSelection;
 
+    /// <summary>
+    /// Нажали хоткей списка сниппетов: показать выбор. Ответ — через
+    /// <see cref="InsertSnippet"/>.
+    /// </summary>
+    public event EventHandler? SnippetPickerRequested;
+
+    /// <summary>Окно, куда вставлять сниппет, — на время показа списка.</summary>
+    private IntPtr _snippetTarget;
+
     /// <summary>Нажали хоткей голосового ввода, а модели на диске нет.</summary>
     public event EventHandler? VoiceModelMissing;
 
@@ -344,6 +353,16 @@ public sealed class App : IDisposable
             Sender.CancelMenuActivation();
             Log.Write("  совпало: замена");
             _uiContext.Post(_ => RunReplace(), null);
+            return;
+        }
+
+        if (Settings.SnippetsHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win))
+        {
+            e.Handled = true;
+            if (e.IsRepeat) return;
+            Sender.CancelMenuActivation();
+            Log.Write("  совпало: список сниппетов");
+            _uiContext.Post(_ => RunSnippetPicker(), null);
             return;
         }
 
@@ -814,19 +833,45 @@ public sealed class App : IDisposable
     /// </summary>
     public void ApplyReplacement(string? text)
     {
+        // Выделение всё ещё активно — ввод перетирает его сам, стирать нечего.
+        TypeInto(_replaceTarget, text);
+        _replaceTarget = IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Список сниппетов. Окно, куда вставлять, запоминаем ДО показа: список
+    /// заберёт фокус, а к его закрытию последним активным может оказаться
+    /// что угодно.
+    /// </summary>
+    private void RunSnippetPicker()
+    {
+        Sender.WaitForModifiersReleased();
+        Sender.ReleaseHotkeyModifiers();
+        _snippetTarget = GetForegroundWindow();
+        SnippetPickerRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Печатает выбранный сниппет у курсора. null — человек передумал.</summary>
+    public void InsertSnippet(string? text)
+    {
+        TypeInto(_snippetTarget, text);
+        _snippetTarget = IntPtr.Zero;
+    }
+
+    /// <summary>Вернуть фокус окну, из которого открыли наш диалог, и напечатать туда текст.</summary>
+    private void TypeInto(IntPtr target, string? text)
+    {
         if (string.IsNullOrEmpty(text)) return;
 
-        if (_replaceTarget != IntPtr.Zero)
+        if (target != IntPtr.Zero)
         {
-            SetForegroundWindow(_replaceTarget);
+            SetForegroundWindow(target);
             // Возврат фокуса не мгновенный: без паузы первые символы уходят
             // ещё закрывающемуся диалогу и пропадают.
             Thread.Sleep(120);
         }
-        _replaceTarget = IntPtr.Zero;
 
         Sender.WaitForModifiersReleased();
-        // Выделение всё ещё активно — ввод перетирает его сам, стирать нечего.
         Sender.SendUnicode(text!);
         ResetAll();
     }

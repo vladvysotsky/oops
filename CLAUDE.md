@@ -353,6 +353,12 @@ lands in the wrong window. The conditions it comes back under:
   (`SnippetsSuspended`), or typing a trigger into it would expand — but the
   hotkeys stay on (NOT `HotkeysSuspended`): the layout gets mixed up in those
   fields like anywhere else, and the editor records no shortcuts.
+  `UI/SnippetPickerForm.cs` (2.4.1) is the list on a hotkey, for snippets whose
+  abbreviation is forgotten: filter by trigger or text (`SnippetMatcher.Fits`,
+  the trigger by keys again), Enter inserts. The target window is remembered
+  before the list takes focus and restored before typing — the same
+  `TypeInto` as the replace dialog. Expansion is suspended while it is open,
+  or a trigger typed into the search box would expand there.
 - `Core/TextReplacer.cs` + `UI/ReplaceForm.cs` — find and replace in the selected
   text, plain and by regular expression, with a wizard (ready-made rules +
   building blocks inserted into the search field). The search **must** have a
@@ -478,7 +484,10 @@ lands in the wrong window. The conditions it comes back under:
   the version list, and nobody learned that the thing they had complained about
   was fixed. For a fix, "nothing to do, it just works now" IS the answer to
   "how to use this".
-- `UI/TrayContext.cs` — NotifyIcon and the menu. Also the **background update
+- `UI/TrayContext.cs` — NotifyIcon and the menu. The first item shows the state
+  as a coloured dot, not a check mark — green working, amber paused, grey off;
+  a check next to "Enabled" read as "click to enable" rather than answering
+  "is it working". Snippets and Settings sit in a group of their own. Also the **background update
   check**: an hourly WinForms timer that goes to the network only when
   `UpdateCheckInterval` (6 h) has passed since `LastUpdateCheckUtc`. It used to
   run once, at startup — and oops lives in the tray for weeks, so a new version
@@ -541,6 +550,8 @@ lands in the wrong window. The conditions it comes back under:
   dictating a phrase while holding three keys is physically impossible.
 - Replace in selection: **Alt+Shift+Win** (modifier-only). Alt+Shift on its own
   is forbidden (the system layout switch), but with Win it is a different chord.
+- Snippet list: **Ctrl+Alt+Space**. Not modifier-only — none are left: Shift+Win
+  takes the screen snip, Ctrl+Alt+Shift+Win is the Office key.
 - **Alt+Shift must not be assigned** — it is the Windows system shortcut for
   switching layouts and never reaches us in a usable form. The recording dialog
   rejects it and `Sanitize()` resets such saved values.

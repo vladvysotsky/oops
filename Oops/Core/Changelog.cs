@@ -1,7 +1,7 @@
 namespace Oops.Core;
 
 /// <summary>Какой хоткей показать рядом с пунктом. Разрешается уже в окне.</summary>
-public enum HotkeyRef { None, Convert, Case, Translate, Voice, Replace }
+public enum HotkeyRef { None, Convert, Case, Translate, Voice, Replace, Snippets }
 
 /// <summary>Один пункт «что нового»: что появилось и как этим пользоваться.</summary>
 /// <param name="TitleKey">Ключ заголовка в словаре.</param>
@@ -27,6 +27,11 @@ public static class Changelog
 {
     public static readonly IReadOnlyList<ChangeSet> All = new[]
     {
+        new ChangeSet(new Version(2, 4, 1), new[]
+        {
+            new ChangeEntry("news.2_4_1.picker.title", "news.2_4_1.picker.body", HotkeyRef.Snippets),
+            new ChangeEntry("news.2_4_1.tray.title", "news.2_4_1.tray.body"),
+        }),
         new ChangeSet(new Version(2, 4, 0), new[]
         {
             new ChangeEntry("news.2_4.snippets.title", "news.2_4.snippets.body"),

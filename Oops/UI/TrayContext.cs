@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Windows.Forms;
 using Oops.Core;
 using Oops.Settings;
@@ -44,6 +45,7 @@ public sealed class TrayContext : ApplicationContext
     private Version? _announcedVersion;
 
     private ToolStripMenuItem _miPause = new();
+    private ToolStripMenuItem _miEnabled = new();
     private ToolStripMenuItem _miResume = new();
 
     /// <summary>
@@ -99,6 +101,25 @@ public sealed class TrayContext : ApplicationContext
             finally { _app.HotkeysSuspended = false; }
         };
 
+        // Список сниппетов — тоже окно, значит тоже здесь. Пока он открыт,
+        // сниппеты не раскрываются: сокращение, набранное в поиске, иначе
+        // превратилось бы в текст прямо в поле поиска.
+        _app.SnippetPickerRequested += (_, _) =>
+        {
+            var snippets = _app.Settings.Snippets
+                .Where(x => SnippetMatcher.IsValidTrigger(x.Trigger) && x.Text.Length > 0)
+                .ToList();
+            if (snippets.Count == 0)
+            {
+                Notice.Info(null, L10n.T("picker.empty.title"),
+                    L10n.T("picker.empty.body"), L10n.T("picker.empty.hint"));
+                return;
+            }
+            _app.SnippetsSuspended = true;
+            try { _app.InsertSnippet(SnippetPickerForm.Pick(snippets)); }
+            finally { _app.SnippetsSuspended = false; }
+        };
+
         _app.ReplaceNeedsSelection += (_, _) => Notice.Info(null,
             L10n.T("replace.noSelection.title"),
             L10n.T("replace.noSelection.body"),
@@ -143,12 +164,15 @@ public sealed class TrayContext : ApplicationContext
     {
         var menu = new ContextMenuStrip();
 
-        var miEnabled = new ToolStripMenuItem(L10n.T("tray.enabled"))
-            { Checked = _app.Settings.Enabled, CheckOnClick = true };
-        miEnabled.CheckedChanged += (_, _) =>
+        // Состояние — цветной точкой, а не галочкой: галочка у «Включено»
+        // читается как «нажми, чтобы включить», а точка сразу отвечает на
+        // вопрос «работает ли программа». Клик переключает.
+        _miEnabled = new ToolStripMenuItem();
+        _miEnabled.Click += (_, _) =>
         {
-            _app.Settings.Enabled = miEnabled.Checked;
+            _app.Settings.Enabled = !_app.Settings.Enabled;
             _app.Settings.Save();
+            RefreshEnabledState();
         };
 
         // Пауза — подменю с длительностью; на паузе вместо него виден один
@@ -197,12 +221,13 @@ public sealed class TrayContext : ApplicationContext
 
         menu.Items.AddRange(new ToolStripItem[]
         {
-            miEnabled,
+            _miEnabled,
             _miPause,
             _miResume,
             new ToolStripSeparator(),
-            miSettings,
             miSnippets,
+            miSettings,
+            new ToolStripSeparator(),
             _miUpdate,
             miNews,
             miFeedback,
@@ -366,8 +391,38 @@ public sealed class TrayContext : ApplicationContext
     }
 
     /// <summary>Привести меню и подсказку к тому, на паузе программа или нет.</summary>
+    /// <summary>
+    /// Точка у первого пункта: зелёная — работает, жёлтая — на паузе, серая —
+    /// выключено. Пауза тоже здесь: программа на паузе не работает, и зелёная
+    /// точка при ней была бы неправдой.
+    /// </summary>
+    private void RefreshEnabledState()
+    {
+        bool on = _app.Settings.Enabled;
+        _miEnabled.Text = L10n.T(on ? "tray.state.on" : "tray.state.off");
+        var color = !on ? Theme.TextMuted
+            : _app.IsPaused ? Theme.Warning
+            : StateOn;
+        _miEnabled.Image?.Dispose();
+        _miEnabled.Image = Dot(color);
+    }
+
+    private static readonly Color StateOn = Color.FromArgb(0x22, 0xB5, 0x5A);
+
+    private static Bitmap Dot(Color color)
+    {
+        int size = Theme.Px(16), d = Theme.Px(8);
+        var bmp = new Bitmap(size, size);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using var brush = new SolidBrush(color);
+        g.FillEllipse(brush, (size - d) / 2f, (size - d) / 2f, d, d);
+        return bmp;
+    }
+
     private void RefreshPauseState()
     {
+        RefreshEnabledState();
         bool paused = _app.IsPaused;
         _miPause.Visible = !paused;
         _miResume.Visible = paused;

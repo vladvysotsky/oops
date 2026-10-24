@@ -74,6 +74,20 @@ public sealed class SnippetMatcher
     }
 
     /// <summary>
+    /// Подходит ли сниппет под строку поиска в списке: текст — как есть, без
+    /// учёта регистра; сокращение — ещё и по клавишам, как при наборе, так что
+    /// «!уу» находит «!ee».
+    /// </summary>
+    public static bool Fits(Snippet snippet, string query, LayoutPair pair)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return true;
+        query = query.Trim();
+        return snippet.Text.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+               || snippet.Trigger.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+               || Key(snippet.Trigger, pair).Contains(Key(query, pair), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Последнее слово ленты — то, что набрано после последнего пробела. Если
     /// лента кончается пробелом, слова нет: человек уже закончил его.
     /// </summary>

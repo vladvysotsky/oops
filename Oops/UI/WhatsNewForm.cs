@@ -314,6 +314,7 @@ internal sealed class WhatsNewForm : ThemedForm
         HotkeyRef.Translate => _settings.TranslateHotkey.ToString(),
         HotkeyRef.Voice => _settings.VoiceHotkey.ToString(),
         HotkeyRef.Replace => _settings.ReplaceHotkey.ToString(),
+        HotkeyRef.Snippets => _settings.SnippetsHotkey.ToString(),
         _ => null,
     };
 
