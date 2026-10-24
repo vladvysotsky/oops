@@ -519,6 +519,18 @@ lands in the wrong window. The conditions it comes back under:
   got the old ones back after a restart.
   `Sanitize()` repairs settings from old files (null → default, Alt+Shift →
   default, two identical shortcuts → default).
+  **Settings must survive versions that do not know them** — `[JsonExtensionData]
+  Unknown` writes back every field this build does not recognise. Every start
+  re-saves the file (`LastSeenVersion`), so one launch of an older build — an
+  old local build, an installed copy that autostarts — used to drop whatever it
+  did not know: that is how the snippets made in 2.4.0 vanished. The fix only
+  protects from 2.4.2 on; builds already out cannot be changed.
+  `Save` writes a temp file and swaps it in with `File.Replace`, keeping the
+  previous version as `settings.json.bak`: `WriteAllText` truncates first, and
+  the installer kills the process (`CloseApplications=force`). `Load` never
+  leaves an unreadable file in place under defaults — the next save would erase
+  it — it copies it aside as `settings.unreadable-<date>.json` and falls back
+  to the `.bak`.
 - `Settings/Autostart.cs` — autostart, in two flavours. **The system is the
   single source of truth**; there is no copy in `settings.json` and there must
   not be one — a copy of the flag once wiped the entry the installer had made,

@@ -27,6 +27,10 @@ public static class Changelog
 {
     public static readonly IReadOnlyList<ChangeSet> All = new[]
     {
+        new ChangeSet(new Version(2, 4, 2), new[]
+        {
+            new ChangeEntry("news.2_4_2.settings.title", "news.2_4_2.settings.body"),
+        }),
         new ChangeSet(new Version(2, 4, 1), new[]
         {
             new ChangeEntry("news.2_4_1.picker.title", "news.2_4_1.picker.body", HotkeyRef.Snippets),

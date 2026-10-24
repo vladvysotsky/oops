@@ -143,6 +143,19 @@ public sealed class AppSettings
     /// </summary>
     public List<Oops.Core.Snippet> Snippets { get; set; } = new();
 
+    /// <summary>
+    /// Поля, которых эта версия не знает, — чтобы записать их обратно как были.
+    ///
+    /// Без этого любая СТАРАЯ версия, запущенная хоть раз, тихо стирала новые
+    /// настройки: при каждом старте программа пересохраняет файл (запоминает
+    /// версию для «Что нового»), а незнакомое поле при чтении отбрасывается.
+    /// Так пропали сниппеты, заведённые в 2.4.0: после локальной сборки или
+    /// автозапуска установленной 2.3 файл переписала версия, не знавшая слова
+    /// Snippets. Помогает с этой версии и дальше — уже вышедшим её не дать.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Unknown { get; set; }
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Oops", "settings.json");
@@ -156,24 +169,54 @@ public sealed class AppSettings
     [JsonIgnore]
     public string? LoadError { get; private set; }
 
-    public static AppSettings Load()
+    public static AppSettings Load() => Load(FilePath);
+
+    /// <summary>
+    /// Читает настройки. Нечитаемый файл НЕ остаётся на месте под дефолтами:
+    /// первое же сохранение затёрло бы его, и всё, что в нём было, — сниппеты,
+    /// хоткеи — пропало бы без следа. Он откладывается рядом с датой в имени, а
+    /// вместо него берётся копия с прошлого сохранения, если она читается.
+    /// </summary>
+    public static AppSettings Load(string path)
+    {
+        if (!File.Exists(path)) return new AppSettings();
+
+        var (settings, error) = TryRead(path);
+        if (settings != null) return settings;
+
+        try { File.Copy(path, UnreadableCopyPath(path), overwrite: false); } catch { }
+
+        var (backup, _) = TryRead(BackupPath(path));
+        if (backup != null)
+        {
+            backup.LoadError = error;
+            return backup;
+        }
+        return new AppSettings { LoadError = error };
+    }
+
+    private static (AppSettings? Settings, string? Error) TryRead(string path)
     {
         try
         {
-            if (File.Exists(FilePath))
-            {
-                var json = File.ReadAllText(FilePath);
-                var s = JsonSerializer.Deserialize<AppSettings>(json);
-                if (s != null) { s.Sanitize(); return s; }
-                return new AppSettings { LoadError = "settings file is empty" };
-            }
+            if (!File.Exists(path)) return (null, "no file");
+            var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path));
+            if (s == null) return (null, "settings file is empty");
+            s.Sanitize();
+            Log.Write($"настройки прочитаны: сниппетов {s.Snippets.Count}");
+            return (s, null);
         }
         catch (Exception ex)
         {
-            return new AppSettings { LoadError = ex.Message };
+            return (null, ex.Message);
         }
-        return new AppSettings();
     }
+
+    /// <summary>Предыдущее сохранение: восстановить, если основной файл испорчен.</summary>
+    public static string BackupPath(string path) => path + ".bak";
+
+    private static string UnreadableCopyPath(string path)
+        => Path.ChangeExtension(path, null) + $".unreadable-{DateTime.Now:yyyyMMdd-HHmmss}.json";
 
     /// <summary>
     /// Чинит настройки из старых/битых файлов, чтобы хоткей не «молчал»:
@@ -247,14 +290,25 @@ public sealed class AppSettings
     /// отказ проглатывался, и человек закрывал окно в уверенности, что хоткеи
     /// переназначены, а после перезапуска получал прежние.
     /// </summary>
-    public string? Save()
+    public string? Save() => Save(FilePath);
+
+    /// <summary>
+    /// Пишет через временный файл и подмену, а прежнюю версию оставляет рядом
+    /// (<see cref="BackupPath"/>). File.WriteAllText сначала обрезает файл, потом
+    /// пишет: оборви процесс посередине — установщик при обновлении как раз
+    /// завершает программу принудительно — и на диске остаётся огрызок, который
+    /// не прочитается, а следующее сохранение запишет поверх него дефолты.
+    /// </summary>
+    public string? Save(string path)
     {
         try
         {
-            var dir = Path.GetDirectoryName(FilePath)!;
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(FilePath, json);
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, json);
+            if (File.Exists(path)) File.Replace(temp, path, BackupPath(path), ignoreMetadataErrors: true);
+            else File.Move(temp, path);
             return null;
         }
         catch (Exception ex)
