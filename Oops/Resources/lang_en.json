@@ -133,6 +133,8 @@
   "news.2_4_1.picker.title": "The snippet list on a hotkey",
   "news.2_4_1.tray.body": "The first item of the tray menu shows with a dot whether the app is working: green — working, amber — paused, grey — disabled. Clicking the item turns it on and off. Snippets and settings now sit in a group of their own.",
   "news.2_4_1.tray.title": "The app's state is visible in the menu",
+  "news.2_4_2.settings.body": "Nothing to do. Launching an older version of the app — an old build or an installed copy starting with Windows — could erase what it did not know, snippets for example. Unknown settings are now kept as they are, and a copy of the previous version sits next to the settings file — settings.json.bak in %AppData%\\Oops.",
+  "news.2_4_2.settings.title": "Settings are no longer lost",
   "news.header.hint": "Versions on the left, what they brought on the right. The shortcuts shown are the ones you have right now.",
   "news.header.plain": "What's new in oops",
   "news.header.updated": "oops has been updated to {0}",
