@@ -51,6 +51,7 @@ public sealed class SettingsForm : ThemedForm
     private readonly HotkeyDisplay _translateKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _voiceKeys = new() { Interactive = true };
     private readonly HotkeyDisplay _replaceKeys = new() { Interactive = true };
+    private readonly HotkeyDisplay _snippetsKeys = new() { Interactive = true };
     private readonly Stepper _nudIdle = new();
     private readonly Stepper _nudExpand = new();
 
@@ -67,6 +68,7 @@ public sealed class SettingsForm : ThemedForm
     private HotkeyConfig _translateHotkey;
     private HotkeyConfig _voiceHotkey;
     private HotkeyConfig _replaceHotkey;
+    private HotkeyConfig _snippetsHotkey;
 
     /// <summary>
     /// Выбранный язык — отдельно от настроек. В settings.Language он попадает
@@ -101,6 +103,7 @@ public sealed class SettingsForm : ThemedForm
         _translateHotkey = Clone(settings.TranslateHotkey);
         _voiceHotkey = Clone(settings.VoiceHotkey);
         _replaceHotkey = Clone(settings.ReplaceHotkey);
+        _snippetsHotkey = Clone(settings.SnippetsHotkey);
         _languagePref = settings.Language;
         _themePref = settings.Theme;
 
@@ -431,6 +434,10 @@ public sealed class SettingsForm : ThemedForm
         AddAutoRow(rows, HotkeyRow(
             L10n.T("hotkey.replace"), L10n.T("hotkey.replace.hint"),
             _replaceKeys, () => RecordInto(ref _replaceHotkey, _replaceKeys)));
+        AddAutoRow(rows, Divider());
+        AddAutoRow(rows, HotkeyRow(
+            L10n.T("hotkey.snippets"), L10n.T("hotkey.snippets.hint"),
+            _snippetsKeys, () => RecordInto(ref _snippetsHotkey, _snippetsKeys)));
         return card;
     }
 
@@ -811,10 +818,12 @@ public sealed class SettingsForm : ThemedForm
             && _voiceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
         bool isReplace = !isConvert && !isCase && !isTranslate && !isVoice
             && _replaceHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
+        bool isSnippets = !isConvert && !isCase && !isTranslate && !isVoice && !isReplace
+            && _snippetsHotkey.Matches(e.VirtualKey, e.Ctrl, e.Shift, e.Alt, e.Win);
 
         // Совпавшее сочетание глотаем: иначе Win откроет «Пуск» прямо из окна
         // настроек. Всё остальное пропускаем — окном надо пользоваться.
-        if (isConvert || isCase || isTranslate || isVoice || isReplace) e.Handled = true;
+        if (isConvert || isCase || isTranslate || isVoice || isReplace || isSnippets) e.Handled = true;
 
         var seen = new HotkeyConfig
         {
@@ -846,6 +855,11 @@ public sealed class SettingsForm : ThemedForm
         else if (isReplace)
         {
             _probeStatus.Text = L10n.T("probe.matchReplace");
+            _probeStatus.ForeColor = Theme.Accent;
+        }
+        else if (isSnippets)
+        {
+            _probeStatus.Text = L10n.T("probe.matchSnippets");
             _probeStatus.ForeColor = Theme.Accent;
         }
         else
@@ -1177,6 +1191,7 @@ public sealed class SettingsForm : ThemedForm
         _translateKeys.SetCombo(_translateHotkey.ToString());
         _voiceKeys.SetCombo(_voiceHotkey.ToString());
         _replaceKeys.SetCombo(_replaceHotkey.ToString());
+        _snippetsKeys.SetCombo(_snippetsHotkey.ToString());
     }
 
     private void RecordInto(ref HotkeyConfig target, HotkeyDisplay display)
@@ -1229,7 +1244,12 @@ public sealed class SettingsForm : ThemedForm
             || _replaceHotkey.SameCombo(_convertHotkey)
             || _replaceHotkey.SameCombo(_caseHotkey)
             || _replaceHotkey.SameCombo(_translateHotkey)
-            || _replaceHotkey.SameCombo(_voiceHotkey))
+            || _replaceHotkey.SameCombo(_voiceHotkey)
+            || _snippetsHotkey.SameCombo(_convertHotkey)
+            || _snippetsHotkey.SameCombo(_caseHotkey)
+            || _snippetsHotkey.SameCombo(_translateHotkey)
+            || _snippetsHotkey.SameCombo(_voiceHotkey)
+            || _snippetsHotkey.SameCombo(_replaceHotkey))
         {
             Notice.Warn(this, L10n.T("hotkey.clash.title"),
                 L10n.T("hotkey.clash.body"), L10n.T("hotkey.clash.hint"));
@@ -1269,6 +1289,7 @@ public sealed class SettingsForm : ThemedForm
         _settings.TranslateHotkey = _translateHotkey;
         _settings.VoiceHotkey = _voiceHotkey;
         _settings.ReplaceHotkey = _replaceHotkey;
+        _settings.SnippetsHotkey = _snippetsHotkey;
         _settings.TranslationEnabled = Translator.IsReady;
 
         // Реестр — единственный источник правды для автозапуска.

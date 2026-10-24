@@ -69,6 +69,7 @@ one — however long you spend looking at the result.
 | Translate | `Ctrl` + `Alt` + `Win` |
 | Voice input | `Ctrl` + `Shift` + `Win` |
 | Replace in selection | `Alt` + `Shift` + `Win` |
+| Insert a snippet from the list | `Ctrl` + `Alt` + `Space` |
 
 All of them can be changed in the settings: right-click the tray icon →
 Settings.
@@ -105,6 +106,10 @@ Tray menu → **Snippets…**: an abbreviation on the left, the text it expands
 into on the right. Type the abbreviation and a space, and it is replaced. The
 layout and case do not matter — `!ee`, `!уу` and `!EE` are the same keys, so a
 snippet works even when the layout is the wrong one.
+
+Forgot an abbreviation? `Ctrl` + `Alt` + `Space` opens the list: type to
+filter by abbreviation or text, arrows to move, `Enter` to insert at the
+cursor, `Esc` to close.
 
 Snippets are stored in `settings.json` as plain text: you wrote them yourself,
 and you can see and copy them there. Do not put passwords in a snippet.

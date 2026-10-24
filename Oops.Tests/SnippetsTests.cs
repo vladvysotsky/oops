@@ -68,3 +68,36 @@ public class SnippetsTests
     public void TriggerCannotContainSpaces(string? trigger, bool valid)
         => Assert.Equal(valid, SnippetMatcher.IsValidTrigger(trigger));
 }
+
+public class SnippetPickerFilterTests
+{
+    private static readonly Snippet Mail = new() { Trigger = "!ee", Text = "me@example.com" };
+
+    [Theory]
+    [InlineData("")]            // пустой поиск — показать всё
+    [InlineData("!ee")]
+    [InlineData("!уу")]         // сокращение — по клавишам, как при наборе
+    [InlineData("EXAMPLE")]     // текст — без учёта регистра
+    [InlineData("  example ")]
+    public void FindsBySnippetTriggerOrText(string query)
+        => Assert.True(SnippetMatcher.Fits(Mail, query, LayoutPair.BuiltIn));
+
+    [Fact]
+    public void OtherQueriesDoNotFit()
+        => Assert.False(SnippetMatcher.Fits(Mail, "адрес", LayoutPair.BuiltIn));
+}
+
+public class SnippetHotkeyTests
+{
+    [Fact]
+    public void DefaultSnippetListHotkeyClashesWithNoOtherDefault()
+    {
+        // Совпавшие сочетания — второй хоткей мёртв без единого признака.
+        var others = new[]
+        {
+            HotkeyConfig.Default, HotkeyConfig.ChangeCaseDefault, HotkeyConfig.TranslateDefault,
+            HotkeyConfig.VoiceDefault, HotkeyConfig.ReplaceDefault,
+        };
+        Assert.DoesNotContain(others, h => h.SameCombo(HotkeyConfig.SnippetsDefault));
+    }
+}

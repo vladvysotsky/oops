@@ -79,6 +79,20 @@ public sealed class HotkeyConfig
         Key = 0,
     };
 
+    /// <summary>
+    /// Вставка сниппета из списка — Ctrl+Alt+Space по умолчанию.
+    ///
+    /// Не modifier-only: свободных таких сочетаний не осталось. Shift+Win
+    /// забирает снимок экрана (Win+Shift+S), а Ctrl+Alt+Shift+Win — это
+    /// клавиша Office, Windows открывает по ней своё приложение.
+    /// </summary>
+    public static HotkeyConfig SnippetsDefault => new()
+    {
+        Ctrl = true,
+        Alt = true,
+        Key = (int)Keys.Space,
+    };
+
     /// <summary>Одно и то же сочетание (без учёта ссылочного равенства).</summary>
     public bool SameCombo(HotkeyConfig other) =>
         other != null &&

@@ -93,6 +93,7 @@ internal static class Program
             (L10n.T("hotkey.translate"), settings.TranslateHotkey),
             (L10n.T("hotkey.voice"), settings.VoiceHotkey),
             (L10n.T("hotkey.replace"), settings.ReplaceHotkey),
+            (L10n.T("hotkey.snippets"), settings.SnippetsHotkey),
         });
         if (taken.Count > 0)
             Notice.Warn(null, L10n.T("conflict.title"),

@@ -101,6 +101,9 @@ public sealed class AppSettings
     /// </summary>
     public HotkeyConfig ReplaceHotkey { get; set; } = HotkeyConfig.ReplaceDefault;
 
+    /// <summary>Список сниппетов: выбрать и вставить, не помня сокращения.</summary>
+    public HotkeyConfig SnippetsHotkey { get; set; } = HotkeyConfig.SnippetsDefault;
+
     /// <summary>Максимальная длина одной записи, секунд.</summary>
     public int VoiceMaxSeconds { get; set; } = 120;
 
@@ -196,6 +199,7 @@ public sealed class AppSettings
         TranslateHotkey = Fix(TranslateHotkey, HotkeyConfig.TranslateDefault);
         VoiceHotkey = Fix(VoiceHotkey, HotkeyConfig.VoiceDefault);
         ReplaceHotkey = Fix(ReplaceHotkey, HotkeyConfig.ReplaceDefault);
+        SnippetsHotkey = Fix(SnippetsHotkey, HotkeyConfig.SnippetsDefault);
 
         // Совпавшие сочетания = второй хоткей мёртв: App проверяет их по
         // порядку и до второго сравнения не доходит вообще — «никакой
@@ -214,6 +218,10 @@ public sealed class AppSettings
         if (ReplaceHotkey.SameCombo(ConvertHotkey) || ReplaceHotkey.SameCombo(ChangeCaseHotkey)
             || ReplaceHotkey.SameCombo(TranslateHotkey) || ReplaceHotkey.SameCombo(VoiceHotkey))
             ReplaceHotkey = HotkeyConfig.ReplaceDefault;
+        if (SnippetsHotkey.SameCombo(ConvertHotkey) || SnippetsHotkey.SameCombo(ChangeCaseHotkey)
+            || SnippetsHotkey.SameCombo(TranslateHotkey) || SnippetsHotkey.SameCombo(VoiceHotkey)
+            || SnippetsHotkey.SameCombo(ReplaceHotkey))
+            SnippetsHotkey = HotkeyConfig.SnippetsDefault;
 
         if (BufferIdleTimeoutSeconds < 5) BufferIdleTimeoutSeconds = 30;
         if (ExpandWindowSeconds < 1) ExpandWindowSeconds = 2;
