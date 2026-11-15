@@ -114,10 +114,17 @@ jobs:
             Set-Content dist\SHA256SUMS.txt -Encoding ascii
           Get-Content dist\SHA256SUMS.txt
 
+      # Артефакт — только для ручного запуска без тега: там релиза нет, и это
+      # единственный способ забрать собранное. Для тега те же файлы уже лежат в
+      # релизе, а копия в артефактах (~125 МБ на версию, 90 дней по умолчанию)
+      # исчерпала бесплатные 0,5 ГБ хранилища Actions. При исчерпанной квоте
+      # загрузка падает и роняет весь запуск — то есть и публикацию релиза.
       - name: Upload build artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v4
         with:
           name: oops-${{ steps.ver.outputs.version }}
+          retention-days: 7
           path: |
             dist/*.exe
             dist/*.zip
